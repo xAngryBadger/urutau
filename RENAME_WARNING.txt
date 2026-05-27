@@ -1,0 +1,8 @@
+This project is being renamed: inventario-pro → urutau
+
+Files that may need path updates:
+- servidorbadger/start.sh (check for hardcoded paths)
+- versoes-app/ cleaned (kept only latest APKs in releases/)
+- node_modules/ deleted (regenerate with npm install)
+
+The 20GB versoes-app/ Flutter builds were cleaned.

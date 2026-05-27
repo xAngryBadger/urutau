@@ -1,0 +1,14 @@
+# DO NOT FUCKING COMMIT SECRETS — .env, keys, credentials, tokens
+# Keys go in ~/Downloads/SECRET_KEYS_BACKUP.txt, NOT in git
+pocketbase
+pocketbase.exe
+pocketbase_*.zip
+ngrok
+ngrok.exe
+ngrok-v3-*.tgz
+ngrok-v3-*.zip
+pb_data/
+migration-cachyos/
+.env.seed
+.env.seed.example
+*.bat

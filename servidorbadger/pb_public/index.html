@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Urutau</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0f1a0a;color:#e8f0e0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem}
+.card{background:linear-gradient(135deg,#1a2e12 0%,#0d1a08 100%);border:1px solid #2d4a1e;border-radius:1.5rem;padding:3rem;max-width:640px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.5)}
+h1{font-size:1.75rem;font-weight:700;margin-bottom:0.5rem;color:#a3d977}
+p.sub{color:#7a9a60;font-size:0.95rem;margin-bottom:2rem}
+.links{display:flex;flex-direction:column;gap:0.75rem;margin-bottom:2rem}
+a{display:flex;align-items:center;justify-content:center;gap:0.5rem;padding:0.875rem 1.5rem;border-radius:0.75rem;text-decoration:none;font-weight:600;font-size:0.95rem;transition:all 0.2s}
+a.admin{background:#2d6a1e;color:#e0f0d0}
+a.admin:hover{background:#3a8a28;transform:translateY(-1px)}
+a.pb{background:#1e3a5c;color:#c0daf0}
+a.pb:hover{background:#284a72;transform:translateY(-1px)}
+a.api{background:#4a3520;color:#e0d0c0}
+a.api:hover{background:#5a4530;transform:translateY(-1px)}
+.footer{color:#4a6a3a;font-size:0.75rem;margin-top:1rem}
+.badge{display:inline-block;background:#2d6a1e;color:#a3d977;padding:0.25rem 0.75rem;border-radius:2rem;font-size:0.7rem;font-weight:600;margin-bottom:1.5rem;letter-spacing:0.05em;text-transform:uppercase}
+.server-url{background:#0d1508;border:1px solid #2d4a1e;border-radius:0.5rem;padding:0.75rem 1rem;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:#7a9a60;word-break:break-all;margin-top:1rem;cursor:pointer;position:relative}
+.server-url:hover{border-color:#3a8a28;color:#a3d977}
+.server-url::after{content:'Clique para copiar';position:absolute;top:-1.5rem;right:0;font-size:0.65rem;color:#4a6a3a;opacity:0;transition:opacity 0.2s}
+.server-url:hover::after{opacity:1}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="badge">Servidor Online</div>
+  <h1>Urutau</h1>
+  <p class="sub">Sistema de inventario florestal com PocketBase</p>
+
+  <div class="links">
+    <a class="admin" href="/urutau-admin/">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Painel Admin
+    </a>
+    <a class="pb" href="/_/">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+      PocketBase Admin
+    </a>
+    <a class="api" href="/api/">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/></svg>
+      API
+    </a>
+  </div>
+
+  <p style="font-size:0.8rem;color:#5a7a4a;margin-bottom:0.5rem">URL do servidor (cole no app):</p>
+  <div class="server-url" id="serverUrl" onclick="copyUrl()"></div>
+</div>
+
+<script>
+const url = window.location.origin;
+document.getElementById('serverUrl').textContent = url;
+
+async function copyUrl() {
+  try {
+    await navigator.clipboard.writeText(url);
+    const el = document.getElementById('serverUrl');
+    el.style.borderColor = '#3a8a28';
+    el.style.color = '#a3d977';
+    setTimeout(() => { el.style.borderColor = ''; el.style.color = ''; }, 1500);
+  } catch(e) {}
+}
+
+fetch('/api/health').then(r => r.json()).then(d => {
+  if (d.code !== 200) {
+    document.querySelector('.badge').textContent = 'Servidor com problemas';
+    document.querySelector('.badge').style.background = '#6a2e1e';
+    document.querySelector('.badge').style.color = '#d97777';
+  }
+}).catch(() => {
+  document.querySelector('.badge').textContent = 'Offline';
+  document.querySelector('.badge').style.background = '#6a2e1e';
+  document.querySelector('.badge').style.color = '#d97777';
+});
+</script>
+</body>
+</html>
