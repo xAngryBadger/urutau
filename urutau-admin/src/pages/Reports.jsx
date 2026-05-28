@@ -22,11 +22,22 @@ const Reports = () => {
     try {
       startTransition(() => { setLoading(true); setError(null); });
 
-      const [parcelsData, plantsData, userList] = await Promise.all([
-        fetchAllParcels(),
-        fetchAllPlants(),
-        fetchUsers().catch(() => []),
-      ]);
+      let parcelsData, plantsData, userList;
+      try {
+        [parcelsData, plantsData, userList] = await Promise.all([
+          fetchAllParcels(),
+          fetchAllPlants(),
+          fetchUsers().catch(() => []),
+        ]);
+      } catch (err) {
+        const msg = err?.message || String(err);
+        if (/memory|oom|out of memory|heap/i.test(msg) || err?.status === 503) {
+          safeError('OOM loading reports data:', err);
+          startTransition(() => setError('Dados muito grandes para carregar de uma vez. Tente gerar relatórios individuais ou contate o administrador.'));
+          return;
+        }
+        throw err;
+      }
 
       const ubMap = new Map();
       for (const u of userList) {
@@ -47,7 +58,7 @@ const Reports = () => {
       });
     } catch (err) {
       safeError('Error loading reports data:', err);
-      startTransition(() => setError('Erro ao carregar dados para relatórios'));
+      startTransition(() => setError('Erro ao carregar dados para relatórios. Os dados podem ser muito grandes — tente novamente mais tarde.'));
     } finally {
       startTransition(() => setLoading(false));
     }
@@ -433,13 +444,7 @@ if (reportId === 'full') {
                     </>
                   )}
                 </button>
-                <button
-                  disabled
-                  className="btn-secondary text-sm disabled:opacity-50 cursor-not-allowed"
-                >
-                  <FileText className="h-4 w-4" />
-                  PDF (em breve)
-                </button>
+
               </div>
             </div>
           </div>

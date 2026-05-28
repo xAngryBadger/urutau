@@ -87,13 +87,13 @@ class _UrutauAppState extends State<UrutauApp> {
       theme: themeProvider.theme,
       themeAnimationDuration: Duration.zero,
       themeAnimationCurve: Curves.easeInOut,
-      home: _ErrorBoundary(key: _errorStateKey),
+      initialRoute: '/',
       onGenerateRoute: (settings) {
         switch (settings.name) {
-          case '/':
-            return MaterialPageRoute(
-              builder: (_) => const SplashScreen(),
-            );
+  case '/':
+        return MaterialPageRoute(
+          builder: (_) => _ErrorBoundary(key: _errorStateKey),
+        );
           case '/login':
             return MaterialPageRoute(
               builder: (_) => const LoginScreen(),

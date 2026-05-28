@@ -10,18 +10,16 @@ const [deleteUserData, setDeleteUserData] = useState(false);
 const [newPassword, setNewPassword] = useState('');
 const [confirmPassword, setConfirmPassword] = useState('');
 const [loading, setLoading] = useState(false);
-const [error, setError] = useState(null);
-const prevUserIdRef = useRef(user?.id);
+  const [error, setError] = useState(null);
 
-if (user?.id !== prevUserIdRef.current) {
-  prevUserIdRef.current = user?.id;
-  setAction(null);
-  setDeleteUserData(false);
-  setNewPassword('');
-  setConfirmPassword('');
-  setLoading(false);
-  setError(null);
-}
+  useEffect(() => {
+    setAction(null);
+    setDeleteUserData(false);
+    setNewPassword('');
+    setConfirmPassword('');
+    setLoading(false);
+    setError(null);
+  }, [user?.id]);
 
   const handleDelete = async () => {
     setLoading(true);
@@ -270,6 +268,8 @@ const Users = () => {
 
   const handleToggleAdmin = async (user) => {
     if (user.id === currentUser?.id) return;
+    const action = user.isAdmin ? 'remover admin de' : 'conceder admin a';
+    if (!window.confirm(`Tem certeza que deseja ${action} ${user.username || user.email}?`)) return;
     const newIsAdmin = !user.isAdmin;
     const result = await updateUserAdmin(user.id, newIsAdmin);
     if (result.success) {
@@ -390,26 +390,47 @@ const Users = () => {
                           {u.email || '-'}
                         </div>
                       </td>
-                      <td className="table-cell">
-                        <button
-                          onClick={() => handleToggleAdmin(u)}
-                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                            u.isAdmin
-                              ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
-                        >
-                          {u.isAdmin ? (
-                            <>
-                              <ShieldCheck className="h-3 w-3" /> Admin
-                            </>
-                          ) : (
-                            <>
-                              <UserX className="h-3 w-3" /> Usuário
-                            </>
-                          )}
-                        </button>
-                      </td>
+<td className="table-cell">
+{u.id === currentUser?.id ? (
+<span
+title="Não é possível remover o próprio admin"
+className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium cursor-not-allowed ${
+u.isAdmin
+? 'bg-emerald-100 text-emerald-700 opacity-60'
+: 'bg-gray-100 text-gray-600 opacity-60'
+}`}
+>
+{u.isAdmin ? (
+<>
+<ShieldCheck className="h-3 w-3" /> Admin
+</>
+) : (
+<>
+<UserX className="h-3 w-3" /> Usuário
+</>
+)}
+</span>
+) : (
+<button
+onClick={() => handleToggleAdmin(u)}
+className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+u.isAdmin
+? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+: 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+}`}
+>
+{u.isAdmin ? (
+<>
+<ShieldCheck className="h-3 w-3" /> Admin
+</>
+) : (
+<>
+<UserX className="h-3 w-3" /> Usuário
+</>
+)}
+</button>
+)}
+</td>
                       <td className="table-cell">
                         <span className="text-sm text-gray-600">
                           {parcelasCount[u.id] || 0}

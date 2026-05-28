@@ -15,11 +15,13 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    // Navega imediatamente (sem delay)
-    _navigate();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 1500), _navigate);
+    });
   }
 
   Future<void> _navigate() async {
+    if (!mounted) return;
     final syncService = context.read<SyncService>();
     final user = syncService.currentUser;
     if (user != null) {

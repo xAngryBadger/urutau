@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, startTransition } from
 import {
   fetchParcels,
   fetchAllParcels,
+  fetchParcelsByIds,
   fetchProperties,
   fetchUTs,
   fetchUsers,
@@ -379,7 +380,7 @@ const Parcels = () => {
       const usersMap = getUsersById();
       let dataToExport;
       if (selectedParcels.length > 0) {
-        dataToExport = parcels.filter((p) => selectedParcels.includes(p.id));
+        dataToExport = await fetchParcelsByIds(selectedParcels, usersMap);
       } else {
         dataToExport = await fetchAllParcels(filters, usersMap);
       }
@@ -594,8 +595,8 @@ const Parcels = () => {
                   />
                   <span className="ml-2 text-sm text-gray-700">
                     {selectedParcels.length > 0
-                      ? `${selectedParcels.length} selecionadas`
-                      : 'Selecionar todas'}
+                  ? `${selectedParcels.length} selecionadas`
+                    : 'Selecionar todas da página'}
                   </span>
                 </label>
               </div>

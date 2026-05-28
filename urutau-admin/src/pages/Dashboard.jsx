@@ -4,7 +4,10 @@ import { getStats, getTopSpecies } from '../services/pocketbase';
 import safeError from '../services/logger';
 import {
   TreePine,
+  Trees,
   MapPin,
+  Building2,
+  Leaf,
   Image,
   Users,
   CheckCircle,
@@ -72,13 +75,13 @@ const Dashboard = () => {
     {
       title: 'Propriedades',
       value: stats?.totalProperties || 0,
-      icon: MapPin,
+      icon: Building2,
       color: 'bg-blue-500',
     },
     {
       title: 'UTs',
       value: stats?.totalUTs || 0,
-      icon: TreePine,
+      icon: Trees,
       color: 'bg-forest-500',
     },
     {
@@ -90,7 +93,7 @@ const Dashboard = () => {
     {
       title: 'Plantas',
       value: stats?.totalPlants || 0,
-      icon: TreePine,
+      icon: Leaf,
       color: 'bg-green-500',
     },
     {

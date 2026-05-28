@@ -258,6 +258,27 @@ export const fetchAllParcels = async (filters = {}, usersById = null) => {
   }
 };
 
+export const fetchParcelsByIds = async (ids, usersById = null) => {
+  if (!ids || ids.length === 0) return [];
+
+  const filterParts = ids.map((id) => `id = "${escapeFilterValue(id)}"`);
+  const filterString = filterParts.join(' || ');
+
+  try {
+    const result = await pb.collection('parcelas').getFullList({
+      filter: filterString,
+      sort: '-id_parcela',
+      expand: EXPAND_RELATIONS,
+    });
+
+    return result.map((p) => normalizeParcelRecord(p, usersById));
+  } catch (error) {
+    if (error?.isAbort) return [];
+    safeError('Error fetching parcels by IDs:', error);
+    throw error;
+  }
+};
+
 export const fetchParcelById = async (id, usersById = null) => {
   try {
     const result = await pb.collection('parcelas').getOne(id, {

@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback, startTransition } from 'react';
-import { fetchAllParcels, getPhotoUrl } from '../services/pocketbase';
+import React, { useEffect, useState, useCallback, useRef, startTransition } from 'react';
+import { fetchParcels, getPhotoUrl } from '../services/pocketbase';
 import safeError from '../services/logger';
 import {
   Image,
@@ -14,60 +14,85 @@ import {
   ZoomIn
 } from 'lucide-react';
 
+const PHOTOS_PER_PAGE = 50;
+
+const parcelToPhotos = (parcel) => {
+  const result = [];
+  if (parcel.fotos_parcela && parcel.fotos_parcela.length > 0) {
+    parcel.fotos_parcela.forEach((photoId, index) => {
+      const url = getPhotoUrl(parcel, index);
+      if (!url) return;
+      result.push({
+        id: `${parcel.id}_${index}`,
+        photoId,
+        parcelId: parcel.id,
+        parcelNumber: parcel.id_parcela,
+        property: parcel.propertyCode || '',
+        ut: parcel.utCode || '',
+        url,
+        user: parcel.displayUser || '',
+        date: parcel.createdAt,
+      });
+    });
+  }
+  return result;
+};
+
 const Photos = () => {
   const [parcels, setParcels] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [actionError, setActionError] = useState(null);
+  const pageRef = useRef(1);
 
-  const loadPhotos = useCallback(async () => {
+  const loadPhotos = useCallback(async (page = 1, append = false) => {
     try {
-      startTransition(() => { setLoading(true); setError(null); });
-      const result = await fetchAllParcels({ hasPhotos: true });
+      if (append) {
+        startTransition(() => { setLoadingMore(true); });
+      } else {
+        startTransition(() => { setLoading(true); setError(null); });
+      }
 
-      const allPhotos = [];
-      result.forEach((parcel) => {
-        if (parcel.fotos_parcela && parcel.fotos_parcela.length > 0) {
-          parcel.fotos_parcela.forEach((photoId, index) => {
-            const url = getPhotoUrl(parcel, index);
-            if (!url) {
-              return;
-            }
-
-            allPhotos.push({
-              id: `${parcel.id}_${index}`,
-              photoId,
-              parcelId: parcel.id,
-              parcelNumber: parcel.id_parcela,
-              property: parcel.propertyCode || '',
-              ut: parcel.utCode || '',
-              url,
-              user: parcel.displayUser || '',
-              date: parcel.createdAt,
-            });
-          });
-        }
-      });
+      const result = await fetchParcels({ hasPhotos: true }, page, PHOTOS_PER_PAGE);
+      const newPhotos = result.items.flatMap(parcelToPhotos);
 
       startTransition(() => {
-        setParcels(result);
-        setPhotos(allPhotos);
+        if (append) {
+          setParcels((prev) => [...prev, ...result.items]);
+          setPhotos((prev) => [...prev, ...newPhotos]);
+        } else {
+          setParcels(result.items);
+          setPhotos(newPhotos);
+        }
+        setHasMore(result.items.length === PHOTOS_PER_PAGE);
       });
     } catch (err) {
       startTransition(() => setError('Erro ao carregar fotos. Tente novamente.'));
       safeError('Error loading photos:', err);
     } finally {
-      startTransition(() => setLoading(false));
+      startTransition(() => {
+        setLoading(false);
+        setLoadingMore(false);
+      });
     }
   }, []);
 
   useEffect(() => {
-    startTransition(() => { loadPhotos(); });
+    pageRef.current = 1;
+    startTransition(() => { loadPhotos(1); });
   }, [loadPhotos]);
+
+  const loadMore = () => {
+    const nextPage = pageRef.current + 1;
+    pageRef.current = nextPage;
+    loadPhotos(nextPage, true);
+  };
 
   useEffect(() => {
     if (!actionError) return;
@@ -166,7 +191,7 @@ const Photos = () => {
   ) : error ? (
     <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
       <p className="text-red-700">{error}</p>
-      <button onClick={loadPhotos} className="mt-4 btn-secondary">
+      <button onClick={() => { pageRef.current = 1; loadPhotos(1); }} className="mt-4 btn-secondary">
         Tentar novamente
       </button>
     </div>
