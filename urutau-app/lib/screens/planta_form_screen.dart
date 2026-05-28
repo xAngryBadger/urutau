@@ -267,34 +267,34 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
                   ),
                 ),
               const SizedBox(height: 24),
-              Row(
-                children: [
-                  Icon(Icons.eco, color: Colors.grey[700]),
-                  const SizedBox(width: 8),
-                  Text('Tipo de nome:',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[700])),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Nome popular'),
-                    selected: _useNomePopular,
-                    onSelected: (v) => setState(() {
-                      _useNomePopular = true;
-                      _filteredSpecies = SpeciesService.filter(
-                        _allSpecies,
-                        _especieController.text,
-                        true,
-                      );
-                    }),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Nome científico'),
-                    selected: !_useNomePopular,
-                    onSelected: (v) => setState(() {
-                      _useNomePopular = false;
-                      _filteredSpecies = SpeciesService.filter(
-                        _allSpecies,
-                        _especieController.text,
+Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Icon(Icons.eco, color: Colors.grey[700]),
+          Text('Tipo de nome:',
+              style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+          ChoiceChip(
+            label: const Text('Nome popular'),
+            selected: _useNomePopular,
+            onSelected: (v) => setState(() {
+              _useNomePopular = true;
+              _filteredSpecies = SpeciesService.filter(
+                _allSpecies,
+                _especieController.text,
+                true,
+              );
+            }),
+          ),
+          ChoiceChip(
+            label: const Text('Nome científico'),
+            selected: !_useNomePopular,
+            onSelected: (v) => setState(() {
+              _useNomePopular = false;
+              _filteredSpecies = SpeciesService.filter(
+                _allSpecies,
+                _especieController.text,
                         false,
                       );
                     }),
@@ -302,11 +302,12 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              Semantics(
-                label: 'Buscar espécie',
-                child: TextFormField(
-                  controller: _especieController,
-                  focusNode: _especieFocusNode,
+Semantics(
+          label: 'Buscar espécie',
+          child: TextFormField(
+          controller: _especieController,
+          focusNode: _especieFocusNode,
+          autocorrect: false,
                   decoration: InputDecoration(
                     labelText: 'Espécie *',
                     hintText: _useNomePopular
@@ -376,20 +377,29 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
                     itemCount: _filteredSpecies.length,
                     itemBuilder: (_, i) {
                       final e = _filteredSpecies[i];
-                      final display = e.display(_useNomePopular);
+                      final nomeExibir = e.nomeCientifico.isNotEmpty
+                          ? e.nomeCientifico
+                          : e.nomePopular;
                       return ListTile(
                         dense: true,
-                        title: Text(display),
-                        subtitle:
-                            _useNomePopular && e.nomeCientifico != e.nomePopular
-                                ? Text(
-                                    e.nomeCientifico,
-                                    style: TextStyle(
-                                        fontSize: 12, color: Colors.grey[600]),
-                                  )
-                                : null,
+                        leading: const Icon(Icons.eco, size: 20),
+                        title: Text(
+                          nomeExibir,
+                          style: const TextStyle(fontSize: 15),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: !_useNomePopular &&
+                                e.nomePopular.isNotEmpty &&
+                                e.nomePopular != e.nomeCientifico
+                            ? Text(
+                                e.nomePopular,
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey[600]),
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : null,
                         onTap: () {
-                          _especieController.text = display;
+                          _especieController.text = nomeExibir;
                           setState(() {
                             _showSpeciesList = false;
                             _filteredSpecies = [];
@@ -595,9 +605,12 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
                 child: FilledButton.icon(
                   onPressed: _salvarPlanta,
                   icon: const Icon(Icons.check),
-                  label: Text(
-                    _isEditing ? 'Atualizar Planta' : 'Adicionar Planta',
-                    style: const TextStyle(fontSize: 18),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      _isEditing ? 'Atualizar Planta' : 'Adicionar Planta',
+                      style: const TextStyle(fontSize: 16),
+                    ),
                   ),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(double.infinity, 56),
