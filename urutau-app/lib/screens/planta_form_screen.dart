@@ -72,7 +72,6 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
         _dapController.text = p.dapCm.toString();
       }
       _fotoPath = p.fotoEspeciePath;
-      // Planta salva só com categoria (altura 0, categoria 1/2/3) → modo manual
       if (p.alturaCm == 0 && p.categoria >= 1 && p.categoria <= 3) {
         _categoriaManual = true;
         _categoriaManualSelecionada = p.categoria;
@@ -130,9 +129,6 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(16),
             children: [
-              // ==========================================
-              // CATEGORIA (Badge dinâmico no topo)
-              // ==========================================
               if (_categoriaManual)
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -140,13 +136,21 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
                     horizontal: 16,
                   ),
                   decoration: BoxDecoration(
-                    color: categoriaColors[_categoriaManualSelecionada ?? 0]?.withAlpha(30) ?? Colors.grey.withAlpha(30),
+                    color: categoriaColors[_categoriaManualSelecionada ?? 0]
+                            ?.withAlpha(30) ??
+                        Colors.grey.withAlpha(30),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: categoriaColors[_categoriaManualSelecionada ?? 0]?.withAlpha(80) ?? Colors.grey.withAlpha(80)),
+                    border: Border.all(
+                        color: categoriaColors[_categoriaManualSelecionada ?? 0]
+                                ?.withAlpha(80) ??
+                            Colors.grey.withAlpha(80)),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.category, color: categoriaColors[_categoriaManualSelecionada ?? 0] ?? Colors.grey),
+                      Icon(Icons.category,
+                          color: categoriaColors[
+                                  _categoriaManualSelecionada ?? 0] ??
+                              Colors.grey),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -157,15 +161,21 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: categoriaColors[_categoriaManualSelecionada ?? 0] ?? Colors.grey,
+                                color: categoriaColors[
+                                        _categoriaManualSelecionada ?? 0] ??
+                                    Colors.grey,
                               ),
                             ),
                             if (_categoriaManualSelecionada != null)
                               Text(
-                                descricaoCategoria(_categoriaManualSelecionada!),
+                                descricaoCategoria(
+                                    _categoriaManualSelecionada!),
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: categoriaColors[_categoriaManualSelecionada ?? 0]?.withAlpha(200) ?? Colors.grey.withAlpha(200),
+                                  color: categoriaColors[
+                                              _categoriaManualSelecionada ?? 0]
+                                          ?.withAlpha(200) ??
+                                      Colors.grey.withAlpha(200),
                                 ),
                               ),
                           ],
@@ -214,399 +224,393 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
                     ],
                   ),
                 ),
-
               const SizedBox(height: 24),
-
-              // ==========================================
-              // Checkbox para seleção manual
-              // ==========================================
-              CheckboxListTile(
-                title: const Text('Quero apenas selecionar a categoria'),
-                value: _categoriaManual,
-                onChanged: (val) {
-                  setState(() {
-                    _categoriaManual = val ?? false;
-                    if (!_categoriaManual) _categoriaManualSelecionada = null;
-                  });
-                },
+              Semantics(
+                label: 'Selecionar categoria manualmente',
+                child: CheckboxListTile(
+                  title: const Text('Quero apenas selecionar a categoria'),
+                  value: _categoriaManual,
+                  onChanged: (val) {
+                    setState(() {
+                      _categoriaManual = val ?? false;
+                      if (!_categoriaManual) _categoriaManualSelecionada = null;
+                    });
+                  },
+                ),
               ),
-
-              // ==========================================
-              // Dropdown de categoria manual
-              // ==========================================
               if (_categoriaManual)
-                DropdownButtonFormField<int>(
+                Semantics(
+                  label: 'Selecione a categoria',
+                  child: DropdownButtonFormField<int>(
+                    decoration: InputDecoration(
+                      labelText: 'Selecione a categoria',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    value: _categoriaManualSelecionada,
+                    items: [1, 2, 3]
+                        .map((cat) => DropdownMenuItem(
+                              value: cat,
+                              child: Text('Categoria $cat'),
+                            ))
+                        .toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _categoriaManualSelecionada = val;
+                      });
+                    },
+                    validator: (v) {
+                      if (v == null) return 'Selecione a categoria';
+                      return null;
+                    },
+                  ),
+                ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Icon(Icons.eco, color: Colors.grey[700]),
+                  const SizedBox(width: 8),
+                  Text('Tipo de nome:',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Nome popular'),
+                    selected: _useNomePopular,
+                    onSelected: (v) => setState(() {
+                      _useNomePopular = true;
+                      _filteredSpecies = SpeciesService.filter(
+                        _allSpecies,
+                        _especieController.text,
+                        true,
+                      );
+                    }),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Nome científico'),
+                    selected: !_useNomePopular,
+                    onSelected: (v) => setState(() {
+                      _useNomePopular = false;
+                      _filteredSpecies = SpeciesService.filter(
+                        _allSpecies,
+                        _especieController.text,
+                        false,
+                      );
+                    }),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Semantics(
+                label: 'Buscar espécie',
+                child: TextFormField(
+                  controller: _especieController,
+                  focusNode: _especieFocusNode,
                   decoration: InputDecoration(
-                    labelText: 'Selecione a categoria',
+                    labelText: 'Espécie *',
+                    hintText: _useNomePopular
+                        ? 'Digite ou escolha (ex: fedego, NI)'
+                        : 'Digite ou escolha nome científico',
+                    prefixIcon: const Icon(Icons.eco),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                    suffixIcon: _fotoObrigatoria
+                        ? Tooltip(
+                            message: 'Foto obrigatória para NI',
+                            child: Icon(Icons.warning_amber,
+                                color: Colors.orange[700]),
+                          )
+                        : null,
                   ),
-                  value: _categoriaManualSelecionada,
-                  items: [1, 2, 3]
-                      .map((cat) => DropdownMenuItem(
-                            value: cat,
-                            child: Text('Categoria $cat'),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                        RegExp(r'[a-zA-ZÀ-ÿ0-9\s\-]')),
+                  ],
+                  onChanged: (v) {
                     setState(() {
-                      _categoriaManualSelecionada = val;
+                      _filteredSpecies = SpeciesService.filter(
+                        _allSpecies,
+                        v,
+                        _useNomePopular,
+                      );
+                      _showSpeciesList = v.trim().isNotEmpty;
                     });
+                    _updateCategoria();
+                  },
+                  onTap: () {
+                    if (_especieController.text.trim().isNotEmpty) {
+                      setState(() {
+                        _filteredSpecies = SpeciesService.filter(
+                          _allSpecies,
+                          _especieController.text,
+                          _useNomePopular,
+                        );
+                        _showSpeciesList = true;
+                      });
+                    }
                   },
                   validator: (v) {
-                    if (v == null) return 'Selecione a categoria';
+                    if (v == null || v.isEmpty) return 'Informe a espécie';
+                    if (!RegExp(r'^[a-zA-ZÀ-ÿ0-9\s\-]+$').hasMatch(v)) {
+                      return 'Apenas letras, números, espaços e hífens';
+                    }
                     return null;
                   },
                 ),
-
-              const SizedBox(height: 24),
-
-            // ==========================================
-            // ESPÉCIE (dropdown + preditor, nome popular ou científico)
-            // ==========================================
-            Row(
-              children: [
-                Icon(Icons.eco, color: Colors.grey[700]),
-                const SizedBox(width: 8),
-                Text('Tipo de nome:', style: TextStyle(fontSize: 14, color: Colors.grey[700])),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Nome popular'),
-                  selected: _useNomePopular,
-                  onSelected: (v) => setState(() {
-                    _useNomePopular = true;
-                    _filteredSpecies = SpeciesService.filter(
-                      _allSpecies,
-                      _especieController.text,
-                      true,
-                    );
-                  }),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Nome científico'),
-                  selected: !_useNomePopular,
-                  onSelected: (v) => setState(() {
-                    _useNomePopular = false;
-                    _filteredSpecies = SpeciesService.filter(
-                      _allSpecies,
-                      _especieController.text,
-                      false,
-                    );
-                  }),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _especieController,
-              focusNode: _especieFocusNode,
-              decoration: InputDecoration(
-                labelText: 'Espécie *',
-                hintText: _useNomePopular
-                    ? 'Digite ou escolha (ex: fedego, NI)'
-                    : 'Digite ou escolha nome científico',
-                prefixIcon: const Icon(Icons.eco),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                suffixIcon: _fotoObrigatoria
-                    ? Tooltip(
-                        message: 'Foto obrigatória para NI',
-                        child: Icon(Icons.warning_amber,
-                            color: Colors.orange[700]),
-                      )
-                    : null,
               ),
-              textCapitalization: TextCapitalization.words,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-ZÀ-ÿ0-9\s\-]')),
-              ],
-              onChanged: (v) {
-                setState(() {
-                  _filteredSpecies = SpeciesService.filter(
-                    _allSpecies,
-                    v,
-                    _useNomePopular,
-                  );
-                  _showSpeciesList = v.trim().isNotEmpty;
-                });
-                _updateCategoria();
-              },
-              onTap: () {
-                if (_especieController.text.trim().isNotEmpty) {
-                  setState(() {
-                    _filteredSpecies = SpeciesService.filter(
-                      _allSpecies,
-                      _especieController.text,
-                      _useNomePopular,
-                    );
-                    _showSpeciesList = true;
-                  });
-                }
-              },
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Informe a espécie';
-                if (!RegExp(r'^[a-zA-ZÀ-ÿ0-9\s\-]+$').hasMatch(v)) {
-                  return 'Apenas letras, números, espaços e hífens';
-                }
-                return null;
-              },
-            ),
-            if (_showSpeciesList && _filteredSpecies.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(top: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                constraints: const BoxConstraints(maxHeight: 200),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  padding: EdgeInsets.zero,
-                  itemCount: _filteredSpecies.length,
-                  itemBuilder: (_, i) {
-                    final e = _filteredSpecies[i];
-                    final display = e.display(_useNomePopular);
-                    return ListTile(
-                      dense: true,
-                      title: Text(display),
-                      subtitle: _useNomePopular && e.nomeCientifico != e.nomePopular
-                          ? Text(
-                              e.nomeCientifico,
-                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                            )
-                          : null,
-                      onTap: () {
-                        _especieController.text = display;
-                        setState(() {
-                          _showSpeciesList = false;
-                          _filteredSpecies = [];
-                        });
-                        _updateCategoria();
-                        FocusScope.of(context).unfocus();
-                      },
-                    );
-                  },
-                ),
-              ),
-
-            // Aviso NI
-            if (_fotoObrigatoria) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange[200]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.orange[700], size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Atenção: Foto obrigatória para identificação posterior.',
-                        style: TextStyle(
-                          color: Colors.orange[800],
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 16),
-
-            // ==========================================
-            // ALTURA
-            // ==========================================
-            if (!_categoriaManual)
-              TextFormField(
-                controller: _alturaController,
-                decoration: InputDecoration(
-                  labelText: 'Altura (cm) *',
-                  hintText: 'Ex: 120',
-                  prefixIcon: const Icon(Icons.height),
-                  suffixText: 'cm',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                ],
-                onChanged: (_) => _updateCategoria(),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Informe a altura';
-                  final val = double.tryParse(v.replaceAll(',', '.'));
-                  if (val == null || val <= 0) return 'Valor inválido';
-                  return null;
-                },
-              ),
-
-            const SizedBox(height: 16),
-
-            // ==========================================
-            // DAP (condicional)
-            // ==========================================
-            if (!_categoriaManual)
-              AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                child: _mostrarDAP
-                    ? Column(
-                        children: [
-                          TextFormField(
-                            controller: _dapController,
-                            decoration: InputDecoration(
-                              labelText: 'DAP (cm) *',
-                              hintText: 'Diâmetro à altura do peito',
-                              prefixIcon: const Icon(Icons.straighten),
-                              suffixText: 'cm',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              helperText:
-                                  'Obrigatório para plantas com altura ≥ 50cm',
-                            ),
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.,]')),
-                            ],
-                            onChanged: (_) => _updateCategoria(),
-                            validator: (v) {
-                              if (!_mostrarDAP) return null;
-                              if (v == null || v.isEmpty) {
-                                return 'DAP obrigatório para altura ≥ 50cm';
-                              }
-                              final val = double.tryParse(v.replaceAll(',', '.'));
-                              if (val == null || val <= 0) {
-                                return 'Valor inválido';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                      )
-                    : const SizedBox.shrink(),
-              ),
-
-            // ==========================================
-            // FOTO DA ESPÉCIE
-            // ==========================================
-            const SizedBox(height: 8),
-            Text(
-              _fotoObrigatoria
-                  ? 'Foto da Espécie (obrigatória) *'
-                  : 'Foto da Espécie (opcional)',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            if (_fotoPath != null)
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: ImageService.buildImage(
-                      _fotoPath!,
-                      height: 200,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      cacheWidth: kIsWeb ? null : 600,
-                    ),
-                  ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: IconButton(
-                      icon: const Icon(Icons.cancel, color: Colors.red),
-                      onPressed: () {
-                        setState(() => _fotoPath = null);
-                      },
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.8),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            else
-              InkWell(
-                onTap: _tirarFoto,
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  height: 150,
+              if (_showSpeciesList && _filteredSpecies.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 4),
                   decoration: BoxDecoration(
-                    border: Border.all(
-                      color: _fotoObrigatoria
-                          ? Colors.orange[300]!
-                          : Colors.grey[300]!,
-                      width: 2,
-                    ),
+                    color: Colors.grey[50],
+                    border: Border.all(color: Colors.grey[300]!),
                     borderRadius: BorderRadius.circular(12),
-                    color:
-                        _fotoObrigatoria ? Colors.orange[50] : Colors.grey[50],
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: _filteredSpecies.length,
+                    itemBuilder: (_, i) {
+                      final e = _filteredSpecies[i];
+                      final display = e.display(_useNomePopular);
+                      return ListTile(
+                        dense: true,
+                        title: Text(display),
+                        subtitle:
+                            _useNomePopular && e.nomeCientifico != e.nomePopular
+                                ? Text(
+                                    e.nomeCientifico,
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.grey[600]),
+                                  )
+                                : null,
+                        onTap: () {
+                          _especieController.text = display;
+                          setState(() {
+                            _showSpeciesList = false;
+                            _filteredSpecies = [];
+                          });
+                          _updateCategoria();
+                          FocusScope.of(context).unfocus();
+                        },
+                      );
+                    },
+                  ),
+                ),
+              if (_fotoObrigatoria) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange[200]!),
+                  ),
+                  child: Row(
                     children: [
-                      Icon(
-                        Icons.add_a_photo,
-                        size: 40,
-                        color: _fotoObrigatoria
-                            ? Colors.orange[400]
-                            : Colors.grey[400],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tirar foto da planta',
-                        style: TextStyle(
-                          color: _fotoObrigatoria
-                              ? Colors.orange[600]
-                              : Colors.grey[500],
+                      Icon(Icons.info_outline,
+                          color: Colors.orange[700], size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Atenção: Foto obrigatória para identificação posterior.',
+                          style: TextStyle(
+                            color: Colors.orange[800],
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-
-            const SizedBox(height: 32),
-
-            // ==========================================
-            // BOTÃO SALVAR PLANTA
-            // ==========================================
-            FilledButton.icon(
-              onPressed: _salvarPlanta,
-              icon: const Icon(Icons.check),
-              label: Text(
-                _isEditing ? 'Atualizar Planta' : 'Adicionar Planta',
-                style: const TextStyle(fontSize: 18),
-              ),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+              ],
+              const SizedBox(height: 16),
+              if (!_categoriaManual)
+                Semantics(
+                  label: 'Altura da árvore',
+                  child: TextFormField(
+                    controller: _alturaController,
+                    decoration: InputDecoration(
+                      labelText: 'Altura (cm) *',
+                      hintText: 'Ex: 120',
+                      prefixIcon: const Icon(Icons.height),
+                      suffixText: 'cm',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                    ],
+                    onChanged: (_) => _updateCategoria(),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Informe a altura';
+                      final val = double.tryParse(v.replaceAll(',', '.'));
+                      if (val == null || val <= 0) return 'Valor inválido';
+                      return null;
+                    },
+                  ),
+                ),
+              const SizedBox(height: 16),
+              if (!_categoriaManual)
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 300),
+                  child: _mostrarDAP
+                      ? Column(
+                          children: [
+                            Semantics(
+                              label: 'Diâmetro à altura do peito',
+                              child: TextFormField(
+                                controller: _dapController,
+                                decoration: InputDecoration(
+                                  labelText: 'DAP (cm) *',
+                                  hintText: 'Diâmetro à altura do peito',
+                                  prefixIcon: const Icon(Icons.straighten),
+                                  suffixText: 'cm',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  helperText:
+                                      'Obrigatório para plantas com altura ≥ 50cm',
+                                ),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9.,]')),
+                                ],
+                                onChanged: (_) => _updateCategoria(),
+                                validator: (v) {
+                                  if (!_mostrarDAP) return null;
+                                  if (v == null || v.isEmpty) {
+                                    return 'DAP obrigatório para altura ≥ 50cm';
+                                  }
+                                  final val =
+                                      double.tryParse(v.replaceAll(',', '.'));
+                                  if (val == null || val <= 0) {
+                                    return 'Valor inválido';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              const SizedBox(height: 8),
+              Text(
+                _fotoObrigatoria
+                    ? 'Foto da Espécie (obrigatória) *'
+                    : 'Foto da Espécie (opcional)',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-          ],
+              const SizedBox(height: 8),
+              if (_fotoPath != null)
+                Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: ImageService.buildImage(
+                        _fotoPath!,
+                        height: 200,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        cacheWidth: kIsWeb ? null : 600,
+                      ),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: IconButton(
+                        icon: const Icon(Icons.cancel, color: Colors.red),
+                        onPressed: () {
+                          setState(() => _fotoPath = null);
+                        },
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Semantics(
+                  label: 'Tirar foto da planta',
+                  button: true,
+                  child: InkWell(
+                    onTap: _tirarFoto,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      height: 150,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: _fotoObrigatoria
+                              ? Colors.orange[300]!
+                              : Colors.grey[300]!,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        color: _fotoObrigatoria
+                            ? Colors.orange[50]
+                            : Colors.grey[50],
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.add_a_photo,
+                            size: 40,
+                            color: _fotoObrigatoria
+                                ? Colors.orange[400]
+                                : Colors.grey[400],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tirar foto da planta',
+                            style: TextStyle(
+                              color: _fotoObrigatoria
+                                  ? Colors.orange[600]
+                                  : Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 32),
+              Semantics(
+                label: 'Salvar planta',
+                button: true,
+                child: FilledButton.icon(
+                  onPressed: _salvarPlanta,
+                  icon: const Icon(Icons.check),
+                  label: Text(
+                    _isEditing ? 'Atualizar Planta' : 'Adicionar Planta',
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 56),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -614,7 +618,6 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
   Future<void> _tirarFoto() async {
     final picker = ImagePicker();
 
-    // Escolher origem: Câmera ou Galeria
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (ctx) => Column(
@@ -651,7 +654,6 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
   Future<void> _salvarPlanta() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validação de foto NI
     if (_fotoObrigatoria && _fotoPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -694,7 +696,6 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
       await _db.insertPlanta(companion);
     }
 
-    // Retornar a planta para a tela anterior
     final planta = Planta(
       id: 0,
       uuid: _currentUuid!,

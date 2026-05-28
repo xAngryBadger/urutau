@@ -23,6 +23,18 @@
   --color-wood-700: #5d4037;
   --color-wood-800: #4e342e;
   --color-wood-900: #3e2723;
+
+--color-forest-50: #f2f7f2;
+--color-forest-100: #e1eee1;
+--color-forest-200: #c3ddc3;
+--color-forest-300: #9cc49c;
+--color-forest-400: #6aa86a;
+--color-forest-500: #488c48;
+--color-forest-600: #357135;
+--color-forest-700: #2a5b2a;
+--color-forest-800: #1f491f;
+--color-forest-900: #163a16;
+--color-forest-950: #0b210b;
 }
 
 body {

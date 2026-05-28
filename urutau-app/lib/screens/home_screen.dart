@@ -77,25 +77,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-    title: Semantics(
-      label: 'Urutau - ${syncService.currentUser?.nome ?? "app florestal"}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const Text('Urutau'),
-          if (syncService.currentUser != null)
-            Text(
-              syncService.currentUser!.nome,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
-              ),
-            ),
-        ],
-      ),
-    ),
-    centerTitle: true,
-    actions: [
+        title: Semantics(
+          label: 'Urutau - ${syncService.currentUser?.nome ?? "app florestal"}',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Text('Urutau'),
+              if (syncService.currentUser != null)
+                Text(
+                  syncService.currentUser!.nome,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        centerTitle: true,
+        actions: [
           // Indicador de sincronização
           Padding(
             padding: const EdgeInsets.only(right: 4),
@@ -103,7 +103,9 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icon(
                 _showFilterBar
                     ? Icons.filter_alt
-                    : (_filterActive ? Icons.filter_alt : Icons.filter_alt_outlined),
+                    : (_filterActive
+                        ? Icons.filter_alt
+                        : Icons.filter_alt_outlined),
                 color: _filterActive ? Colors.amber : null,
               ),
               tooltip: 'Filtrar por data ou talhão',
@@ -206,8 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     : (snapshot.data ?? []);
 
                 if (parcelas.isEmpty) {
-                  return _buildEmptyState(
-                      filterActive: _filterActive);
+                  return _buildEmptyState(filterActive: _filterActive);
                 }
 
                 return ListView.builder(
@@ -311,7 +312,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildFilterBar(SyncService syncService) {
     final dateFmt = DateFormat('dd/MM/yy');
     return Container(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      color: Theme.of(context)
+          .colorScheme
+          .surfaceContainerHighest
+          .withValues(alpha: 0.5),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,15 +331,18 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: InputDecoration(
                 labelText: 'Talhão / Propriedade',
                 prefixIcon: const Icon(Icons.forest, size: 18),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 isDense: true,
               ),
               value: _filterPropUt,
               items: [
-                const DropdownMenuItem(value: null, child: Text('Todos os talhões')),
-                ..._talhoes.map((t) => DropdownMenuItem(value: t, child: Text(t))),
+                const DropdownMenuItem(
+                    value: null, child: Text('Todos os talhões')),
+                ..._talhoes
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t))),
               ],
               onChanged: (v) => setState(() => _filterPropUt = v),
             ),
@@ -359,7 +366,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       firstDate: DateTime(2020),
                       lastDate: DateTime.now(),
                     );
-                    if (picked != null) setState(() => _filterDataInicio = picked);
+                    if (picked != null)
+                      setState(() => _filterDataInicio = picked);
                   },
                 ),
               ),
@@ -473,7 +481,8 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(12),
               onTap: () {
                 if (list.length == 1) {
-                  Navigator.of(context).pushNamed('/parcela/editar', arguments: list.first.uuid);
+                  Navigator.of(context)
+                      .pushNamed('/parcela/editar', arguments: list.first.uuid);
                 } else {
                   showModalBottomSheet(
                     context: context,
@@ -489,13 +498,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           ...list.map((p) => ListTile(
-                            leading: const Icon(Icons.edit_note, color: Colors.blue),
-                            title: Text('${p.propriedade} · ${p.propUt} · Parcela ${p.idParcela}'),
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              Navigator.of(context).pushNamed('/parcela/editar', arguments: p.uuid);
-                            },
-                          )),
+                                leading: const Icon(Icons.edit_note,
+                                    color: Colors.blue),
+                                title: Text(
+                                    '${p.propriedade} · ${p.propUt} · Parcela ${p.idParcela}'),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  Navigator.of(context).pushNamed(
+                                      '/parcela/editar',
+                                      arguments: p.uuid);
+                                },
+                              )),
                         ],
                       ),
                     ),
@@ -503,7 +516,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
               },
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
                     Icon(Icons.edit_note, color: Colors.blue[700], size: 24),
@@ -543,7 +557,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 24),
           Text(
-            filterActive ? 'Nenhuma parcela encontrada' : 'Nenhuma parcela cadastrada',
+            filterActive
+                ? 'Nenhuma parcela encontrada'
+                : 'Nenhuma parcela cadastrada',
             style: TextStyle(
               fontSize: 18,
               color: Colors.grey[600],
@@ -560,7 +576,8 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Colors.grey[500],
             ),
           ),
-          if (filterActive) ...[            const SizedBox(height: 16),
+          if (filterActive) ...[
+            const SizedBox(height: 16),
             OutlinedButton.icon(
               icon: const Icon(Icons.clear),
               label: const Text('Limpar filtro'),
@@ -571,6 +588,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
   Widget _buildParcelaCard(Parcela parcela) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -699,7 +717,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final myId = syncService.currentUser?.uuid ?? '';
-    final incompletas = myId.isEmpty ? <Parcela>[] : await _db.getParcelasIncompletas(myId);
+    final incompletas =
+        myId.isEmpty ? <Parcela>[] : await _db.getParcelasIncompletas(myId);
     if (!mounted) return;
     final pendingBefore = syncService.pendingCount;
 
@@ -748,7 +767,8 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Icon(Icons.edit_note, size: 18, color: Colors.orange),
                 SizedBox(width: 8),
-                Expanded(child: Text(
+                Expanded(
+                    child: Text(
                   'Revise seus dados antes de enviar. Após sincronizar, as alterações ficam no servidor.',
                   style: TextStyle(fontSize: 13),
                 )),
@@ -760,7 +780,8 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Icon(Icons.wifi, size: 18, color: Colors.blue),
                 SizedBox(width: 8),
-                Expanded(child: Text(
+                Expanded(
+                    child: Text(
                   'Recomenda-se usar uma conexão Wi-Fi estável para evitar falhas.',
                   style: TextStyle(fontSize: 13),
                 )),
@@ -822,7 +843,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ? 'Enviadas $sent parcela(s) concluída(s).'
             : 'Sincronização concluída.';
         if (incompletas.isNotEmpty) {
-          msg += ' ${incompletas.length} parcela(s) incompleta(s) permanecem só no dispositivo (conclua-as para enviar).';
+          msg +=
+              ' ${incompletas.length} parcela(s) incompleta(s) permanecem só no dispositivo (conclua-as para enviar).';
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

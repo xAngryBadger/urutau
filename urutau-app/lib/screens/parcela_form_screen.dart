@@ -49,7 +49,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   bool _isLoading = false;
   bool _isEditing = false;
   String? _currentUuid;
-  bool _prontaParaSync = false; // carregado ao editar; rascunho até marcar concluída
+  bool _prontaParaSync =
+      false; // carregado ao editar; rascunho até marcar concluída
 
   // [GPS DESATIVADO - MANUTENÇÃO] Reativar quando integrar com app de mapas
   // double? _latitude;
@@ -126,7 +127,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     _fotos = await _db.getFotosByParcela(_currentUuid!);
     if (mounted) setState(() => _isLoading = false);
     if (mounted && parcela != null && parcela.synced) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _showEditarSyncedAviso());
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _showEditarSyncedAviso());
     }
   }
 
@@ -171,7 +173,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     final syncService = context.read<SyncService>();
     final myId = syncService.currentUser?.uuid;
 
-    final parcelas = await _db.getParcelasByHierarchy(propriedade: prop, propUt: ut);
+    final parcelas =
+        await _db.getParcelasByHierarchy(propriedade: prop, propUt: ut);
     // Próxima por idParcela (lista já vem ordenada por idParcela)
     Parcela? nextToOpen;
     int? nextSuggestedId;
@@ -240,7 +243,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           content: Text(
             nextSuggestedId != null
                 ? 'Não há mais parcelas editáveis nesta UT.\n\n'
-                  'Deseja criar a Parcela $nextSuggestedId?'
+                    'Deseja criar a Parcela $nextSuggestedId?'
                 : 'Não há parcelas nesta UT para abrir.',
           ),
           actions: [
@@ -282,8 +285,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   }
 
   bool get _hasUnsavedData {
-    if (_propriedadeController.text.isNotEmpty || _propUtController.text.isNotEmpty ||
-        _idParcelaController.text.isNotEmpty || _plantas.isNotEmpty || _novasFotosPaths.isNotEmpty) return true;
+    if (_propriedadeController.text.isNotEmpty ||
+        _propUtController.text.isNotEmpty ||
+        _idParcelaController.text.isNotEmpty ||
+        _plantas.isNotEmpty ||
+        _novasFotosPaths.isNotEmpty) return true;
     return false;
   }
 
@@ -297,7 +303,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           final choice = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              icon: const Icon(Icons.warning_amber, color: Colors.orange, size: 32),
+              icon: const Icon(Icons.warning_amber,
+                  color: Colors.orange, size: 32),
               title: const Text('Sair sem salvar?'),
               content: const Text(
                 'Você tem dados não salvos nesta parcela.\n\n'
@@ -314,7 +321,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(ctx, 'discard'),
-                  child: const Text('Descartar', style: TextStyle(color: Colors.red)),
+                  child: const Text('Descartar',
+                      style: TextStyle(color: Colors.red)),
                 ),
               ],
             ),
@@ -338,331 +346,363 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         }
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Editar Parcela' : 'Nova Parcela'),
-        actions: [
-        if (_isEditing) ...[
-          Semantics(
-            label: 'Próxima parcela',
-            button: true,
-            child: IconButton(
-              icon: const Icon(Icons.skip_next),
-              onPressed: _goToNextParcela,
-              tooltip: 'Próxima parcela (mesmo UT)',
-            ),
-          ),
-          Semantics(
-            label: 'Excluir parcela',
-            button: true,
-            child: IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: _confirmDelete,
-              tooltip: 'Excluir parcela',
-            ),
-          ),
-        ],
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : GestureDetector(
-              onTap: () => FocusScope.of(context).unfocus(),
-              child: Form(
-              key: _formKey,
-              child: ListView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.all(16),
-                children: [
-                  // ==========================================
-                  // SEÇÃO 1: Identificação (Hierarquia)
-                  // ==========================================
-                  const SizedBox(height: 12),
-                  // [GPS DESATIVADO - MANUTENÇÃO] Botão de GPS comentado
-                  // Reativar quando integrar com app de mapas
-
-                  // --- Propriedade (com autocomplete) ---
-                  Autocomplete<String>(
-                    initialValue: TextEditingValue(text: _propriedadeController.text),
-                    optionsBuilder: (textEditingValue) {
-                      if (textEditingValue.text.isEmpty) {
-                        return _propriedadesSugestoes;
-                      }
-                      return _propriedadesSugestoes.where((p) =>
-                          p.toLowerCase().contains(
-                              textEditingValue.text.toLowerCase()));
-                    },
-                    onSelected: (value) {
-                      _propriedadeController.text = value;
-                      _loadUtSugestoes(value);
-                    },
-                    fieldViewBuilder: (context, textController, focusNode, onSubmitted) {
-                      // Sincronizar com nosso controller
-                      if (textController.text != _propriedadeController.text &&
-                          _propriedadeController.text.isNotEmpty &&
-                          textController.text.isEmpty) {
-                        textController.text = _propriedadeController.text;
-                      }
-                      textController.addListener(() {
-                        _propriedadeController.text = textController.text;
-                      });
-        return Semantics(
-          label: 'Propriedade',
-          textField: true,
-          child: TextFormField(
-                  enabled: !widget.readOnly,
-                  controller: textController,
-                  focusNode: focusNode,
-                  decoration: InputDecoration(
-                    labelText: 'Propriedade *',
-                    hintText: 'Ex: Fazenda São João',
-                    prefixIcon: const Icon(Icons.home_work),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    suffixIcon: _propriedadesSugestoes.isNotEmpty
-                        ? const Icon(Icons.arrow_drop_down, size: 20)
-                        : null,
-                  ),
-                  textCapitalization: TextCapitalization.words,
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Campo obrigatório' : null,
-                  onFieldSubmitted: (_) => onSubmitted(),
+        appBar: AppBar(
+          title: Text(_isEditing ? 'Editar Parcela' : 'Nova Parcela'),
+          actions: [
+            if (_isEditing) ...[
+              Semantics(
+                label: 'Próxima parcela',
+                button: true,
+                child: IconButton(
+                  icon: const Icon(Icons.skip_next),
+                  onPressed: _goToNextParcela,
+                  tooltip: 'Próxima parcela (mesmo UT)',
                 ),
-              );
-          },
-        ),
-        const SizedBox(height: 16),
-
-        // --- UT / Talhão (com autocomplete) ---
-        Autocomplete<String>(
-          initialValue: TextEditingValue(text: _propUtController.text),
-          optionsBuilder: (textEditingValue) {
-            if (textEditingValue.text.isEmpty) {
-              return _utSugestoes;
-            }
-            return _utSugestoes.where((u) =>
-                u.toLowerCase().contains(
-                    textEditingValue.text.toLowerCase()));
-          },
-          onSelected: (value) {
-            _propUtController.text = value;
-          },
-          fieldViewBuilder: (context, textController, focusNode, onSubmitted) {
-            if (textController.text != _propUtController.text &&
-                _propUtController.text.isNotEmpty &&
-                textController.text.isEmpty) {
-              textController.text = _propUtController.text;
-            }
-            textController.addListener(() {
-              _propUtController.text = textController.text;
-            });
-      return Semantics(
-        label: 'UT ou Talhão',
-        textField: true,
-        child: TextFormField(
-                enabled: !widget.readOnly,
-                controller: textController,
-                focusNode: focusNode,
-                decoration: InputDecoration(
-                  labelText: 'UT / Talhão *',
-                  hintText: 'Ex: UT 01, Talhão A',
-                  prefixIcon: const Icon(Icons.park),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  suffixIcon: _utSugestoes.isNotEmpty
-                      ? const Icon(Icons.arrow_drop_down, size: 20)
-                      : null,
-                ),
-                textCapitalization: TextCapitalization.words,
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Campo obrigatório' : null,
-                onFieldSubmitted: (_) => onSubmitted(),
               ),
-            );
-          },
-        ),
-        const SizedBox(height: 16),
-
-        // --- Número da Parcela (livre: o usuário define na hora) ---
-    Semantics(
-      label: 'Número da parcela',
-      textField: true,
-      child: TextFormField(
-          controller: _idParcelaController,
-          enabled: !widget.readOnly,
-          decoration: InputDecoration(
-            labelText: 'Número da parcela *',
-            hintText: 'Você define (ex: 1, 2, 3...)',
-            helperText: 'Número que você dá a esta parcela no campo.',
-            prefixIcon: const Icon(Icons.tag),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-          keyboardType: TextInputType.number,
-          validator: (v) {
-            if (v == null || v.isEmpty) return 'Campo obrigatório';
-            if (int.tryParse(v) == null) return 'Número inválido';
-            return null;
-          },
-        ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // ==========================================
-        // SEÇÃO 2: Anotações (antigo Observações) — PRIMEIRO
-        // ==========================================
-    Semantics(
-      label: 'Anotações',
-      textField: true,
-      child: TextFormField(
-          controller: _observacoesController,
-          enabled: !widget.readOnly,
-          decoration: InputDecoration(
-            labelText: 'Anotações (opcional)',
-            hintText: 'Anotações sobre a parcela...',
-            prefixIcon: const Icon(Icons.edit_note),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-          maxLines: 3,
-          textCapitalization: TextCapitalization.sentences,
-        ),
-        ),
-
-        const SizedBox(height: 32),
-
-                  // ==========================================
-                  // SEÇÃO 3: Plantas
-                  // ==========================================
-                  _sectionTitle(
-                    'Plantas (${_plantas.length})',
-                    Icons.grass,
-                  ),
-                  const SizedBox(height: 12),
-
-                  if (_plantas.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[200]!),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(Icons.grass, size: 48, color: Colors.grey[300]),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Nenhuma planta adicionada',
-                            style: TextStyle(color: Colors.grey[500]),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  ..._plantas.asMap().entries.map(
-                        (entry) => _buildPlantaCard(entry.key, entry.value),
-                      ),
-
-                  const SizedBox(height: 12),
-
-        Semantics(
-          label: 'Adicionar planta',
-          button: true,
-          child: OutlinedButton.icon(
-          onPressed: widget.readOnly ? null : _addPlanta,
-          icon: const Icon(Icons.add),
-          label: const Text('Adicionar Planta'),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        ),
-
-                  const SizedBox(height: 32),
-
-                  // ==========================================
-                  // SEÇÃO 3: Fotos da Parcela (2-4)
-                  // ==========================================
-                  _sectionTitle(
-                    'Fotos da Parcela (${_fotos.length + _novasFotosPaths.length})',
-                    Icons.photo_camera,
-                  ),
-                  const SizedBox(height: 12),
-
-                  _buildFotosGrid(),
-
-                  const SizedBox(height: 24),
-                  if (!_prontaParaSync && _isEditing && !widget.readOnly)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.orange.shade700, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Esta parcela não será sincronizada até marcar como concluída.',
-                              style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // ==========================================
-                  // BOTÕES: Sair e guardar (rascunho) | Concluir
-                  // ==========================================
-      if (!widget.readOnly) ...[
-        Semantics(
-          label: 'Salvar rascunho',
-          button: true,
-          child: OutlinedButton.icon(
-            onPressed: _isLoading ? null : _salvarRascunho,
-            icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_as),
-            label: const Text('Sair e guardar (rascunho)'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-      Semantics(
-        label: 'Salvar parcela',
-        button: true,
-          child: FilledButton.icon(
-            onPressed: _isLoading ? null : _salvar,
-            icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.check_circle),
-            label: const Text('Concluir parcela (pronta para sincronizar)'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(double.infinity, 56),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
-      ],
-                  const SizedBox(height: 32),
+              Semantics(
+                label: 'Excluir parcela',
+                button: true,
+                child: IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: _confirmDelete,
+                  tooltip: 'Excluir parcela',
+                ),
+              ),
+            ],
           ],
         ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : GestureDetector(
+                onTap: () => FocusScope.of(context).unfocus(),
+                child: Form(
+                  key: _formKey,
+                  child: ListView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      // ==========================================
+                      // SEÇÃO 1: Identificação (Hierarquia)
+                      // ==========================================
+                      const SizedBox(height: 12),
+                      // [GPS DESATIVADO - MANUTENÇÃO] Botão de GPS comentado
+                      // Reativar quando integrar com app de mapas
+
+                      // --- Propriedade (com autocomplete) ---
+                      Autocomplete<String>(
+                        initialValue:
+                            TextEditingValue(text: _propriedadeController.text),
+                        optionsBuilder: (textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return _propriedadesSugestoes;
+                          }
+                          return _propriedadesSugestoes.where((p) => p
+                              .toLowerCase()
+                              .contains(textEditingValue.text.toLowerCase()));
+                        },
+                        onSelected: (value) {
+                          _propriedadeController.text = value;
+                          _loadUtSugestoes(value);
+                        },
+                        fieldViewBuilder:
+                            (context, textController, focusNode, onSubmitted) {
+                          // Sincronizar com nosso controller
+                          if (textController.text !=
+                                  _propriedadeController.text &&
+                              _propriedadeController.text.isNotEmpty &&
+                              textController.text.isEmpty) {
+                            textController.text = _propriedadeController.text;
+                          }
+                          textController.addListener(() {
+                            _propriedadeController.text = textController.text;
+                          });
+                          return Semantics(
+                            label: 'Propriedade',
+                            textField: true,
+                            child: TextFormField(
+                              enabled: !widget.readOnly,
+                              controller: textController,
+                              focusNode: focusNode,
+                              decoration: InputDecoration(
+                                labelText: 'Propriedade *',
+                                hintText: 'Ex: Fazenda São João',
+                                prefixIcon: const Icon(Icons.home_work),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                suffixIcon: _propriedadesSugestoes.isNotEmpty
+                                    ? const Icon(Icons.arrow_drop_down,
+                                        size: 20)
+                                    : null,
+                              ),
+                              textCapitalization: TextCapitalization.words,
+                              validator: (v) => v == null || v.trim().isEmpty
+                                  ? 'Campo obrigatório'
+                                  : null,
+                              onFieldSubmitted: (_) => onSubmitted(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // --- UT / Talhão (com autocomplete) ---
+                      Autocomplete<String>(
+                        initialValue:
+                            TextEditingValue(text: _propUtController.text),
+                        optionsBuilder: (textEditingValue) {
+                          if (textEditingValue.text.isEmpty) {
+                            return _utSugestoes;
+                          }
+                          return _utSugestoes.where((u) => u
+                              .toLowerCase()
+                              .contains(textEditingValue.text.toLowerCase()));
+                        },
+                        onSelected: (value) {
+                          _propUtController.text = value;
+                        },
+                        fieldViewBuilder:
+                            (context, textController, focusNode, onSubmitted) {
+                          if (textController.text != _propUtController.text &&
+                              _propUtController.text.isNotEmpty &&
+                              textController.text.isEmpty) {
+                            textController.text = _propUtController.text;
+                          }
+                          textController.addListener(() {
+                            _propUtController.text = textController.text;
+                          });
+                          return Semantics(
+                            label: 'UT ou Talhão',
+                            textField: true,
+                            child: TextFormField(
+                              enabled: !widget.readOnly,
+                              controller: textController,
+                              focusNode: focusNode,
+                              decoration: InputDecoration(
+                                labelText: 'UT / Talhão *',
+                                hintText: 'Ex: UT 01, Talhão A',
+                                prefixIcon: const Icon(Icons.park),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                suffixIcon: _utSugestoes.isNotEmpty
+                                    ? const Icon(Icons.arrow_drop_down,
+                                        size: 20)
+                                    : null,
+                              ),
+                              textCapitalization: TextCapitalization.words,
+                              validator: (v) => v == null || v.trim().isEmpty
+                                  ? 'Campo obrigatório'
+                                  : null,
+                              onFieldSubmitted: (_) => onSubmitted(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // --- Número da Parcela (livre: o usuário define na hora) ---
+                      Semantics(
+                        label: 'Número da parcela',
+                        textField: true,
+                        child: TextFormField(
+                          controller: _idParcelaController,
+                          enabled: !widget.readOnly,
+                          decoration: InputDecoration(
+                            labelText: 'Número da parcela *',
+                            hintText: 'Você define (ex: 1, 2, 3...)',
+                            helperText:
+                                'Número que você dá a esta parcela no campo.',
+                            prefixIcon: const Icon(Icons.tag),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (v) {
+                            if (v == null || v.isEmpty)
+                              return 'Campo obrigatório';
+                            if (int.tryParse(v) == null)
+                              return 'Número inválido';
+                            return null;
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // ==========================================
+                      // SEÇÃO 2: Anotações (antigo Observações) — PRIMEIRO
+                      // ==========================================
+                      Semantics(
+                        label: 'Anotações',
+                        textField: true,
+                        child: TextFormField(
+                          controller: _observacoesController,
+                          enabled: !widget.readOnly,
+                          decoration: InputDecoration(
+                            labelText: 'Anotações (opcional)',
+                            hintText: 'Anotações sobre a parcela...',
+                            prefixIcon: const Icon(Icons.edit_note),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          maxLines: 3,
+                          textCapitalization: TextCapitalization.sentences,
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // ==========================================
+                      // SEÇÃO 3: Plantas
+                      // ==========================================
+                      _sectionTitle(
+                        'Plantas (${_plantas.length})',
+                        Icons.grass,
+                      ),
+                      const SizedBox(height: 12),
+
+                      if (_plantas.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[200]!),
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(Icons.grass,
+                                  size: 48, color: Colors.grey[300]),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Nenhuma planta adicionada',
+                                style: TextStyle(color: Colors.grey[500]),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      ..._plantas.asMap().entries.map(
+                            (entry) => _buildPlantaCard(entry.key, entry.value),
+                          ),
+
+                      const SizedBox(height: 12),
+
+                      Semantics(
+                        label: 'Adicionar planta',
+                        button: true,
+                        child: OutlinedButton.icon(
+                          onPressed: widget.readOnly ? null : _addPlanta,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Adicionar Planta'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 52),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // ==========================================
+                      // SEÇÃO 3: Fotos da Parcela (2-4)
+                      // ==========================================
+                      _sectionTitle(
+                        'Fotos da Parcela (${_fotos.length + _novasFotosPaths.length})',
+                        Icons.photo_camera,
+                      ),
+                      const SizedBox(height: 12),
+
+                      _buildFotosGrid(),
+
+                      const SizedBox(height: 24),
+                      if (!_prontaParaSync && _isEditing && !widget.readOnly)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline,
+                                  color: Colors.orange.shade700, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Esta parcela não será sincronizada até marcar como concluída.',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange.shade900),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // ==========================================
+                      // BOTÕES: Sair e guardar (rascunho) | Concluir
+                      // ==========================================
+                      if (!widget.readOnly) ...[
+                        Semantics(
+                          label: 'Salvar rascunho',
+                          button: true,
+                          child: OutlinedButton.icon(
+                            onPressed: _isLoading ? null : _salvarRascunho,
+                            icon: _isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2))
+                                : const Icon(Icons.save_as),
+                            label: const Text('Sair e guardar (rascunho)'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 48),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Semantics(
+                          label: 'Salvar parcela',
+                          button: true,
+                          child: FilledButton.icon(
+                            onPressed: _isLoading ? null : _salvar,
+                            icon: _isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.check_circle),
+                            label: const Text(
+                                'Concluir parcela (pronta para sincronizar)'),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 56),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
+              ),
       ),
-    ),
-  ),
-  );
-}
+    );
+  }
 
   Widget _sectionTitle(String title, IconData icon) {
     return Row(
@@ -808,35 +848,34 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     );
   }
 
-Widget _buildAddFotoButton() {
-  return Semantics(
-    label: 'Adicionar foto da parcela',
-    button: true,
-    child: InkWell(
-      onTap: _tirarFotoParcela,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!, width: 2),
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.grey[50],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add_a_photo, size: 36, color: Colors.grey[400]),
-            const SizedBox(height: 8),
-        Text(
-          'Adicionar foto',
-          style: TextStyle(color: Colors.grey[500], fontSize: 13),
-        ),
-        ],
+  Widget _buildAddFotoButton() {
+    return Semantics(
+      label: 'Adicionar foto da parcela',
+      button: true,
+      child: InkWell(
+        onTap: _tirarFotoParcela,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!, width: 2),
+            borderRadius: BorderRadius.circular(12),
+            color: Colors.grey[50],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_a_photo, size: 36, color: Colors.grey[400]),
+              const SizedBox(height: 8),
+              Text(
+                'Adicionar foto',
+                style: TextStyle(color: Colors.grey[500], fontSize: 13),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  ),
-);
-}
+    );
+  }
 
   // ==========================================
   // AÇÕES
@@ -905,34 +944,34 @@ Widget _buildAddFotoButton() {
 
   Future<void> _tirarFotoParcela() async {
     final picker = ImagePicker();
-    
+
     // Escolher origem
     final source = await showModalBottomSheet<String>(
       context: context,
-    builder: (ctx) => Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Semantics(
-          label: 'Tirar foto com câmera',
-          button: true,
-          child: ListTile(
-            leading: const Icon(Icons.camera_alt),
-            title: const Text('Câmera'),
-            onTap: () => Navigator.pop(ctx, 'camera'),
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            label: 'Tirar foto com câmera',
+            button: true,
+            child: ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Câmera'),
+              onTap: () => Navigator.pop(ctx, 'camera'),
+            ),
           ),
-        ),
-        Semantics(
-          label: 'Escolher foto da galeria',
-          button: true,
-          child: ListTile(
-            leading: const Icon(Icons.photo_library),
-            title: const Text('Galeria (múltiplas)'),
-            subtitle: const Text('Selecione várias fotos de uma vez'),
-            onTap: () => Navigator.pop(ctx, 'gallery'),
+          Semantics(
+            label: 'Escolher foto da galeria',
+            button: true,
+            child: ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Galeria (múltiplas)'),
+              subtitle: const Text('Selecione várias fotos de uma vez'),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
           ),
-        ),
-      ],
-    ),
+        ],
+      ),
     );
 
     if (source == null) return;
@@ -1014,7 +1053,8 @@ Widget _buildAddFotoButton() {
     if (_plantas.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Adicione pelo menos 1 planta para concluir a parcela.'),
+          content:
+              Text('Adicione pelo menos 1 planta para concluir a parcela.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -1032,7 +1072,8 @@ Widget _buildAddFotoButton() {
         await context.read<SyncService>().refreshPendingCount();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Parcela concluída. Pode sincronizar quando tiver rede.'),
+            content:
+                Text('Parcela concluída. Pode sincronizar quando tiver rede.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -1041,7 +1082,8 @@ Widget _buildAddFotoButton() {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao salvar: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Erro ao salvar: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -1091,7 +1133,9 @@ Widget _buildAddFotoButton() {
       prontaParaSync: drift.Value(prontaParaSync),
       synced: const drift.Value(false),
       updatedAt: drift.Value(DateTime.now()),
-      createdBy: _isEditing ? const drift.Value.absent() : drift.Value(currentUser.uuid),
+      createdBy: _isEditing
+          ? const drift.Value.absent()
+          : drift.Value(currentUser.uuid),
     );
     if (_isEditing) {
       await _db.updateParcela(parcela, _currentUuid!);
@@ -1151,7 +1195,8 @@ Widget _buildAddFotoButton() {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Limpar dados', style: TextStyle(color: Colors.red)),
+            child:
+                const Text('Limpar dados', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

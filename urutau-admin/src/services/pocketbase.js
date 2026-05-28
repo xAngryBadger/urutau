@@ -6,6 +6,14 @@ const sanitizeUrl = (url) => (url || '').trim().replace(/\/+$/, '');
 const DEFAULT_POCKETBASE_URL = window.location.origin;
 const POCKETBASE_URL = sanitizeUrl(import.meta.env.VITE_POCKETBASE_URL) || DEFAULT_POCKETBASE_URL;
 
+if (/github\.io$/.test(window.location.hostname) && !import.meta.env.VITE_POCKETBASE_URL) {
+  console.error(
+    '[urutau-admin] VITE_POCKETBASE_URL is not set and the app is running on GitHub Pages.' +
+    ' The admin panel will fail to connect to PocketBase.' +
+    ' Set VITE_POCKETBASE_URL in .env.production before building.',
+  );
+}
+
 export const pb = new PocketBase(POCKETBASE_URL);
 pb.autoCancellation(false);
 

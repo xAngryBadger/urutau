@@ -5,6 +5,7 @@ import '../data/database.dart';
 import '../services/sync_service.dart';
 import '../services/export_service.dart';
 import '../services/image_service.dart';
+import '../theme/app_theme.dart';
 
 enum _ParcelaOwnership { mine, free, other }
 
@@ -42,10 +43,6 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
   final Map<String, String> _userNames = {};
 
   bool _loading = true;
-
-  static const Color _primaryGreen = Color(0xFF304d36);
-  static const Color _headerGreen = Color(0xFF2F5A3F);
-  static const Color _secondaryGreen = Color(0xFF527F4D);
 
   @override
   void initState() {
@@ -88,18 +85,22 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     final depth = _caminho.length;
 
     if (depth == 0) {
-      _propriedades = await _db.getAllPropriedades(userId: userId, isAdmin: isAdmin);
+      _propriedades =
+          await _db.getAllPropriedades(userId: userId, isAdmin: isAdmin);
       _contagemUts.clear();
       _propriedadeInfo.clear();
       for (final prop in _propriedades) {
-        final uts = await _db.getAllTalhoes(propriedade: prop, userId: userId, isAdmin: isAdmin);
+        final uts = await _db.getAllTalhoes(
+            propriedade: prop, userId: userId, isAdmin: isAdmin);
         _contagemUts[prop] = uts.length;
-        final parcelas = await _db.getParcelasByHierarchy(propriedade: prop, userId: userId, isAdmin: isAdmin);
+        final parcelas = await _db.getParcelasByHierarchy(
+            propriedade: prop, userId: userId, isAdmin: isAdmin);
         _propriedadeInfo[prop] = _summarizeOwnership(parcelas);
       }
     } else if (depth == 1) {
       final prop = _caminho[0]['value']!;
-      _uts = await _db.getAllTalhoes(propriedade: prop, userId: userId, isAdmin: isAdmin);
+      _uts = await _db.getAllTalhoes(
+          propriedade: prop, userId: userId, isAdmin: isAdmin);
       _contagemParcelas.clear();
       _utInfo.clear();
       for (final ut in _uts) {
@@ -372,24 +373,24 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
               ],
             ],
           ),
-    actions: [
-      Semantics(
-        label: 'Cancelar',
-        button: true,
-        child: TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Cancelar'),
-        ),
-      ),
-      Semantics(
-        label: 'Confirmar',
-        button: true,
-        child: ElevatedButton(
-          onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-          child: const Text('Confirmar'),
-        ),
-      ),
-    ],
+          actions: [
+            Semantics(
+              label: 'Cancelar',
+              button: true,
+              child: TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar'),
+              ),
+            ),
+            Semantics(
+              label: 'Confirmar',
+              button: true,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+                child: const Text('Confirmar'),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -427,19 +428,24 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         ),
       ),
     );
-    List<Map<String, String>> lista = await syncService.fetchParcelasFeitasDoServidor();
+    List<Map<String, String>> lista =
+        await syncService.fetchParcelasFeitasDoServidor();
     if (!mounted) return;
     Navigator.of(context).pop();
-    if (filtroUt != null && filtroUt['prop'] != null && filtroUt['ut'] != null) {
+    if (filtroUt != null &&
+        filtroUt['prop'] != null &&
+        filtroUt['ut'] != null) {
       lista = lista.where((m) {
-        return m['propriedade'] == filtroUt['prop'] && m['propUt'] == filtroUt['ut'];
+        return m['propriedade'] == filtroUt['prop'] &&
+            m['propUt'] == filtroUt['ut'];
       }).toList();
     }
     if (!mounted) return;
     final titulo = filtroUt != null
         ? 'Parcelas já feitas nesta UT (servidor)'
         : 'Parcelas já feitas (servidor)';
-    final subtitulo = 'Conforme o servidor — o que outros utilizadores já concluíram.';
+    final subtitulo =
+        'Conforme o servidor — o que outros utilizadores já concluíram.';
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -459,12 +465,14 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.visibility, color: _primaryGreen, size: 28),
+                      const Icon(Icons.visibility,
+                          color: AppTheme.primary, size: 28),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           titulo,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ],
@@ -497,7 +505,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                         final owner = _userNames[uid] ?? uid;
                         return ListTile(
                           dense: true,
-                          title: Text('${m['propriedade'] ?? ''} · ${m['propUt'] ?? ''} · Parcela ${m['idParcela'] ?? ''}'),
+                          title: Text(
+                              '${m['propriedade'] ?? ''} · ${m['propUt'] ?? ''} · Parcela ${m['idParcela'] ?? ''}'),
                           subtitle: Text(owner.isNotEmpty ? owner : '—'),
                         );
                       },
@@ -517,7 +526,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (!syncService.isConfigured) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Configure o servidor nas definições primeiro.')),
+          const SnackBar(
+              content: Text('Configure o servidor nas definições primeiro.')),
         );
       }
       return;
@@ -551,7 +561,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (pending.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Nenhuma parcela concluída para sincronizar.')),
+          const SnackBar(
+              content: Text('Nenhuma parcela concluída para sincronizar.')),
         );
       }
       return;
@@ -567,7 +578,9 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (!mounted) return;
     int syncedCount = 0;
     final myParcelas = await _db.getAllParcelas(userId: myId);
-    for (final p in myParcelas) { if (p.synced) syncedCount++; }
+    for (final p in myParcelas) {
+      if (p.synced) syncedCount++;
+    }
     if (!mounted) return;
 
     await showModalBottomSheet<void>(
@@ -581,11 +594,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         conflictKeys: conflictKeys,
         selectedUuids: selectedUuids,
         selectableUuids: selectableUuids,
-        primaryGreen: _primaryGreen,
+        accentColor: AppTheme.primary,
         syncedCount: syncedCount,
         onEdit: (p) async {
           Navigator.pop(ctx);
-          await Navigator.of(context).pushNamed('/parcela/editar', arguments: p.uuid);
+          await Navigator.of(context)
+              .pushNamed('/parcela/editar', arguments: p.uuid);
           if (mounted) await _refreshNivel();
         },
         onPull: () {
@@ -603,7 +617,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           if (selected.isEmpty) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Seleccione pelo menos uma parcela.')),
+                const SnackBar(
+                    content: Text('Seleccione pelo menos uma parcela.')),
               );
             }
             return;
@@ -634,7 +649,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           if (!mounted) return;
           String msg = '${result.sent} parcela(s) enviada(s).';
           if (result.conflictsBlocked > 0) {
-            msg += ' ${result.conflictsBlocked} em conflito no servidor (não enviadas).';
+            msg +=
+                ' ${result.conflictsBlocked} em conflito no servidor (não enviadas).';
           }
           if (conflitoMessages.isNotEmpty && selected.length < pending.length) {
             msg += ' Parcelas em conflito ficam marcadas com aviso.';
@@ -675,25 +691,25 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           'Os dados permanecem seguros no servidor. '
           'Pode recuperá-los puxando do servidor.',
         ),
-      actions: [
-        Semantics(
-          label: 'Cancelar',
-          button: true,
-          child: TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
+        actions: [
+          Semantics(
+            label: 'Cancelar',
+            button: true,
+            child: TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
           ),
-        ),
-        Semantics(
-          label: 'Limpar cache',
-          button: true,
-          child: FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Limpar'),
+          Semantics(
+            label: 'Limpar cache',
+            button: true,
+            child: FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Limpar'),
+            ),
           ),
-        ),
-      ],
+        ],
       ),
     );
 
@@ -760,8 +776,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text(syncService.lastError ?? 'Sincronização concluída!'),
+          content: Text(syncService.lastError ?? 'Sincronização concluída!'),
           backgroundColor:
               syncService.lastError != null ? Colors.red : Colors.green,
         ),
@@ -773,7 +788,9 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
   Future<void> _doPull() async {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('O catálogo de parcelas é local e já está carregado.')),
+        const SnackBar(
+            content:
+                Text('O catálogo de parcelas é local e já está carregado.')),
       );
     }
     return;
@@ -860,7 +877,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       if (!syncService.isConfigured) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Configure o servidor nas definições.')),
+            const SnackBar(
+                content: Text('Configure o servidor nas definições.')),
           );
         }
         return;
@@ -871,14 +889,17 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         );
       }
       try {
-        await syncService.pullDadosDoServidor(userId: user.isAdmin ? null : user.uuid);
+        await syncService.pullDadosDoServidor(
+            userId: user.isAdmin ? null : user.uuid);
         if (mounted) await _refreshNivel();
         if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro ao atualizar: $e'), backgroundColor: Colors.red),
+            SnackBar(
+                content: Text('Erro ao atualizar: $e'),
+                backgroundColor: Colors.red),
           );
         }
         return;
@@ -892,7 +913,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     final options = <Map<String, String>>[];
     if (admin) {
       if (depth >= 1) {
-        options.add({'key': 'prop', 'label': 'Tudo de ${_caminho[0]['value']}'});
+        options
+            .add({'key': 'prop', 'label': 'Tudo de ${_caminho[0]['value']}'});
       }
       if (depth >= 2) {
         options.add({'key': 'ut', 'label': 'Tudo de ${_caminho[1]['value']}'});
@@ -901,10 +923,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       options.add({'key': 'mine', 'label': 'Só minhas parcelas'});
     } else {
       if (depth >= 1) {
-        options.add({'key': 'prop_mine', 'label': 'Minhas em ${_caminho[0]['value']}'});
+        options.add(
+            {'key': 'prop_mine', 'label': 'Minhas em ${_caminho[0]['value']}'});
       }
       if (depth >= 2) {
-        options.add({'key': 'ut_mine', 'label': 'Minhas em ${_caminho[1]['value']}'});
+        options.add(
+            {'key': 'ut_mine', 'label': 'Minhas em ${_caminho[1]['value']}'});
       }
       options.add({'key': 'mine', 'label': 'Todas minhas parcelas'});
     }
@@ -918,10 +942,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       context: context,
       builder: (ctx) => SimpleDialog(
         title: const Text('Exportar planilha'),
-        children: options.map((o) => SimpleDialogOption(
-          onPressed: () => Navigator.pop(ctx, o['key']),
-          child: Text(o['label']!),
-        )).toList(),
+        children: options
+            .map((o) => SimpleDialogOption(
+                  onPressed: () => Navigator.pop(ctx, o['key']),
+                  child: Text(o['label']!),
+                ))
+            .toList(),
       ),
     );
     if (choice != null && mounted) {
@@ -945,13 +971,24 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
 
     final options = <Map<String, String>>[];
     if (admin) {
-      if (depth >= 1) options.add({'key': 'prop', 'label': 'Fotos de ${_caminho[0]['value']}'});
-      if (depth >= 2) options.add({'key': 'ut', 'label': 'Fotos de ${_caminho[1]['value']}'});
+      if (depth >= 1)
+        options
+            .add({'key': 'prop', 'label': 'Fotos de ${_caminho[0]['value']}'});
+      if (depth >= 2)
+        options.add({'key': 'ut', 'label': 'Fotos de ${_caminho[1]['value']}'});
       options.add({'key': 'all', 'label': 'Todas as fotos'});
       options.add({'key': 'mine', 'label': 'Só minhas parcelas'});
     } else {
-      if (depth >= 1) options.add({'key': 'prop_mine', 'label': 'Minhas fotos em ${_caminho[0]['value']}'});
-      if (depth >= 2) options.add({'key': 'ut_mine', 'label': 'Minhas fotos em ${_caminho[1]['value']}'});
+      if (depth >= 1)
+        options.add({
+          'key': 'prop_mine',
+          'label': 'Minhas fotos em ${_caminho[0]['value']}'
+        });
+      if (depth >= 2)
+        options.add({
+          'key': 'ut_mine',
+          'label': 'Minhas fotos em ${_caminho[1]['value']}'
+        });
       options.add({'key': 'mine', 'label': 'Todas as minhas fotos'});
     }
 
@@ -963,10 +1000,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         context: context,
         builder: (ctx) => SimpleDialog(
           title: const Text('Exportar fotos'),
-          children: options.map((o) => SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, o['key']),
-            child: Text(o['label']!),
-          )).toList(),
+          children: options
+              .map((o) => SimpleDialogOption(
+                    onPressed: () => Navigator.pop(ctx, o['key']),
+                    child: Text(o['label']!),
+                  ))
+              .toList(),
         ),
       );
     }
@@ -1069,7 +1108,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(ok ? 'Planilha exportada.' : 'Sem parcelas para exportar.'),
+          content:
+              Text(ok ? 'Planilha exportada.' : 'Sem parcelas para exportar.'),
           backgroundColor: ok ? Colors.green : Colors.orange,
         ),
       );
@@ -1085,31 +1125,31 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           'Os dados locais não sincronizados NÃO serão perdidos. '
           'Deseja sair?',
         ),
-      actions: [
-        Semantics(
-          label: 'Cancelar',
-          button: true,
-          child: TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
+        actions: [
+          Semantics(
+            label: 'Cancelar',
+            button: true,
+            child: TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
           ),
-        ),
-        Semantics(
-          label: 'Sair da conta',
-          button: true,
-          child: FilledButton(
-            onPressed: () async {
-              final nav = Navigator.of(context);
-              final sync = context.read<SyncService>();
-              Navigator.pop(ctx);
-              await sync.logout();
-              if (mounted) {
-                nav.pushReplacementNamed('/login');
-              }
-            },
-            child: const Text('Sair'),
+          Semantics(
+            label: 'Sair da conta',
+            button: true,
+            child: FilledButton(
+              onPressed: () async {
+                final nav = Navigator.of(context);
+                final sync = context.read<SyncService>();
+                Navigator.pop(ctx);
+                await sync.logout();
+                if (mounted) {
+                  nav.pushReplacementNamed('/login');
+                }
+              },
+              child: const Text('Sair'),
+            ),
           ),
-        ),
         ],
       ),
     );
@@ -1130,7 +1170,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F5F5),
         appBar: AppBar(
-          backgroundColor: _headerGreen,
+          backgroundColor: AppTheme.tertiary,
           foregroundColor: Colors.white,
           iconTheme: const IconThemeData(color: Colors.white),
           title: syncService.currentUser != null
@@ -1140,112 +1180,113 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                 )
               : null,
           centerTitle: true,
-        leading: _caminho.isNotEmpty
-        ? Semantics(
-            label: 'Voltar',
-            button: true,
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back), onPressed: _voltar),
-          )
-        : null,
-        actions: [
-          Semantics(
-            label: 'Consultar parcelas no servidor',
-            button: true,
-            child: IconButton(
-              icon: const Icon(Icons.visibility, color: Colors.white),
-              onPressed: syncService.isConfigured
-                  ? (_caminho.length == 2
-                      ? _showParcelasFeitasServidor
-                      : () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Abra uma UT para ver as parcelas já feitas dessa UT.'),
-                            ),
-                          );
-                        })
-                  : null,
-              tooltip: _caminho.length == 2
-                  ? 'Consultar no servidor se outros utilizadores já fizeram parcelas'
-                  : 'Disponível apenas dentro de uma UT',
-            ),
-          ),
-          Semantics(
-            label: 'Sincronização',
-            button: true,
-            child: IconButton(
-              icon: Badge(
-                isLabelVisible: syncService.pendingCount > 0,
-                label: Text('${syncService.pendingCount}'),
-                child: Icon(
-                  syncService.pendingCount > 0
-                      ? Icons.cloud_off
-                      : Icons.cloud_done,
-                  color: Colors.white,
-                ),
-              ),
-              onPressed: _showSyncOptions,
-              tooltip: 'Sincronização',
-            ),
-          ),
+          leading: _caminho.isNotEmpty
+              ? Semantics(
+                  label: 'Voltar',
+                  button: true,
+                  child: IconButton(
+                      icon: const Icon(Icons.arrow_back), onPressed: _voltar),
+                )
+              : null,
+          actions: [
             Semantics(
-            label: 'Menu de opções',
-            button: true,
-            child: PopupMenuButton<String>(
-              iconColor: Colors.white,
-              onSelected: (v) {
-                switch (v) {
-                  case 'export_xlsx':
-                    _exportarXlsx();
-                    break;
-                  case 'export_fotos':
-                    _exportarFotos();
-                    break;
-                  case 'settings':
-                    Navigator.of(context).pushNamed('/settings');
-                    break;
-                  case 'logout':
-                    _showLogoutDialog();
-                    break;
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'export_xlsx',
-                  child: ListTile(
-                    leading: Icon(Icons.table_chart),
-                    title: Text('Exportar planilha (XLSX)'),
-                    contentPadding: EdgeInsets.zero,
+              label: 'Consultar parcelas no servidor',
+              button: true,
+              child: IconButton(
+                icon: const Icon(Icons.visibility, color: Colors.white),
+                onPressed: syncService.isConfigured
+                    ? (_caminho.length == 2
+                        ? _showParcelasFeitasServidor
+                        : () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Abra uma UT para ver as parcelas já feitas dessa UT.'),
+                              ),
+                            );
+                          })
+                    : null,
+                tooltip: _caminho.length == 2
+                    ? 'Consultar no servidor se outros utilizadores já fizeram parcelas'
+                    : 'Disponível apenas dentro de uma UT',
+              ),
+            ),
+            Semantics(
+              label: 'Sincronização',
+              button: true,
+              child: IconButton(
+                icon: Badge(
+                  isLabelVisible: syncService.pendingCount > 0,
+                  label: Text('${syncService.pendingCount}'),
+                  child: Icon(
+                    syncService.pendingCount > 0
+                        ? Icons.cloud_off
+                        : Icons.cloud_done,
+                    color: Colors.white,
                   ),
                 ),
-                const PopupMenuItem(
-                  value: 'export_fotos',
-                  child: ListTile(
-                    leading: Icon(Icons.photo_library),
-                    title: Text('Exportar fotos'),
-                    contentPadding: EdgeInsets.zero,
+                onPressed: _showSyncOptions,
+                tooltip: 'Sincronização',
+              ),
+            ),
+            Semantics(
+              label: 'Menu de opções',
+              button: true,
+              child: PopupMenuButton<String>(
+                iconColor: Colors.white,
+                onSelected: (v) {
+                  switch (v) {
+                    case 'export_xlsx':
+                      _exportarXlsx();
+                      break;
+                    case 'export_fotos':
+                      _exportarFotos();
+                      break;
+                    case 'settings':
+                      Navigator.of(context).pushNamed('/settings');
+                      break;
+                    case 'logout':
+                      _showLogoutDialog();
+                      break;
+                  }
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'export_xlsx',
+                    child: ListTile(
+                      leading: Icon(Icons.table_chart),
+                      title: Text('Exportar planilha (XLSX)'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
-                ),
-                const PopupMenuItem(
-                  value: 'settings',
-                  child: ListTile(
-                    leading: Icon(Icons.settings),
-                    title: Text('Configurações'),
-                    contentPadding: EdgeInsets.zero,
+                  const PopupMenuItem(
+                    value: 'export_fotos',
+                    child: ListTile(
+                      leading: Icon(Icons.photo_library),
+                      title: Text('Exportar fotos'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
-                ),
-                const PopupMenuItem(
-                  value: 'logout',
-                  child: ListTile(
-                    leading: Icon(Icons.logout),
-                    title: Text('Sair'),
-                    contentPadding: EdgeInsets.zero,
+                  const PopupMenuItem(
+                    value: 'settings',
+                    child: ListTile(
+                      leading: Icon(Icons.settings),
+                      title: Text('Configurações'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
-                ),
-      ],
-      ),
-      ),
-      ],
+                  const PopupMenuItem(
+                    value: 'logout',
+                    child: ListTile(
+                      leading: Icon(Icons.logout),
+                      title: Text('Sair'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         body: Column(
           children: [
@@ -1269,7 +1310,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (syncService.isSyncing) {
       return Container(
         width: double.infinity,
-        color: _primaryGreen.withValues(alpha: 0.08),
+        color: AppTheme.primary.withValues(alpha: 0.08),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
@@ -1277,11 +1318,11 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: _primaryGreen),
+                  strokeWidth: 2, color: AppTheme.primary),
             ),
             const SizedBox(width: 12),
             const Text('Sincronizando dados...',
-                style: TextStyle(color: _primaryGreen, fontSize: 13)),
+                style: TextStyle(color: AppTheme.primary, fontSize: 13)),
           ],
         ),
       );
@@ -1329,8 +1370,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             const Spacer(),
             TextButton(
               onPressed: _doSync,
-              child:
-                  const Text('Sincronizar', style: TextStyle(fontSize: 12)),
+              child: const Text('Sincronizar', style: TextStyle(fontSize: 12)),
             ),
           ],
         ),
@@ -1348,7 +1388,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _primaryGreen.withValues(alpha: 0.12)),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
       ),
       child: Column(
         children: [
@@ -1391,34 +1431,35 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
               ),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.all(10),
-          child: Semantics(
-            label: 'Pesquisar ID ou área',
-            child: TextField(
-              controller: _searchController,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                prefixIcon:
-                    Icon(Icons.search, size: 20, color: Colors.grey[400]),
-                hintText: 'Pesquisar ID ou área...',
-                hintStyle: TextStyle(color: Colors.grey[400]),
-                isDense: true,
-                filled: true,
-                fillColor: const Color(0xFFF5F5F5),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Semantics(
+              label: 'Pesquisar ID ou área',
+              child: TextField(
+                controller: _searchController,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  prefixIcon:
+                      Icon(Icons.search, size: 20, color: Colors.grey[400]),
+                  hintText: 'Pesquisar ID ou área...',
+                  hintStyle: TextStyle(color: Colors.grey[400]),
+                  isDense: true,
+                  filled: true,
+                  fillColor: const Color(0xFFF5F5F5),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppTheme.primary),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: _primaryGreen),
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
           ),
@@ -1443,7 +1484,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: isActive
               ? BoxDecoration(
-                  color: _primaryGreen.withValues(alpha: 0.1),
+                  color: AppTheme.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 )
               : null,
@@ -1452,12 +1493,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             children: [
               Icon(icon,
                   size: 14,
-                  color: isActive ? _primaryGreen : Colors.grey[500]),
+                  color: isActive ? AppTheme.primary : Colors.grey[500]),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
-                  color: isActive ? _primaryGreen : Colors.grey[600],
+                  color: isActive ? AppTheme.primary : Colors.grey[600],
                   fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                   fontSize: 13,
                 ),
@@ -1480,22 +1521,23 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           label: 'Nova parcela',
           button: true,
           child: ElevatedButton.icon(
-          onPressed: _adicionar,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _primaryGreen,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-          ),
-          icon: const Icon(Icons.add),
-          label: Text(
-            depth == 0
-                ? 'Nova Parcela'
-                : depth == 1
-                    ? 'Nova Parcela nesta Propriedade'
-                    : 'Nova Parcela nesta UT',
-            style: const TextStyle(fontWeight: FontWeight.w600),
+            onPressed: _adicionar,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.add),
+            label: Text(
+              depth == 0
+                  ? 'Nova Parcela'
+                  : depth == 1
+                      ? 'Nova Parcela nesta Propriedade'
+                      : 'Nova Parcela nesta UT',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ),
       ),
@@ -1515,96 +1557,63 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
   Widget _buildPropriedadesList(String query) {
     final items =
         _propriedades.where((p) => p.toLowerCase().contains(query)).toList();
-    final syncService = context.read<SyncService>();
-    final showPullCard = syncService.isConfigured;
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       children: [
-        // Botão "Carregar parcelas" desativado: inútil para quem só mexe com dados locais.
-        // if (showPullCard)
-        //   Padding(
-        //     padding: const EdgeInsets.only(bottom: 8),
-        //     child: Material(
-        //       color: Colors.blue.withValues(alpha: 0.08),
-        //       borderRadius: BorderRadius.circular(12),
-        //       child: InkWell(
-        //         borderRadius: BorderRadius.circular(12),
-        //         onTap: () async {
-        //           await _doPull();
-        //           if (mounted) await _refreshNivel();
-        //         },
-        //         child: Padding(
-        //           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        //           child: Row(
-        //             children: [
-        //               Icon(Icons.cloud_download, color: Colors.blue[700], size: 24),
-        //               const SizedBox(width: 12),
-        //               const Expanded(
-        //                 child: Text(
-        //                   'Atualizar catálogo do servidor',
-        //                   style: TextStyle(
-        //                     fontWeight: FontWeight.w600,
-        //                     fontSize: 14,
-        //                   ),
-        //                 ),
-        //               ),
-        //             ],
-        //           ),
-        //         ),
-        //       ),
-        //     ),
-        //   ),
-        if (items.isEmpty) _emptyState() else
-        ...items.asMap().entries.expand((e) {
-          final prop = e.value;
-          final utCount = _contagemUts[prop] ?? 0;
-          final info = _propriedadeInfo[prop];
-          return [
-            const SizedBox(height: 4),
-            Card(
-              elevation: 0,
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.grey[200]!),
-              ),
-              child: Semantics(
-                label: 'Propriedade $prop, $utCount UT${utCount != 1 ? 's' : ''}',
-                child: ListTile(
-                  onTap: () => _entrar('Propriedade', prop),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  leading: CircleAvatar(
-                    backgroundColor: _primaryGreen,
-                    child:
-                        const Icon(Icons.forest, color: Colors.white, size: 20),
-                  ),
-                  title: Text(prop,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$utCount UT${utCount != 1 ? 's' : ''}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    if (info != null && info.total > 0)
-                      _ownershipBar(info),
-                  ],
+        if (items.isEmpty)
+          _emptyState()
+        else
+          ...items.asMap().entries.expand((e) {
+            final prop = e.value;
+            final utCount = _contagemUts[prop] ?? 0;
+            final info = _propriedadeInfo[prop];
+            return [
+              const SizedBox(height: 4),
+              Card(
+                elevation: 0,
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.grey[200]!),
                 ),
-                trailing: const Icon(Icons.chevron_right),
+                child: Semantics(
+                  label:
+                      'Propriedade $prop, $utCount UT${utCount != 1 ? 's' : ''}',
+                  child: ListTile(
+                    onTap: () => _entrar('Propriedade', prop),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    leading: CircleAvatar(
+                      backgroundColor: AppTheme.primary,
+                      child: const Icon(Icons.forest,
+                          color: Colors.white, size: 20),
+                    ),
+                    title: Text(prop,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$utCount UT${utCount != 1 ? 's' : ''}',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        if (info != null && info.total > 0) _ownershipBar(info),
+                      ],
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                  ),
+                ),
               ),
-            ),
-          ];
-        }).skip(1),
+            ];
+          }).skip(1),
       ],
     );
   }
 
   Widget _buildUtsList(String query) {
-    final items =
-        _uts.where((u) => u.toLowerCase().contains(query)).toList();
+    final items = _uts.where((u) => u.toLowerCase().contains(query)).toList();
     if (items.isEmpty) return _emptyState();
 
     return ListView.separated(
@@ -1623,34 +1632,32 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(color: Colors.grey[200]!),
           ),
-            child: Semantics(
-              label: 'UT $ut, $count parcela${count != 1 ? 's' : ''}',
-              child: ListTile(
-                onTap: () => _entrar('UT', ut),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                leading: CircleAvatar(
-                  backgroundColor: _secondaryGreen,
-                  child: const Icon(Icons.map, color: Colors.white, size: 20),
-                ),
-                title:
-                    Text(ut, style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$count parcela${count != 1 ? 's' : ''}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    if (info != null && info.total > 0)
-                      _ownershipBar(info),
-                  ],
-                ),
-                trailing: const Icon(Icons.chevron_right),
+          child: Semantics(
+            label: 'UT $ut, $count parcela${count != 1 ? 's' : ''}',
+            child: ListTile(
+              onTap: () => _entrar('UT', ut),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              leading: CircleAvatar(
+                backgroundColor: AppTheme.tertiaryContainer,
+                child: const Icon(Icons.map, color: Colors.white, size: 20),
               ),
+              title:
+                  Text(ut, style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$count parcela${count != 1 ? 's' : ''}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  if (info != null && info.total > 0) _ownershipBar(info),
+                ],
+              ),
+              trailing: const Icon(Icons.chevron_right),
             ),
-                ),
-              );
+          ),
+        );
       },
     );
   }
@@ -1698,69 +1705,71 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
               color: hasWork
-                  ? _primaryGreen.withValues(alpha: 0.3)
+                  ? AppTheme.primary.withValues(alpha: 0.3)
                   : Colors.grey[200]!,
             ),
           ),
-            child: Semantics(
-              label: 'Parcela ${p.idParcela}, $statusLabel',
-              button: true,
-              child: ListTile(
-                onTap: () => _openParcela(p),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            leading: CircleAvatar(
-              backgroundColor: hasWork ? _primaryGreen : Colors.blueGrey[300],
-              child: Text(
-                '${p.idParcela}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+          child: Semantics(
+            label: 'Parcela ${p.idParcela}, $statusLabel',
+            button: true,
+            child: ListTile(
+              onTap: () => _openParcela(p),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              leading: CircleAvatar(
+                backgroundColor:
+                    hasWork ? AppTheme.primary : Colors.blueGrey[300],
+                child: Text(
+                  '${p.idParcela}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
               ),
-            ),
-            title: Row(
-              children: [
-                Text('Parcela ${p.idParcela}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: badgeColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                        color: badgeColor.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(statusIcon, size: 10, color: badgeColor),
-                      const SizedBox(width: 3),
-                      Text(
-                        statusLabel,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: badgeColor,
+              title: Row(
+                children: [
+                  Text('Parcela ${p.idParcela}',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border:
+                          Border.all(color: badgeColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(statusIcon, size: 10, color: badgeColor),
+                        const SizedBox(width: 3),
+                        Text(
+                          statusLabel,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: badgeColor,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+              subtitle: subtitle.isNotEmpty
+                  ? Text(
+                      subtitle,
+                      style: const TextStyle(fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : null,
+              trailing: _buildParcelaTrailing(p),
             ),
-            subtitle: subtitle.isNotEmpty
-                ? Text(
-                    subtitle,
-                    style: const TextStyle(fontSize: 12),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  )
-                : null,
-            trailing: _buildParcelaTrailing(p),
           ),
         );
       },
@@ -1796,8 +1805,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             const PopupMenuItem(
               value: 'apagar',
               child: ListTile(
-                leading: Icon(Icons.delete_forever, size: 20, color: Colors.red),
-                title: Text('Apagar parcela', style: TextStyle(color: Colors.red)),
+                leading:
+                    Icon(Icons.delete_forever, size: 20, color: Colors.red),
+                title:
+                    Text('Apagar parcela', style: TextStyle(color: Colors.red)),
                 subtitle: Text('Remove o slot (local e servidor)'),
                 contentPadding: EdgeInsets.zero,
               ),
@@ -1818,9 +1829,19 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           'Plantas, fotos e observações serão removidos.\n'
           'A parcela voltará a ficar disponível no catálogo.',
         ),
-    actions: [
-          Semantics(label: 'Cancelar', button: true, child: TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar'))),
-          Semantics(label: 'Limpar dados', button: true, child: FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Limpar dados'))),
+        actions: [
+          Semantics(
+              label: 'Cancelar',
+              button: true,
+              child: TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancelar'))),
+          Semantics(
+              label: 'Limpar dados',
+              button: true,
+              child: FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Limpar dados'))),
         ],
       ),
     );
@@ -1850,7 +1871,9 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (mounted) {
       await _refreshNivel();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dados da parcela limpos.'), backgroundColor: Colors.green),
+        const SnackBar(
+            content: Text('Dados da parcela limpos.'),
+            backgroundColor: Colors.green),
       );
     }
   }
@@ -1865,8 +1888,13 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           'O slot será removido localmente e no servidor (se já foi sincronizado). '
           'Esta ação não pode ser desfeita.',
         ),
-    actions: [
-          Semantics(label: 'Cancelar', button: true, child: TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar'))),
+        actions: [
+          Semantics(
+              label: 'Cancelar',
+              button: true,
+              child: TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancelar'))),
           Semantics(
             label: 'Apagar parcela',
             button: true,
@@ -1887,7 +1915,9 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro ao apagar no servidor: $e'), backgroundColor: Colors.red),
+            SnackBar(
+                content: Text('Erro ao apagar no servidor: $e'),
+                backgroundColor: Colors.red),
           );
         }
       }
@@ -1906,7 +1936,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (mounted) {
       await _refreshNivel();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Parcela apagada.'), backgroundColor: Colors.green),
+        const SnackBar(
+            content: Text('Parcela apagada.'), backgroundColor: Colors.green),
       );
     }
   }
@@ -1964,21 +1995,24 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       padding: const EdgeInsets.only(top: 4),
       child: Row(
         children: [
-          if (info.mine > 0) _ownershipChip(
-            Icons.person,
-            '${info.mine} minha${info.mine != 1 ? 's' : ''}',
-            Colors.green[700]!,
-          ),
-          if (info.free > 0) _ownershipChip(
-            Icons.person_add,
-            '${info.free} livre${info.free != 1 ? 's' : ''}',
-            Colors.blue,
-          ),
-          if (info.other > 0) _ownershipChip(
-            Icons.lock,
-            '${info.other} outra${info.other != 1 ? 's' : ''}',
-            Colors.grey,
-          ),
+          if (info.mine > 0)
+            _ownershipChip(
+              Icons.person,
+              '${info.mine} minha${info.mine != 1 ? 's' : ''}',
+              Colors.green[700]!,
+            ),
+          if (info.free > 0)
+            _ownershipChip(
+              Icons.person_add,
+              '${info.free} livre${info.free != 1 ? 's' : ''}',
+              Colors.blue,
+            ),
+          if (info.other > 0)
+            _ownershipChip(
+              Icons.lock,
+              '${info.other} outra${info.other != 1 ? 's' : ''}',
+              Colors.grey,
+            ),
         ],
       ),
     );
@@ -2056,7 +2090,7 @@ class _SyncListSheet extends StatefulWidget {
   final Set<String> conflictKeys;
   final Set<String> selectedUuids;
   final Set<String> selectableUuids;
-  final Color primaryGreen;
+  final Color accentColor;
   final int syncedCount;
   final void Function(Parcela p) onEdit;
   final VoidCallback? onPull;
@@ -2068,7 +2102,7 @@ class _SyncListSheet extends StatefulWidget {
     required this.conflictKeys,
     required this.selectedUuids,
     required this.selectableUuids,
-    required this.primaryGreen,
+    required this.accentColor,
     required this.syncedCount,
     required this.onEdit,
     this.onPull,
@@ -2106,12 +2140,13 @@ class _SyncListSheetState extends State<_SyncListSheet> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.sync, color: widget.primaryGreen, size: 28),
+                      Icon(Icons.sync, color: widget.accentColor, size: 28),
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
                           'Parcelas a sincronizar',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ],
@@ -2151,9 +2186,10 @@ class _SyncListSheetState extends State<_SyncListSheet> {
                                 }
                               });
                             },
-                            activeColor: widget.primaryGreen,
+                            activeColor: widget.accentColor,
                           )
-                        : Icon(Icons.warning_amber, color: Colors.orange[700], size: 24),
+                        : Icon(Icons.warning_amber,
+                            color: Colors.orange[700], size: 24),
                     title: Text(
                       '${p.propriedade} · ${p.propUt} · Parcela ${p.idParcela}',
                       style: TextStyle(
@@ -2164,18 +2200,19 @@ class _SyncListSheetState extends State<_SyncListSheet> {
                     subtitle: isConflict
                         ? Text(
                             'Conflito no servidor (outro utilizador)',
-                            style: TextStyle(fontSize: 11, color: Colors.orange[800]),
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.orange[800]),
                           )
                         : null,
-              trailing: Semantics(
-                label: 'Editar parcela',
-                button: true,
-                child: IconButton(
-                  icon: const Icon(Icons.edit, size: 22),
-                  onPressed: () => widget.onEdit(p),
-                  tooltip: 'Editar',
-                ),
-              ),
+                    trailing: Semantics(
+                      label: 'Editar parcela',
+                      button: true,
+                      child: IconButton(
+                        icon: const Icon(Icons.edit, size: 22),
+                        onPressed: () => widget.onEdit(p),
+                        tooltip: 'Editar',
+                      ),
+                    ),
                   );
                 },
               ),
@@ -2185,51 +2222,53 @@ class _SyncListSheetState extends State<_SyncListSheet> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-            SizedBox(
-              width: double.infinity,
-              child: Semantics(
-                label: 'Confirmar envio',
-                button: true,
-                child: FilledButton.icon(
-                  onPressed: _selected.isEmpty
-                      ? null
-                      : () => widget.onConfirm(_selected),
-                  icon: const Icon(Icons.cloud_upload),
-                  label: const Text('Confirmar envio'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: widget.primaryGreen,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: Semantics(
+                      label: 'Confirmar envio',
+                      button: true,
+                      child: FilledButton.icon(
+                        onPressed: _selected.isEmpty
+                            ? null
+                            : () => widget.onConfirm(_selected),
+                        icon: const Icon(Icons.cloud_upload),
+                        label: const Text('Confirmar envio'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: widget.accentColor,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
                   if (widget.onPull != null || widget.onClearCache != null) ...[
                     const SizedBox(height: 10),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-              if (widget.onPull != null)
-                Semantics(
-                  label: 'Puxar do servidor',
-                  button: true,
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.cloud_download, size: 18),
-                    label: const Text('Puxar do servidor'),
-                    onPressed: widget.onPull,
-                  ),
-                ),
-              if (widget.onClearCache != null && widget.syncedCount > 0) ...[
-                if (widget.onPull != null) const SizedBox(width: 8),
-                Semantics(
-                  label: 'Limpar cache',
-                  button: true,
-                  child: TextButton.icon(
-                    icon: Icon(Icons.cleaning_services, size: 18, color: Colors.red[400]),
-                    label: const Text('Limpar cache'),
-                    onPressed: widget.onClearCache,
-                  ),
-                ),
-              ],
+                        if (widget.onPull != null)
+                          Semantics(
+                            label: 'Puxar do servidor',
+                            button: true,
+                            child: TextButton.icon(
+                              icon: const Icon(Icons.cloud_download, size: 18),
+                              label: const Text('Puxar do servidor'),
+                              onPressed: widget.onPull,
+                            ),
+                          ),
+                        if (widget.onClearCache != null &&
+                            widget.syncedCount > 0) ...[
+                          if (widget.onPull != null) const SizedBox(width: 8),
+                          Semantics(
+                            label: 'Limpar cache',
+                            button: true,
+                            child: TextButton.icon(
+                              icon: Icon(Icons.cleaning_services,
+                                  size: 18, color: Colors.red[400]),
+                              label: const Text('Limpar cache'),
+                              onPressed: widget.onClearCache,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],

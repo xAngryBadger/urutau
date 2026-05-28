@@ -116,11 +116,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.wifi_find),
-                          label: const Text('Testar'),
-                        ),
-                      ),
-                    ],
-                  ),
+          label: const Text('Testar'),
+          ),
+        ),
+      ),
+    ],
+  ),
 
                   // Resultado do teste
                   if (_testResult != null) ...[

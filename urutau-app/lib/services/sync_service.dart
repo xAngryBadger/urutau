@@ -28,7 +28,7 @@ class _TimeoutHttpClient extends http.BaseClient {
 }
 
 http.Client _createHttpClient(
-    {Duration timeout = const Duration(seconds: 30)}) =>
+        {Duration timeout = const Duration(seconds: 30)}) =>
     _TimeoutHttpClient(http.Client(), timeout: timeout);
 
 String _escapePbFilter(String v) =>
@@ -38,6 +38,7 @@ class SyncService extends ChangeNotifier {
   final AppDatabase _db;
   PocketBase? _pb;
   bool _isSyncing = false;
+  Completer<void>? _syncLock;
   int _pendingCount = 0;
   String? _lastError;
   String? _serverUrl;
@@ -106,25 +107,25 @@ class SyncService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _serverUrl = prefs.getString('server_url');
 
-  if (_serverUrl == null || _serverUrl!.isEmpty) {
-    _serverUrl = null;
-  }
-
-  if (_serverUrl != null) {
-    _pb = PocketBase(_serverUrl!, httpClientFactory: _createHttpClient);
-    // Restaurar auth token se existir
-    final authToken =
-        await SecureStorageService.read(SecureStorageService.keyAuthToken);
-    if (authToken != null) {
-      _pb!.authStore.save(authToken, null);
+    if (_serverUrl == null || _serverUrl!.isEmpty) {
+      _serverUrl = null;
     }
-  }
 
-  // Restaurar usuário local atual
-  final userUuid = prefs.getString('current_user_uuid');
-  if (userUuid != null) {
-    _currentUser = await _db.getUsuarioByUuid(userUuid);
-  }
+    if (_serverUrl != null) {
+      _pb = PocketBase(_serverUrl!, httpClientFactory: _createHttpClient);
+      // Restaurar auth token se existir
+      final authToken =
+          await SecureStorageService.read(SecureStorageService.keyAuthToken);
+      if (authToken != null) {
+        _pb!.authStore.save(authToken, null);
+      }
+    }
+
+    // Restaurar usuário local atual
+    final userUuid = prefs.getString('current_user_uuid');
+    if (userUuid != null) {
+      _currentUser = await _db.getUsuarioByUuid(userUuid);
+    }
 
     await _updatePendingCount();
     notifyListeners();
@@ -516,21 +517,34 @@ class SyncService extends ChangeNotifier {
     return SecureStorageService.read(SecureStorageService.keyCurrentPassword);
   }
 
+  Future<void> _waitForSyncLock() async {
+    while (_syncLock != null) {
+      try {
+        await _syncLock!.future;
+      } catch (_) {}
+    }
+  }
+
   /// Sincroniza todas as parcelas pendentes com o servidor.
   /// Agora bidirecional: PUSH local → servidor, depois PULL servidor → local.
   Future<void> syncAll() async {
-    if (_isSyncing) return;
+    await _waitForSyncLock();
+    _syncLock = Completer<void>();
 
     if (_pb == null) {
       _lastError =
           'Servidor não configurado. Vá em Configurações e informe a URL.';
       notifyListeners();
+      _syncLock!.complete();
+      _syncLock = null;
       return;
     }
 
     if (!await hasInternet()) {
       _lastError = 'Sem conexão com a internet.';
       notifyListeners();
+      _syncLock!.complete();
+      _syncLock = null;
       return;
     }
 
@@ -622,9 +636,16 @@ class SyncService extends ChangeNotifier {
       _lastError =
           'Falha na sincronização. Verifique a conexão e tente novamente.';
       debugPrint('Erro na sincronização: $e');
+      _syncLock!.completeError(e);
+      _syncLock = null;
+      rethrow;
     } finally {
       _isSyncing = false;
       _syncProgress = 0.0;
+      if (_syncLock != null) {
+        _syncLock!.complete();
+        _syncLock = null;
+      }
       notifyListeners();
     }
   }
@@ -1103,10 +1124,19 @@ class SyncService extends ChangeNotifier {
     required Set<String> conflictKeys,
     String? userId,
   }) async {
-    if (_isSyncing || _pb == null) return (sent: 0, conflictsBlocked: 0);
+    await _waitForSyncLock();
+    _syncLock = Completer<void>();
+
+    if (_pb == null) {
+      _syncLock!.complete();
+      _syncLock = null;
+      return (sent: 0, conflictsBlocked: 0);
+    }
     if (!await hasInternet()) {
       _lastError = 'Sem conexão com a internet.';
       notifyListeners();
+      _syncLock!.complete();
+      _syncLock = null;
       return (sent: 0, conflictsBlocked: 0);
     }
     if (!_pb!.authStore.isValid) {
@@ -1137,8 +1167,16 @@ class SyncService extends ChangeNotifier {
         }
       }
       await _updatePendingCount();
+    } catch (e) {
+      _syncLock!.completeError(e);
+      _syncLock = null;
+      rethrow;
     } finally {
       _isSyncing = false;
+      if (_syncLock != null) {
+        _syncLock!.complete();
+        _syncLock = null;
+      }
       notifyListeners();
     }
     return (sent: sent, conflictsBlocked: conflictsBlocked);
@@ -1425,30 +1463,30 @@ class SyncService extends ChangeNotifier {
       } catch (_) {}
     }
 
-  // 4. Só marca tudo como synced se TODAS as plantas foram enviadas
-  if (allPlantasOk) {
-    await _db.transaction(() async {
-      for (final foto in fotos) {
-        await _db.marcarFotoSynced(foto.uuid);
-      }
-      await _db.marcarParcelaSynced(parcela.uuid);
-
-      // 5. Remapear UUID local para 'pb-{recordId}' (só para parcelas criadas localmente)
-      if (existingServerId == null) {
-        try {
-          await _db.remapParcelaUuid(parcela.uuid, 'pb-${record.id}');
-        } catch (e) {
-          debugPrint('Aviso: não foi possível remapear UUID da parcela: $e');
+    // 4. Só marca tudo como synced se TODAS as plantas foram enviadas
+    if (allPlantasOk) {
+      await _db.transaction(() async {
+        for (final foto in fotos) {
+          await _db.marcarFotoSynced(foto.uuid);
         }
-      }
+        await _db.marcarParcelaSynced(parcela.uuid);
 
-      // Audita sync bem-sucedido
-      await _db.logAudit('sync_push',
-          entityType: 'parcela',
-          entityUuid: parcela.uuid,
-          userId: parcela.userId);
-    });
-  } else {
+        // 5. Remapear UUID local para 'pb-{recordId}' (só para parcelas criadas localmente)
+        if (existingServerId == null) {
+          try {
+            await _db.remapParcelaUuid(parcela.uuid, 'pb-${record.id}');
+          } catch (e) {
+            debugPrint('Aviso: não foi possível remapear UUID da parcela: $e');
+          }
+        }
+
+        // Audita sync bem-sucedido
+        await _db.logAudit('sync_push',
+            entityType: 'parcela',
+            entityUuid: parcela.uuid,
+            userId: parcela.userId);
+      });
+    } else {
       // Parcela subiu, mas plantas falharam — NÃO marca como synced
       throw Exception(
           'Parcela ${parcela.idParcela} enviada, mas ${plantaErrors.length} '
@@ -1598,7 +1636,6 @@ class SyncService extends ChangeNotifier {
   /// Sempre faz pull do servidor (admin precisa ver tudo).
   Future<void> autoSync() async {
     if (!isConfigured) return;
-    if (_isSyncing) return;
     if (!await hasInternet()) return;
 
     // Testa conexão antes de sincronizar
