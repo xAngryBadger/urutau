@@ -122,9 +122,6 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(parcelas, parcelas.latitude);
           await m.addColumn(parcelas, parcelas.longitude);
         }
-        if (from < 4) {
-          // Migração antiga de admin — agora não faz nada hardcoded
-        }
         if (from < 5) {
           await _limparDadosOrfaos();
         }
@@ -200,13 +197,17 @@ if (from < 14) {
   /// Migra senhas armazenadas em plaintext para formato hash (SHA-256 + salt).
   /// Mantém compatibilidade: se já estiver no formato hash, não faz nada.
   Future<void> _migrarSenhasParaHash() async {
-    final todosUsuarios = await (select(usuarios)).get();
-    for (final user in todosUsuarios) {
-      if (!PasswordService.isHashed(user.senha)) {
-        final hashedPassword = PasswordService.hashPassword(user.senha);
-        await (update(usuarios)..where((t) => t.uuid.equals(user.uuid)))
-            .write(UsuariosCompanion(senha: Value(hashedPassword)));
+    try {
+      final todosUsuarios = await (select(usuarios)).get();
+      for (final user in todosUsuarios) {
+        if (!PasswordService.isHashed(user.senha)) {
+          final hashedPassword = PasswordService.hashPassword(user.senha);
+          await (update(usuarios)..where((t) => t.uuid.equals(user.uuid)))
+              .write(UsuariosCompanion(senha: Value(hashedPassword)));
+        }
       }
+    } catch (e) {
+      print('[DB] Password migration failed: $e');
     }
   }
 

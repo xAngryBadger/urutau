@@ -80,7 +80,6 @@ class _UrutauAppState extends State<UrutauApp> {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
 
-    final isHighContrast = themeProvider.isHighContrast;
     return MaterialApp(
       title: 'Urutau',
       debugShowCheckedModeBanner: false,

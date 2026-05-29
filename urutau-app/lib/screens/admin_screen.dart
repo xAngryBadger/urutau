@@ -1230,6 +1230,9 @@ class _AdminUserParcelasScreen extends StatelessWidget {
   final Usuario usuario;
   final List<Parcela> parcelas;
   final AppDatabase db;
+  final Map<String, Future<int>> _plantaCountCache = {};
+  final Map<String, Future<int>> _fotoCountCache = {};
+  final Map<String, Future<List<FotosParcelaData>>> _fotosCache = {};
 
   _AdminUserParcelasScreen({
     required this.usuario,
@@ -1436,18 +1439,18 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              FutureBuilder<List<Planta>>(
-                future: db.getPlantasByParcela(parcela.uuid),
+              FutureBuilder<int>(
+                future: _plantaCountCache.putIfAbsent(parcela.uuid, () => db.getPlantasByParcela(parcela.uuid).then((l) => l.length)),
                 builder: (context, snap) {
-                  final count = snap.data?.length ?? 0;
+                  final count = snap.data ?? 0;
                   return Row(
                     children: [
                       _infoChip(Icons.grass, '$count plantas'),
                       const SizedBox(width: 12),
-                      FutureBuilder<List<FotosParcelaData>>(
-                        future: db.getFotosByParcela(parcela.uuid),
+                      FutureBuilder<int>(
+                        future: _fotoCountCache.putIfAbsent(parcela.uuid, () => db.getFotosByParcela(parcela.uuid).then((l) => l.length)),
                         builder: (context, fotoSnap) {
-                          final fotoCount = fotoSnap.data?.length ?? 0;
+                          final fotoCount = fotoSnap.data ?? 0;
                           return _infoChip(
                               Icons.photo_camera, '$fotoCount fotos');
                         },
@@ -1476,7 +1479,7 @@ class _AdminUserParcelasScreen extends StatelessWidget {
               ],
               // Thumbnails de fotos
               FutureBuilder<List<FotosParcelaData>>(
-                future: db.getFotosByParcela(parcela.uuid),
+                future: _fotosCache.putIfAbsent(parcela.uuid, () => db.getFotosByParcela(parcela.uuid)),
                 builder: (context, snap) {
                   final fotos = snap.data ?? [];
                   if (fotos.isEmpty) return const SizedBox.shrink();

@@ -8,7 +8,6 @@ import '../theme/app_theme.dart';
 import '../services/sync_service.dart';
 import '../data/database.dart';
 
-// Hide Column from drift to avoid conflict with Flutter's Column
 
 class SyncScreenPro extends StatefulWidget {
   const SyncScreenPro({super.key});

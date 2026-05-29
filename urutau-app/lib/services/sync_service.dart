@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io' if (dart.library.html) 'dart:io';
 import 'dart:async';
+import 'dart:isolate';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:pocketbase/pocketbase.dart';
@@ -1242,9 +1243,18 @@ class SyncService extends ChangeNotifier {
             filter: 'name = "${name.replaceAll('"', '\\"')}"',
           );
       if (list.items.isNotEmpty) return list.items.first.id;
-      final created =
-          await _pb!.collection('propriedades').create(body: {'name': name});
-      return created.id;
+      try {
+        final created =
+            await _pb!.collection('propriedades').create(body: {'name': name});
+        return created.id;
+      } catch (_) {
+        final retry = await _pb!.collection('propriedades').getList(
+              page: 1, perPage: 1,
+              filter: 'name = "${name.replaceAll('"', '\\"')}"',
+            );
+        if (retry.items.isNotEmpty) return retry.items.first.id;
+        return null;
+      }
     } catch (_) {
       return null;
     }
@@ -1261,11 +1271,20 @@ class SyncService extends ChangeNotifier {
             filter: 'propriedade = "$propriedadeId" && name = "$escaped"',
           );
       if (list.items.isNotEmpty) return list.items.first.id;
-      final created = await _pb!.collection('uts').create(body: {
-        'propriedade': propriedadeId,
-        'name': utName,
-      });
-      return created.id;
+      try {
+        final created = await _pb!.collection('uts').create(body: {
+          'propriedade': propriedadeId,
+          'name': utName,
+        });
+        return created.id;
+      } catch (_) {
+        final retry = await _pb!.collection('uts').getList(
+              page: 1, perPage: 1,
+              filter: 'propriedade = "$propriedadeId" && name = "$escaped"',
+            );
+        if (retry.items.isNotEmpty) return retry.items.first.id;
+        return null;
+      }
     } catch (_) {
       return null;
     }
@@ -1342,7 +1361,7 @@ class SyncService extends ChangeNotifier {
     }
 
     final fotos = await _db.getFotosByParcela(parcela.uuid);
-    final fotoPathsAndNames = <Map<String, String>>[];
+    final fotoPathsAndNames = <Map<String, dynamic>>[];
 
     if (!kIsWeb) {
       for (int i = 0; i < fotos.length; i++) {
@@ -1350,15 +1369,9 @@ class SyncService extends ChangeNotifier {
         final path = foto.compressedPath ?? foto.filePath;
         final file = File(path);
         if (await file.exists()) {
-          File? fileToSend;
-          if (foto.compressedPath == null) {
-            fileToSend = await ImageService.compressImage(file);
-          }
-          fileToSend ??= file;
-
           final nomeArquivo = _gerarNomeFotoParcela(parcela, i);
           fotoPathsAndNames.add({
-            'path': fileToSend.path,
+            'index': i,
             'name': nomeArquivo,
           });
         }
@@ -1371,10 +1384,19 @@ class SyncService extends ChangeNotifier {
     final record = await _withRetry(() async {
       final freshFiles = <http.MultipartFile>[];
       for (final entry in fotoPathsAndNames) {
+        final foto = fotos[entry['index'] as int];
+        final path = foto.compressedPath ?? foto.filePath;
+        final file = File(path);
+        File fileToSend;
+        if (foto.compressedPath == null) {
+          fileToSend = (await ImageService.compressImage(file)) ?? file;
+        } else {
+          fileToSend = file;
+        }
         freshFiles.add(await http.MultipartFile.fromPath(
           'fotos_parcela',
-          entry['path']!,
-          filename: entry['name'],
+          fileToSend.path,
+          filename: entry['name'] as String,
         ));
       }
       if (existingServerId != null) {
@@ -1577,6 +1599,26 @@ class SyncService extends ChangeNotifier {
       }
       exportDir.createSync(recursive: true);
 
+      int totalDownloads = 0;
+      int completedDownloads = 0;
+      final Map<String, List<RecordModel>> plantasCache = {};
+
+      for (final parcelaRecord in parcelas) {
+        totalDownloads +=
+            parcelaRecord.getListValue<String>('fotos_parcela').length;
+        final plantas = await _withRetry(
+          () => _pb!.collection('plantas').getFullList(
+                filter: 'parcela = "${parcelaRecord.id}"',
+              ),
+        );
+        plantasCache[parcelaRecord.id] = plantas;
+        for (final plantaRecord in plantas) {
+          if (plantaRecord.getStringValue('foto_especie').isNotEmpty) {
+            totalDownloads++;
+          }
+        }
+      }
+
       for (final parcelaRecord in parcelas) {
         final propUtName = _getPropUtFromRecord(parcelaRecord);
         final idParcela = parcelaRecord.getIntValue('id_parcela');
@@ -1586,7 +1628,6 @@ class SyncService extends ChangeNotifier {
         final parcelaDir = Directory('${exportDir.path}/$pastaName');
         parcelaDir.createSync(recursive: true);
 
-        // Baixar fotos da parcela
         final fotosParcela =
             parcelaRecord.getListValue<String>('fotos_parcela');
         for (int i = 0; i < fotosParcela.length; i++) {
@@ -1596,20 +1637,18 @@ class SyncService extends ChangeNotifier {
             final response = await http.get(url);
             if (response.statusCode == 200) {
               final file = File('${parcelaDir.path}/$fotoName');
-              await file.writeAsBytes(response.bodyBytes);
+              await Isolate.run(
+                  () => file.writeAsBytesSync(response.bodyBytes));
+              completedDownloads++;
+              _syncProgress = completedDownloads / totalDownloads;
+              notifyListeners();
             }
           } catch (e) {
             debugPrint('Erro ao baixar foto parcela: $e');
           }
         }
 
-        // Baixar fotos das plantas dessa parcela
-        final plantas = await _withRetry(
-          () => _pb!.collection('plantas').getFullList(
-                filter: 'parcela = "${parcelaRecord.id}"',
-              ),
-        );
-
+        final plantas = plantasCache[parcelaRecord.id] ?? [];
         for (final plantaRecord in plantas) {
           final fotoEspecie = plantaRecord.getStringValue('foto_especie');
           if (fotoEspecie.isNotEmpty) {
@@ -1618,7 +1657,11 @@ class SyncService extends ChangeNotifier {
               final response = await http.get(url);
               if (response.statusCode == 200) {
                 final file = File('${parcelaDir.path}/$fotoEspecie');
-                await file.writeAsBytes(response.bodyBytes);
+                await Isolate.run(
+                    () => file.writeAsBytesSync(response.bodyBytes));
+                completedDownloads++;
+                _syncProgress = completedDownloads / totalDownloads;
+                notifyListeners();
               }
             } catch (e) {
               debugPrint('Erro ao baixar foto planta: $e');
