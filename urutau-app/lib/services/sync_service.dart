@@ -464,7 +464,13 @@ class SyncService extends ChangeNotifier {
     if (oldUuid == pbRecordId) return; // Já está correto
 
     debugPrint('Reconciliando UUID: $oldUuid → $pbRecordId');
-    await _db.remapUsuarioUuid(oldUuid, pbRecordId);
+    final saved = _currentUser;
+    try {
+      await _db.remapUsuarioUuid(oldUuid, pbRecordId);
+    } catch (_) {
+      _currentUser = saved;
+      rethrow;
+    }
 
     // Atualiza referência em memória
     _currentUser = await _db.getUsuarioByUuid(pbRecordId);
@@ -1410,7 +1416,7 @@ class SyncService extends ChangeNotifier {
           'parcela': record.id,
           'especie': planta.especie,
           'altura_cm': planta.alturaCm,
-          'dap_cm': planta.dapCm ?? 0,
+          'dap_cm': planta.dapCm,
           'categoria': planta.categoria,
           'created_at': planta.createdAt.toIso8601String(),
         };

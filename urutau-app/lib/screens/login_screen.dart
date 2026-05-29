@@ -570,6 +570,10 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       },
     );
+    nameCtrl.dispose();
+    emailCtrl.dispose();
+    passCtrl.dispose();
+    confirmCtrl.dispose();
   }
 
 }

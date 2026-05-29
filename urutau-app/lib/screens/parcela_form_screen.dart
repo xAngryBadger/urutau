@@ -424,16 +424,6 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                           },
                           fieldViewBuilder: (context, textController, focusNode,
                               onSubmitted) {
-                            // Sincronizar com nosso controller
-                            if (textController.text !=
-                                    _propriedadeController.text &&
-                                _propriedadeController.text.isNotEmpty &&
-                                textController.text.isEmpty) {
-                              textController.text = _propriedadeController.text;
-                            }
-                            textController.addListener(() {
-                              _propriedadeController.text = textController.text;
-                            });
                             return Semantics(
                               label: 'Propriedade',
                               textField: true,
@@ -481,14 +471,6 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                           },
                           fieldViewBuilder: (context, textController, focusNode,
                               onSubmitted) {
-                            if (textController.text != _propUtController.text &&
-                                _propUtController.text.isNotEmpty &&
-                                textController.text.isEmpty) {
-                              textController.text = _propUtController.text;
-                            }
-                            textController.addListener(() {
-                              _propUtController.text = textController.text;
-                            });
                             return Semantics(
                               label: 'UT ou Talhão',
                               textField: true,

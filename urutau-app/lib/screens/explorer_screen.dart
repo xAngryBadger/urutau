@@ -322,10 +322,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     String? hint,
     List<String> existentes = const [],
   }) {
+    final ctrl = TextEditingController();
     return showDialog<String?>(
       context: context,
       builder: (ctx) {
-        final ctrl = TextEditingController();
         return AlertDialog(
           title: Text('Nome do(a) $label'),
           content: Column(
@@ -393,7 +393,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           ],
         );
       },
-    );
+    ).whenComplete(() => ctrl.dispose());
   }
 
   // ─── Sync & Cache ─────────────────────────────────────
