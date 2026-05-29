@@ -51,6 +51,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   String? _currentUuid;
   bool _prontaParaSync =
       false; // carregado ao editar; rascunho até marcar concluída
+  bool _popGuard = false;
 
   // [GPS DESATIVADO - MANUTENÇÃO] Reativar quando integrar com app de mapas
   // double? _latitude;
@@ -299,6 +300,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
+        if (_popGuard) return;
+        _popGuard = true;
         if (_hasUnsavedData || (_isEditing && !_prontaParaSync)) {
           final choice = await showDialog<String>(
             context: context,

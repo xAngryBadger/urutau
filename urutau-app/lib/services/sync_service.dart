@@ -518,11 +518,7 @@ class SyncService extends ChangeNotifier {
   }
 
   Future<void> _waitForSyncLock() async {
-    while (_syncLock != null) {
-      try {
-        await _syncLock!.future;
-      } catch (_) {}
-    }
+    await _syncLock?.future;
   }
 
   /// Sincroniza todas as parcelas pendentes com o servidor.

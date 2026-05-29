@@ -793,35 +793,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                 Text('O catálogo de parcelas é local e já está carregado.')),
       );
     }
-    return;
-    // --- Funcionalidade online comentada ---
-    // ignore: dead_code
-    final syncService = context.read<SyncService>();
-    if (!syncService.isConfigured) return;
-    if (!await syncService.hasInternet()) return;
-    try {
-      final importados = await syncService.pullDadosDoServidor();
-      await _refreshNivel();
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(importados > 0
-                ? '$importados parcela(s) importada(s) do servidor.'
-                : 'Nenhuma parcela nova encontrada.'),
-            backgroundColor: importados > 0 ? Colors.green : Colors.blue,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
-        );
-      }
     }
-  }
 
   Future<void> _exportarXlsx() async {
     final syncService = context.read<SyncService>();
