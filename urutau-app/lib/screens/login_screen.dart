@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' as drift;
 import '../services/sync_service.dart';
 import '../services/secure_storage_service.dart';
-import '../services/theme_provider.dart';
 import '../data/database.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -203,28 +202,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();
-    final isHC = themeProvider.isHighContrast;
     final primaryColor = Theme.of(context).colorScheme.primary;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
-    final onBg = isHC ? Colors.white : const Color(0xFF2C3E2E);
-    final fieldFill = isHC ? const Color(0xFF111111) : const Color(0xFFF9F6F0);
+    final onBg = const Color(0xFF2C3E2E);
+    final fieldFill = const Color(0xFFF9F6F0);
 
     return Scaffold(
       body: SafeArea(
         child: Stack(
           children: [
-            // Toggle alto contraste (canto superior direito)
+            // Configurar servidor (canto superior direito)
             Positioned(
               top: 8,
               right: 8,
               child: IconButton(
-                icon: Icon(
-                  isHC ? Icons.brightness_7 : Icons.brightness_4,
-                  color: isHC ? const Color(0xFFFFD600) : Colors.grey[600],
-                ),
-                tooltip: isHC ? 'Tema claro' : 'Alto contraste',
-                onPressed: () async { await themeProvider.setHighContrast(!isHC); },
+                icon: Icon(Icons.settings, color: Colors.grey[600]),
+                tooltip: 'Configurar servidor',
+                onPressed: () => _showServerConfigDialog(),
               ),
             ),
             Center(
@@ -244,7 +238,7 @@ class _LoginScreenState extends State<LoginScreen> {
           errorBuilder: (ctx, err, st) => Icon(
             Icons.forest,
             size: 64,
-            color: isHC ? const Color(0xFFFFD600) : const Color(0xFF5A6B5C),
+            color: const Color(0xFF5A6B5C),
           ),
         ),
         const SizedBox(height: 24),
@@ -400,6 +394,61 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _showServerConfigDialog() async {
+    final syncService = context.read<SyncService>();
+    final ctrl = TextEditingController(text: syncService.serverUrl ?? '');
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Servidor'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('URL do PocketBase:', style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: ctrl,
+              decoration: const InputDecoration(
+                hintText: 'https://exemplo.ngrok-free.dev',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final url = ctrl.text.trim();
+              if (url.isEmpty) return;
+              try {
+                await syncService.setServerUrl(url);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Servidor configurado com sucesso')),
+                  );
+                }
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text('Erro: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
   }
 
   Future<void> _showRegisterDialog() async {

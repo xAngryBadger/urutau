@@ -4,6 +4,9 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
 android {
     namespace = "com.urutau.app"
     compileSdk = flutter.compileSdkVersion
@@ -30,6 +33,16 @@ android {
                 storePassword = keystorePassword
                 this.keyAlias = keyAlias
                 this.keyPassword = keyPassword
+            } else {
+                val propsFile = rootProject.file("key.properties")
+                if (propsFile.exists()) {
+                    val props = Properties()
+                    props.load(FileInputStream(propsFile))
+                    storeFile = file(props.getProperty("storeFile"))
+                    storePassword = props.getProperty("storePassword")
+                    this.keyAlias = props.getProperty("keyAlias")
+                    this.keyPassword = props.getProperty("keyPassword")
+                }
             }
         }
     }

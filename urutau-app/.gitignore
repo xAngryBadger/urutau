@@ -1,73 +1,65 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-.metadata
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
+*.aab
 /android/app/debug
 /android/app/profile
 /android/app/release
-
-# Local binaries / artifacts
+# Android Studio will place build artifacts here
 *.apk
-*.aab
-*.exe
-*.msi
-*.zip
-
-# Secrets / credentials
+app.*.map.json
+app.*.symbols
+.atom/
+.build/
+/build/
+.buildlog/
+*.class
+/coverage/
+credentials.json
+.dart_tool/
+*.db
+**/doc/api/
+.DS_Store
 .env
 .env.*
-google-services.json
-GoogleService-Info.plist
+*.exe
 firebase_options.dart
-credentials.json
-secrets*.json
-*.pem
+# Flutter/Dart/Pub related
+.flutter-plugins
+.flutter-plugins-dependencies
+GoogleService-Info.plist
+google-services.json
+.history
+.idea/
+*.iml
+# IntelliJ related
+**/ios/Flutter/.last_build_id
+*.ipr
+# is commented out by default.
+*.iws
 *.key
-
-# PocketBase/local runtime data
+key.properties
+# Local binaries / artifacts
+*.log
+.metadata
+migrate_working_dir/
+# Miscellaneous
+*.msi
+# Obfuscation related
 pb_data/
-*.sqlite
-*.db
-
+*.pem
+# PocketBase/local runtime data
+.pub/
+.pub-cache/
+*.pyc
+# Secrets / credentials
+secrets*.json
 # Seed script: never commit real PocketBase admin password
+*.sqlite
+.svn/
+.swiftpm/
+*.swp
+# Symbolication related
+# The .vscode folder contains launch configuration and tasks you configure in
 tool/.env.seed
+.vscode/
+# VS Code which you may wish to be included in version control, so this line
+*.zip
