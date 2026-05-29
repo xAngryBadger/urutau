@@ -22,6 +22,9 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Parcela>? _filteredParcelas;
   List<String> _talhoes = [];
   bool _showFilterBar = false;
+  final Map<String, Future<List<Parcela>>> _incompletasCache = {};
+  final Map<String, Future<int>> _plantaCountCache = {};
+  final Map<String, Future<int>> _fotoCountCache = {};
 
   @override
   void initState() {
@@ -366,7 +369,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       firstDate: DateTime(2020),
                       lastDate: DateTime.now(),
                     );
-                    if (picked != null)
+                    if (picked != null && mounted)
                       setState(() => _filterDataInicio = picked);
                   },
                 ),
@@ -388,7 +391,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       firstDate: DateTime(2020),
                       lastDate: DateTime.now(),
                     );
-                    if (picked != null) setState(() => _filterDataFim = picked);
+                    if (picked != null && mounted) setState(() => _filterDataFim = picked);
                   },
                 ),
               ),
@@ -467,7 +470,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final myId = syncService.currentUser?.uuid;
     if (myId == null || myId.isEmpty) return const SizedBox.shrink();
     return FutureBuilder<List<Parcela>>(
-      future: _db.getParcelasIncompletas(myId),
+      future: _incompletasCache.putIfAbsent(myId, () => _db.getParcelasIncompletas(myId)),
       builder: (context, snapshot) {
         final list = snapshot.data ?? [];
         if (list.isEmpty) return const SizedBox.shrink();
@@ -629,18 +632,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 8),
               // Info das plantas
-              FutureBuilder<List<Planta>>(
-                future: _db.getPlantasByParcela(parcela.uuid),
+              FutureBuilder<int>(
+                future: _plantaCountCache.putIfAbsent(parcela.uuid, () => _db.getPlantasByParcela(parcela.uuid).then((l) => l.length)),
                 builder: (context, snap) {
-                  final count = snap.data?.length ?? 0;
+                  final count = snap.data ?? 0;
                   return Row(
                     children: [
                       _infoChip(Icons.grass, '$count plantas'),
                       const SizedBox(width: 12),
-                      FutureBuilder<List<FotosParcelaData>>(
-                        future: _db.getFotosByParcela(parcela.uuid),
+                      FutureBuilder<int>(
+                        future: _fotoCountCache.putIfAbsent(parcela.uuid, () => _db.getFotosByParcela(parcela.uuid).then((l) => l.length)),
                         builder: (context, fotoSnap) {
-                          final fotoCount = fotoSnap.data?.length ?? 0;
+                          final fotoCount = fotoSnap.data ?? 0;
                           return Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
