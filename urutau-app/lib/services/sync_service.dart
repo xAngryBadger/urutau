@@ -4,14 +4,21 @@ import 'dart:async';
 import 'dart:isolate';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
 import 'package:http/http.dart' as http;
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import '../data/database.dart';
+import '../models/conflict_info.dart';
+import '../widgets/conflict_resolution_dialog.dart';
 import 'image_service.dart';
 import 'secure_storage_service.dart';
+import 'password_service.dart';
+import '../../main.dart' as main;
+
+const String kForcedOfflineKey = 'forced_offline_mode';
 
 /// HTTP client com timeout global em todas as requisições.
 class _TimeoutHttpClient extends http.BaseClient {
@@ -54,10 +61,6 @@ class SyncService extends ChangeNotifier {
   static const Duration _baseRetryDelay = Duration(seconds: 2);
   static const int _pageSize = 200; // Itens por página no pull
 
-  // Auto-sync periódico
-  Timer? _autoSyncTimer;
-  StreamSubscription? _connectivitySub;
-
   SyncService(this._db);
 
   bool get isSyncing => _isSyncing;
@@ -69,6 +72,12 @@ class SyncService extends ChangeNotifier {
   double get syncProgress => _syncProgress;
   Usuario? get currentUser => _currentUser;
   bool get isAdmin => _currentUser?.isAdmin ?? false;
+
+  /// Verifica se o modo offline forçado está ativo.
+  Future<bool> get isForcedOffline async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(kForcedOfflineKey) ?? false;
+  }
 
   /// Detecta se o valor parece ser um UT (ex: UT11, UTE2) e não uma propriedade.
   static bool _looksLikeUt(String s) {
@@ -179,15 +188,12 @@ class SyncService extends ChangeNotifier {
       await SecureStorageService.write(
           SecureStorageService.keyCurrentPassword, password);
     }
-    await _updatePendingCount();
-    notifyListeners();
-    // Inicia sync periódico ao definir usuário
-    startPeriodicSync();
-  }
+  await _updatePendingCount();
+  notifyListeners();
+}
 
   /// Remove o usuário atual (logout).
   Future<void> clearCurrentUser() async {
-    stopPeriodicSync();
     _currentUser = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('current_user_uuid');
@@ -249,7 +255,6 @@ class SyncService extends ChangeNotifier {
 
   /// Logout.
   Future<void> logout() async {
-    stopPeriodicSync();
     _pb?.authStore.clear();
     await SecureStorageService.deleteAll();
     _currentUser = null;
@@ -395,6 +400,13 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Retorna o timestamp do último sync bem-sucedido.
+  Future<DateTime?> getLastSyncTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ms = prefs.getInt('last_sync_timestamp');
+    return ms != null ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+  }
+
   /// Tenta auto-autenticar no PocketBase usando as credenciais do usuário local.
   Future<bool> _tryAutoAuth() async {
     if (_pb == null || _currentUser == null) return false;
@@ -531,6 +543,13 @@ class SyncService extends ChangeNotifier {
   /// Sincroniza todas as parcelas pendentes com o servidor.
   /// Agora bidirecional: PUSH local → servidor, depois PULL servidor → local.
   Future<void> syncAll() async {
+    // Verifica modo offline forçado
+    if (await isForcedOffline) {
+      _lastError = 'Sync bloqueada: modo offline forçado ativo.';
+      notifyListeners();
+      return;
+    }
+
     await _waitForSyncLock();
     _syncLock = Completer<void>();
 
@@ -585,7 +604,26 @@ class SyncService extends ChangeNotifier {
       final usuariosAtivos = await _db.getAllUsuarios();
       final uuidsAtivos = usuariosAtivos.map((u) => u.uuid).toSet();
 
+      // Detectar conflitos antes de sincronizar
+      final currentUserId = _currentUser?.uuid;
+      if (currentUserId != null) {
+        final conflicts = await fetchDetailedConflicts(userId: currentUserId);
+        if (conflicts.isNotEmpty) {
+          final resolved = <ConflictInfo>[];
+          final context = main.navigatorKey.currentContext;
+          if (context != null) {
+            await _showConflictResolutionDialog(context, conflicts, resolved);
+          }
+          // Atualizar lista de parcelas baseada nas resoluções
+          for (final r in resolved) {
+            // Marcar parcela como resolvida localmente
+            debugPrint('Conflito resolvido para ${r.parcelaId}: ${r.differingFields}');
+          }
+        }
+      }
+
       int sincronizados = 0;
+      int partialSyncCount = 0;
       final total = parcelas.length;
 
       // Processa em lotes de 50
@@ -606,8 +644,14 @@ class SyncService extends ChangeNotifier {
             notifyListeners();
           } catch (e) {
             debugPrint('Erro ao sincronizar parcela ${parcela.uuid}: $e');
-            _lastError =
-                'Falha ao enviar parcela ${parcela.idParcela}. Verifique a conexão e tente novamente.';
+            final msg = e.toString();
+            if (msg.contains('planta(s) falharam')) {
+              _lastError = msg.replaceFirst('Exception: ', '');
+              partialSyncCount++;
+            } else {
+              _lastError =
+                  'Falha ao enviar parcela ${parcela.idParcela}. Verifique a conexão e tente novamente.';
+            }
           }
         }
       }
@@ -633,6 +677,13 @@ class SyncService extends ChangeNotifier {
       // Salvar timestamp do último sync bem-sucedido
       await prefs.setInt(
           'last_sync_timestamp', DateTime.now().millisecondsSinceEpoch);
+
+      // Limpar fotos comprimidas temporárias após sync bem-sucedido
+      try {
+        await ImageService.cleanCompressedPhotos();
+      } catch (e) {
+        debugPrint('Clean compressed photos failed (non-critical): $e');
+      }
 
       await _updatePendingCount();
     } catch (e) {
@@ -791,7 +842,7 @@ class SyncService extends ChangeNotifier {
           uuid: serverId,
           nome: nomeReal,
           email: email,
-          senha: 'servidor',
+          senha: PasswordService.generateServerPlaceholder(),
           isAdmin: Value(serverIsAdmin),
         ));
         novos++;
@@ -980,7 +1031,7 @@ class SyncService extends ChangeNotifier {
                 uuid: serverUser,
                 nome: serverUser,
                 email: '$serverUser@imported.local',
-                senha: 'importado',
+                senha: PasswordService.generateServerPlaceholder(),
               ));
             }
           }
@@ -1093,7 +1144,13 @@ class SyncService extends ChangeNotifier {
     const empty = (messages: <String>[], conflictKeys: <String>{});
     if (_pb == null || userId == null) return empty;
     try {
-      final serverList = await fetchParcelasFeitasDoServidor();
+      final locais = await _db.getParcelasNaoSincronizadas(userId: userId);
+      if (locais.isEmpty) return empty;
+
+      // Build filter to only fetch matching parcelas from server
+      final keys = locais.map(parcelaKey).toSet();
+      final serverList = await _fetchServerParcelasByKeys(keys);
+      
       final serverKeyToUser = <String, String>{};
       for (final m in serverList) {
         final key =
@@ -1101,7 +1158,7 @@ class SyncService extends ChangeNotifier {
         final u = m['user'] ?? '';
         if (u.isNotEmpty) serverKeyToUser[key] = u;
       }
-      final locais = await _db.getParcelasNaoSincronizadas(userId: userId);
+      
       final messages = <String>[];
       final conflictKeys = <String>{};
       for (final p in locais) {
@@ -1120,6 +1177,104 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  /// Fetches parcelas from server matching the given keys only.
+  Future<List<Map<String, dynamic>>> _fetchServerParcelasByKeys(Set<String> keys) async {
+    if (_pb == null || keys.isEmpty) return [];
+    
+    try {
+      final filterParts = keys.map((k) {
+        final parts = k.split('|');
+        if (parts.length != 3) return null;
+        return '(propriedade = "${parts[0]}" && prop_ut = "${parts[1]}" && id_parcela = ${parts[2]})';
+      }).where((s) => s != null).join(' || ');
+      
+      if (filterParts.isEmpty) return [];
+      
+      final result = await _withRetry(() => _pb!.collection('parcelas').getList(
+        filter: filterParts,
+        perPage: keys.length + 10,
+      ));
+      return result.items.map((r) => {
+        'propriedade': r.getStringValue('propriedade'),
+        'propUt': r.getStringValue('prop_ut'),
+        'idParcela': r.getIntValue('id_parcela'),
+        'user': r.getStringValue('user'),
+      }).toList();
+    } catch (e) {
+      debugPrint('_fetchServerParcelasByKeys: $e');
+      return [];
+    }
+  }
+
+  /// Busca conflitos detalhados com diff campo a campo.
+  /// Retorna lista de ConflictInfo para mostrar na UI de resolução.
+  Future<List<ConflictInfo>> fetchDetailedConflicts({String? userId}) async {
+    if (_pb == null || userId == null) return [];
+
+    try {
+      final locais = await _db.getParcelasNaoSincronizadas(userId: userId);
+      if (locais.isEmpty) return [];
+
+      // Fetch only matching parcelas from server
+      final keys = locais.map(parcelaKey).toSet();
+      final serverList = await _fetchServerParcelasByKeys(keys);
+      
+      final serverKeyToRec = <String, Map<String, dynamic>>{};
+      for (final m in serverList) {
+        final key =
+            '${m['propriedade'] ?? ''}|${m['propUt'] ?? ''}|${m['idParcela'] ?? ''}';
+        final u = m['user'] ?? '';
+        if (u.isNotEmpty && u != userId) {
+          serverKeyToRec[key] = {
+            'propriedade': m['propriedade'] ?? '',
+            'propUt': m['propUt'] ?? '',
+            'idParcela': m['idParcela'] ?? 0,
+            'areaHa': m['areaHa'],
+            'observacoes': m['observacoes'] ?? '',
+            'synced': true,
+            'user': u,
+          };
+        }
+      }
+
+      final conflicts = <ConflictInfo>[];
+
+      for (final p in locais) {
+        final key = parcelaKey(p);
+        final serverRec = serverKeyToRec[key];
+        if (serverRec != null) {
+          final conflict = ConflictInfo.fromSyncComparison(p, serverRec);
+          if (conflict != null) {
+            conflicts.add(conflict);
+          }
+        }
+      }
+
+      return conflicts;
+    } catch (e) {
+      debugPrint('fetchDetailedConflicts: $e');
+      return [];
+    }
+  }
+
+  Future<void> _showConflictResolutionDialog(
+      BuildContext context, List<ConflictInfo> conflicts, List<ConflictInfo> resolved) async {
+    final completer = Completer<void>();
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ConflictResolutionDialog(
+        conflicts: conflicts,
+        onResolve: (conflict, resolution) {
+          resolved.add(conflict.copyWith(resolution: resolution));
+        },
+      ),
+    );
+    completer.complete();
+    return completer.future;
+  }
+
   /// Envia apenas as parcelas cujos UUIDs estão em [uuids].
   /// Usado pela UI de sync com seleção (checkboxes).
   Future<({int sent, int conflictsBlocked})> syncSelected({
@@ -1127,6 +1282,13 @@ class SyncService extends ChangeNotifier {
     required Set<String> conflictKeys,
     String? userId,
   }) async {
+    // Verifica modo offline forçado
+    if (await isForcedOffline) {
+      _lastError = 'Sync bloqueada: modo offline forçado ativo.';
+      notifyListeners();
+      return (sent: 0, conflictsBlocked: 0);
+    }
+
     await _waitForSyncLock();
     _syncLock = Completer<void>();
 
@@ -1170,6 +1332,13 @@ class SyncService extends ChangeNotifier {
         }
       }
       await _updatePendingCount();
+
+      // Limpar fotos comprimidas temporárias após sync bem-sucedido
+      try {
+        await ImageService.cleanCompressedPhotos();
+      } catch (e) {
+        debugPrint('Clean compressed photos failed (non-critical): $e');
+      }
     } catch (e) {
       _syncLock!.completeError(e);
       _syncLock = null;
@@ -1233,62 +1402,76 @@ class SyncService extends ChangeNotifier {
         .replaceAll(RegExp(r'-+'), '-');
   }
 
-  /// Schema normalizado: obtém ou cria propriedade por nome; retorna id ou null se coleção não existir.
-  Future<String?> _getOrCreatePropriedadeId(String name) async {
-    if (name.isEmpty) return null;
-    try {
-      final list = await _pb!.collection('propriedades').getList(
-            page: 1,
-            perPage: 1,
-            filter: 'name = "${name.replaceAll('"', '\\"')}"',
-          );
-      if (list.items.isNotEmpty) return list.items.first.id;
-      try {
-        final created =
-            await _pb!.collection('propriedades').create(body: {'name': name});
-        return created.id;
-      } catch (_) {
-        final retry = await _pb!.collection('propriedades').getList(
-              page: 1, perPage: 1,
-              filter: 'name = "${name.replaceAll('"', '\\"')}"',
-            );
-        if (retry.items.isNotEmpty) return retry.items.first.id;
-        return null;
-      }
-    } catch (_) {
-      return null;
-    }
-  }
+   /// Schema normalizado: obtém ou cria propriedade por nome; retorna id ou null se coleção não existir.
+   Future<String?> _getOrCreatePropriedadeId(String name) async {
+     if (name.isEmpty) return null;
+     try {
+       final list = await _pb!.collection('propriedades').getList(
+             page: 1,
+             perPage: 1,
+             filter: 'name = "${name.replaceAll('"', '\\"')}"',
+           );
+       if (list.items.isNotEmpty) return list.items.first.id;
+       try {
+         final created =
+             await _pb!.collection('propriedades').create(body: {'name': name});
+         return created.id;
+       } catch (_) {
+         final retry = await _pb!.collection('propriedades').getList(
+               page: 1, perPage: 1,
+               filter: 'name = "${name.replaceAll('"', '\\"')}"',
+             );
+         if (retry.items.isNotEmpty) {
+           // Log dedup event
+           await _db.logAudit('dedup_propriedade',
+               entityType: 'propriedade',
+               details: 'Concurrent create detected, reused existing: $name',
+               newValue: 'deduplicated');
+           return retry.items.first.id;
+         }
+         return null;
+       }
+     } catch (_) {
+       return null;
+     }
+   }
 
-  /// Schema normalizado: obtém ou cria UT por (propriedadeId, nome UT); retorna id ou null.
-  Future<String?> _getOrCreateUtId(String propriedadeId, String utName) async {
-    if (propriedadeId.isEmpty || utName.isEmpty) return null;
-    final escaped = utName.replaceAll('"', '\\"');
-    try {
-      final list = await _pb!.collection('uts').getList(
-            page: 1,
-            perPage: 1,
-            filter: 'propriedade = "$propriedadeId" && name = "$escaped"',
-          );
-      if (list.items.isNotEmpty) return list.items.first.id;
-      try {
-        final created = await _pb!.collection('uts').create(body: {
-          'propriedade': propriedadeId,
-          'name': utName,
-        });
-        return created.id;
-      } catch (_) {
-        final retry = await _pb!.collection('uts').getList(
-              page: 1, perPage: 1,
-              filter: 'propriedade = "$propriedadeId" && name = "$escaped"',
-            );
-        if (retry.items.isNotEmpty) return retry.items.first.id;
-        return null;
-      }
-    } catch (_) {
-      return null;
-    }
-  }
+   /// Schema normalizado: obtém ou cria UT por (propriedadeId, nome UT); retorna id ou null.
+   Future<String?> _getOrCreateUtId(String propriedadeId, String utName) async {
+     if (propriedadeId.isEmpty || utName.isEmpty) return null;
+     final escaped = utName.replaceAll('"', '\\"');
+     try {
+       final list = await _pb!.collection('uts').getList(
+             page: 1,
+             perPage: 1,
+             filter: 'propriedade = "$propriedadeId" && name = "$escaped"',
+           );
+       if (list.items.isNotEmpty) return list.items.first.id;
+       try {
+         final created = await _pb!.collection('uts').create(body: {
+           'propriedade': propriedadeId,
+           'name': utName,
+         });
+         return created.id;
+       } catch (_) {
+         final retry = await _pb!.collection('uts').getList(
+               page: 1, perPage: 1,
+               filter: 'propriedade = "$propriedadeId" && name = "$escaped"',
+             );
+         if (retry.items.isNotEmpty) {
+           // Log dedup event
+           await _db.logAudit('dedup_ut',
+               entityType: 'ut',
+               details: 'Concurrent create detected, reused existing: $utName',
+               newValue: 'deduplicated');
+           return retry.items.first.id;
+         }
+         return null;
+       }
+     } catch (_) {
+       return null;
+     }
+   }
 
   /// Sincroniza uma parcela pelo UUID.
   /// Público para uso em operações em lote.
@@ -1366,10 +1549,10 @@ class SyncService extends ChangeNotifier {
     if (!kIsWeb) {
       for (int i = 0; i < fotos.length; i++) {
         final foto = fotos[i];
-        final path = foto.compressedPath ?? foto.filePath;
-        final file = File(path);
-        if (await file.exists()) {
-          final nomeArquivo = _gerarNomeFotoParcela(parcela, i);
+      final path = foto.filePath;
+      final file = File(path);
+      if (await file.exists()) {
+        final nomeArquivo = _gerarNomeFotoParcela(parcela, i);
           fotoPathsAndNames.add({
             'index': i,
             'name': nomeArquivo,
@@ -1384,15 +1567,10 @@ class SyncService extends ChangeNotifier {
     final record = await _withRetry(() async {
       final freshFiles = <http.MultipartFile>[];
       for (final entry in fotoPathsAndNames) {
-        final foto = fotos[entry['index'] as int];
-        final path = foto.compressedPath ?? foto.filePath;
-        final file = File(path);
-        File fileToSend;
-        if (foto.compressedPath == null) {
-          fileToSend = (await ImageService.compressImage(file)) ?? file;
-        } else {
-          fileToSend = file;
-        }
+    final foto = fotos[entry['index'] as int];
+    final path = foto.filePath;
+    final file = File(path);
+    final fileToSend = (await ImageService.compressImage(file)) ?? file;
         freshFiles.add(await http.MultipartFile.fromPath(
           'fotos_parcela',
           fileToSend.path,
@@ -1413,7 +1591,7 @@ class SyncService extends ChangeNotifier {
     });
 
     // 2. Enviar as plantas desta parcela — rastreia falhas individualmente
-    // Primeiro, coleta IDs das plantas existentes no servidor para deletar depois
+    // Primeiro, coleta IDs das plantas existentes no servidor para deletar ANTES de criar
     final oldPlantaIds = <String>[];
     try {
       final existingPlantas = await _withRetry(
@@ -1424,6 +1602,13 @@ class SyncService extends ChangeNotifier {
       oldPlantaIds.addAll(existingPlantas.map((r) => r.id));
     } catch (e) {
       debugPrint('Aviso: não foi possível buscar plantas existentes: $e');
+    }
+
+    // 3. Deleta plantas antigas do servidor ANTES de criar novas (idempotente)
+    for (final oldId in oldPlantaIds) {
+      try {
+        await _pb!.collection('plantas').delete(oldId);
+      } catch (_) {}
     }
 
     final plantas = await _db.getPlantasByParcela(parcela.uuid);
@@ -1480,13 +1665,6 @@ class SyncService extends ChangeNotifier {
       }
     }
 
-    // 3. Deleta plantas antigas do servidor (agora que novas já foram criadas)
-    for (final oldId in oldPlantaIds) {
-      try {
-        await _pb!.collection('plantas').delete(oldId);
-      } catch (_) {}
-    }
-
     // 4. Só marca tudo como synced se TODAS as plantas foram enviadas
     if (allPlantasOk) {
       await _db.transaction(() async {
@@ -1508,14 +1686,17 @@ class SyncService extends ChangeNotifier {
         await _db.logAudit('sync_push',
             entityType: 'parcela',
             entityUuid: parcela.uuid,
-            userId: parcela.userId);
+            userId: parcela.userId,
+            newValue: 'synced');
       });
-    } else {
-      // Parcela subiu, mas plantas falharam — NÃO marca como synced
-      throw Exception(
-          'Parcela ${parcela.idParcela} enviada, mas ${plantaErrors.length} '
-          'planta(s) falharam: ${plantaErrors.join("; ")}');
-    }
+      } else {
+        await _db.marcarParcelaParcialmenteSincronizada(parcela.uuid);
+        for (final foto in fotos) {
+          await _db.marcarFotoSynced(foto.uuid);
+        }
+        throw Exception(
+            '${plantaErrors.length} planta(s) falharam ao sincronizar, tentará novamente na próxima vez');
+      }
   }
 
   /// Remove a parcela (e suas plantas) no servidor. Só para parcelas já sincronizadas (uuid pb-*).
@@ -1675,61 +1856,6 @@ class SyncService extends ChangeNotifier {
       debugPrint('Erro ao baixar fotos: $e');
       return null;
     }
-  }
-
-  /// Sincroniza automaticamente ao abrir o app (se possível).
-  /// Sempre faz pull do servidor (admin precisa ver tudo).
-  Future<void> autoSync() async {
-    if (!isConfigured) return;
-    if (!await hasInternet()) return;
-
-    // Testa conexão antes de sincronizar
-    final testResult = await testConnection();
-    if (testResult != 'OK') return;
-
-    await syncAll();
-  }
-
-  /// Inicia timer periódico que tenta sincronizar a cada 5 minutos
-  /// se houver dados pendentes e conexão com internet.
-  /// Também escuta mudanças de conectividade para sync imediato.
-  void startPeriodicSync() {
-    stopPeriodicSync(); // Cancela anterior se houver
-
-    // Timer a cada 5 minutos
-    _autoSyncTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
-      if (_pendingCount > 0 && !_isSyncing && isConfigured) {
-        final online = await hasInternet();
-        if (online) {
-          debugPrint(
-              'Auto-sync periódico: $_pendingCount pendentes, sincronizando...');
-          await autoSync();
-        }
-      }
-    });
-
-    // Sync imediato quando volta a ter conectividade
-    _connectivitySub =
-        Connectivity().onConnectivityChanged.listen((result) async {
-      if (!result.contains(ConnectivityResult.none) &&
-          _pendingCount > 0 &&
-          !_isSyncing &&
-          isConfigured) {
-        debugPrint(
-            'Conectividade restaurada: sincronizando $_pendingCount pendentes...');
-        // Pequeno delay para estabilizar a conexão
-        await Future.delayed(const Duration(seconds: 3));
-        await autoSync();
-      }
-    });
-  }
-
-  /// Para o timer periódico e listener de conectividade.
-  void stopPeriodicSync() {
-    _autoSyncTimer?.cancel();
-    _autoSyncTimer = null;
-    _connectivitySub?.cancel();
-    _connectivitySub = null;
   }
 
   /// Atualiza o campo isAdmin de um usuário no PocketBase.

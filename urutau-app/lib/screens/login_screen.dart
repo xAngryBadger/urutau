@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:uuid/uuid.dart';
 import '../services/sync_service.dart';
 import '../services/secure_storage_service.dart';
 import '../data/database.dart';
@@ -139,57 +140,19 @@ class _LoginScreenState extends State<LoginScreen> {
         final syncService = context.read<SyncService>();
         await syncService.setCurrentUser(usuario, password: _senhaController.text);
 
-  if (mounted) {
-      final seeded = await syncService.ensureCatalogSeeded();
-      if (!mounted) return;
-      if (!seeded) {
-        final retry = await showDialog<bool>(
-              context: context,
-              barrierDismissible: false,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Conexão necessária'),
-                content: const Text(
-                  'O app precisa baixar o catálogo (propriedades/UTs/parcelas) no primeiro acesso. '
-                  'Conecte-se à internet e tente novamente.',
-                ),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                  FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Tentar novamente')),
-                ],
-              ),
-            );
-            if (retry == true) {
-              final seeded2 = await syncService.ensureCatalogSeeded();
-              if (!seeded2 && mounted) {
-                setState(() => _isLoading = false);
-                return;
-              }
-            } else {
-              if (mounted) setState(() => _isLoading = false);
-              return;
-            }
-          }
-
-          // Atualizar catálogo em logins seguintes (estado das outras parcelas)
-    if (await syncService.hasInternet()) {
-      syncService.pullDadosDoServidor().then((_) {
-        syncService.refreshPendingCount();
-      });
-    }
-
-    if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/explorer');
+  // Atualizar catálogo em logins seguintes (estado das outras parcelas) se conectado
+  if (await syncService.hasInternet()) {
+    syncService.pullDadosDoServidor().then((_) {
+      syncService.refreshPendingCount();
+    });
   }
+
+  if (!mounted) return;
+  Navigator.of(context).pushReplacementNamed('/explorer');
       } else {
         // Mensagem mais informativa
         final syncService = context.read<SyncService>();
-    final online = syncService.isConfigured && await syncService.hasInternet();
-    if (!mounted) return;
-    if (online) {
-          setState(() => _errorMessage = 'Email ou senha incorretos.');
-        } else {
-          setState(() => _errorMessage = 'Conta não encontrada localmente e sem internet para verificar o servidor.');
-        }
+    setState(() => _errorMessage = 'Email ou senha incorretos.');
       }
     } catch (e) {
       if (mounted) setState(() => _errorMessage = 'Erro ao fazer login: $e');
@@ -247,9 +210,10 @@ class _LoginScreenState extends State<LoginScreen> {
                          const Center(child: CircularProgressIndicator())
                       else ...[
                         // Campo Email
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
+              TextFormField(
+                controller: _emailController,
+                textInputAction: TextInputAction.next,
+                keyboardType: TextInputType.emailAddress,
                           decoration: InputDecoration(
                             labelText: 'Email',
                             hintText: 'exemplo@urutau.com',
@@ -271,9 +235,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
 
                         // Campo de senha
-                        TextFormField(
-                          controller: _senhaController,
-                          decoration: InputDecoration(
+              TextFormField(
+                controller: _senhaController,
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(
                             labelText: 'Senha',
                             hintText: 'Mínimo 8 caracteres',
                             prefixIcon: const Icon(Icons.lock),
@@ -408,9 +373,10 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             const Text('URL do PocketBase:', style: TextStyle(fontSize: 13)),
             const SizedBox(height: 8),
-            TextField(
-              controller: ctrl,
-              decoration: const InputDecoration(
+                TextField(
+                  controller: ctrl,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
                 hintText: 'https://exemplo.ngrok-free.dev',
                 border: OutlineInputBorder(),
               ),
@@ -432,13 +398,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Servidor configurado com sucesso')),
+                    const SnackBar(content: Text('Servidor configurado com sucesso'), duration: Duration(seconds: 3)),
                   );
                 }
               } catch (e) {
                 if (ctx.mounted) {
                   ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text('Erro: $e')),
+                    SnackBar(content: Text('Erro: $e'), duration: const Duration(seconds: 5)),
                   );
                 }
               }
@@ -451,97 +417,101 @@ class _LoginScreenState extends State<LoginScreen> {
     ctrl.dispose();
   }
 
-  Future<void> _showRegisterDialog() async {
-    final syncService = context.read<SyncService>();
-    final scaffoldMsg = ScaffoldMessenger.of(context);
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final passCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    bool confirmed = false;
-    bool obscurePass = true;
-    bool obscureConfirm = true;
-    final dialogFormKey = GlobalKey<FormState>();
+    Future<void> _showRegisterDialog() async {
+      final syncService = context.read<SyncService>();
+      final scaffoldMsg = ScaffoldMessenger.of(context);
+      final nameCtrl = TextEditingController();
+      final emailCtrl = TextEditingController();
+      final passCtrl = TextEditingController();
+      final confirmCtrl = TextEditingController();
+      bool confirmed = false;
+      bool obscurePass = true;
+      bool obscureConfirm = true;
+      final dialogFormKey = GlobalKey<FormState>();
 
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setStateBuilder) {
-            return AlertDialog(
-              title: const Text('Novo Usuário'),
-              content: SingleChildScrollView(
-                child: SizedBox(
-                  width: double.maxFinite,
-                  child: Form(
-                    key: dialogFormKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextFormField(
-                          controller: nameCtrl,
-                          decoration: const InputDecoration(labelText: 'Nome Completo'),
-                          textCapitalization: TextCapitalization.words,
-                          validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: emailCtrl,
-                          decoration: const InputDecoration(labelText: 'Email (ex: nome@gmail.com)'),
-                          keyboardType: TextInputType.emailAddress,
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'Obrigatório';
-                            final regex = RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)+$');
-                            if (!regex.hasMatch(v.trim())) {
-                              return 'Email inválido (inclua o domínio completo)';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: passCtrl,
-                          decoration: InputDecoration(
-                            labelText: 'Senha (min 8)',
-                            suffixIcon: IconButton(
-                              icon: Icon(obscurePass ? Icons.visibility_off : Icons.visibility),
-                              onPressed: () => setStateBuilder(() => obscurePass = !obscurePass),
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (context, setStateBuilder) {
+              return AlertDialog(
+                title: const Text('Novo Usuário'),
+                content: SingleChildScrollView(
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: Form(
+                      key: dialogFormKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                      TextFormField(
+                        controller: nameCtrl,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(labelText: 'Nome Completo'),
+                                textCapitalization: TextCapitalization.words,
+                                validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: emailCtrl,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(labelText: 'Email (ex: nome@gmail.com)'),
+                                keyboardType: TextInputType.emailAddress,
+                                validator: (v) {
+                                  if (v == null || v.isEmpty) return 'Obrigatório';
+                                  final regex = RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)+$');
+                                  if (!regex.hasMatch(v.trim())) {
+                                    return 'Email inválido (inclua o domínio completo)';
+                                  }
+                                  return null;
+                                },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: passCtrl,
+                        textInputAction: TextInputAction.next,
+                        decoration: InputDecoration(
+                              labelText: 'Senha (min 8)',
+                              suffixIcon: IconButton(
+                                icon: Icon(obscurePass ? Icons.visibility_off : Icons.visibility),
+                                onPressed: () => setStateBuilder(() => obscurePass = !obscurePass),
+                              ),
                             ),
-                          ),
-                          obscureText: obscurePass,
-                          validator: (v) => (v?.length ?? 0) < 8 ? 'Mínimo 8 caracteres' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: confirmCtrl,
-                          decoration: InputDecoration(
-                            labelText: 'Confirmar Senha',
-                            suffixIcon: IconButton(
-                              icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
-                              onPressed: () => setStateBuilder(() => obscureConfirm = !obscureConfirm),
+                            obscureText: obscurePass,
+                            validator: (v) => (v?.length ?? 0) < 8 ? 'Mínimo 8 caracteres' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: confirmCtrl,
+                        textInputAction: TextInputAction.done,
+                        decoration: InputDecoration(
+                              labelText: 'Confirmar Senha',
+                              suffixIcon: IconButton(
+                                icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                                onPressed: () => setStateBuilder(() => obscureConfirm = !obscureConfirm),
+                              ),
                             ),
-                          ),
-                          obscureText: obscureConfirm,
-                          validator: (v) => v != passCtrl.text ? 'Senhas não conferem' : null,
+                            obscureText: obscureConfirm,
+                            validator: (v) => v != passCtrl.text ? 'Senhas não conferem' : null,
+                      ),
+                      const SizedBox(height: 20),
+                      CheckboxListTile(
+                        value: confirmed,
+                        onChanged: (v) => setStateBuilder(() => confirmed = v!),
+                        title: const Text(
+                          'Confirmo que meus dados estão corretos e não poderão ser alterados posteriormente.',
+                          style: TextStyle(fontSize: 13),
                         ),
-                        const SizedBox(height: 20),
-                        CheckboxListTile(
-                          value: confirmed,
-                          onChanged: (v) => setStateBuilder(() => confirmed = v!),
-                          title: const Text(
-                            'Confirmo que meus dados estão corretos e não poderão ser alterados posteriormente.',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                          contentPadding: EdgeInsets.zero,
-                          controlAffinity: ListTileControlAffinity.leading,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ],
+        ),
+        ),
+        ),
+        ),
+        actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
                   child: const Text('Cancelar'),
@@ -551,78 +521,68 @@ class _LoginScreenState extends State<LoginScreen> {
                       ? null
                       : () async {
                           if (!dialogFormKey.currentState!.validate()) return;
-                          
+                           
                           try {
-                            // ── Cadastro requer internet (online-first) ──
-                            if (!syncService.isConfigured || !await syncService.hasInternet()) {
-                              scaffoldMsg.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Cadastro requer conexão com a internet!'),
-                                  backgroundColor: Colors.red,
-                                  duration: Duration(seconds: 4),
-                                ),
-                              );
-                              return;
-                            }
-
                             // Verifica se email já existe
                             final allUsers = await _db.getAllUsuarios();
                             if (allUsers.any((u) => u.email == emailCtrl.text.trim())) {
                                scaffoldMsg.showSnackBar(
-                                 const SnackBar(content: Text('Email já cadastrado!'), backgroundColor: Colors.red),
+                                 const SnackBar(content: Text('Email já cadastrado!'), backgroundColor: Colors.red, duration: Duration(seconds: 5)),
                                );
                                return;
                             }
-
-                            // Registra no servidor primeiro (online-first)
-                            final pbId = await syncService.registrarUsuarioNoServidor(
-                              nameCtrl.text.trim(),
-                              emailCtrl.text.trim(),
-                              passCtrl.text,
-                            );
-
-                            if (pbId == null) {
-                              scaffoldMsg.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Falha ao registrar no servidor. Verifique sua conexão.'),
-                                  backgroundColor: Colors.red,
-                                  duration: Duration(seconds: 4),
-                                ),
-                              );
-                              return;
-                            }
-
-                            // Sucesso no servidor → salva localmente com ID do servidor
+   
+                            // Gera UUID local para funcionar offline
+                            final localUuid = const Uuid().v4();
                             await _db.insertUsuario(UsuariosCompanion(
-                              uuid: drift.Value(pbId),
+                              uuid: drift.Value(localUuid),
                               nome: drift.Value(nameCtrl.text.trim()),
                               email: drift.Value(emailCtrl.text.trim()),
                               senha: drift.Value(passCtrl.text),
                               isAdmin: drift.Value(false),
                             ));
+
+                            // Tenta registrar no servidor se tiver internet (não-bloqueante)
+                            if (syncService.isConfigured && await syncService.hasInternet()) {
+                              try {
+                                final serverId = await syncService.registrarUsuarioNoServidor(
+                                  nameCtrl.text.trim(),
+                                  emailCtrl.text.trim(),
+                                  passCtrl.text,
+                                );
+                                if (serverId != null && serverId != localUuid) {
+                                  await _db.updateUsuario(
+                                    UsuariosCompanion(uuid: drift.Value(serverId)),
+                                    localUuid,
+                                  );
+                                }
+                              } catch (_) {
+                                // Falha no servidor não impede uso offline
+                              }
+                            }
                             
                             Navigator.pop(ctx);
                             scaffoldMsg.showSnackBar(
-                              const SnackBar(content: Text('Cadastro realizado! Faça login.'), backgroundColor: Colors.green),
+                              const SnackBar(content: Text('Cadastro realizado! Faça login.'), backgroundColor: Colors.green, duration: Duration(seconds: 3)),
                             );
                           } catch (e) {
                              scaffoldMsg.showSnackBar(
-                               SnackBar(content: Text('Erro: $e')),
+                           SnackBar(content: Text('Erro: $e'), duration: const Duration(seconds: 5)),
                              );
                           }
-                      },
-                  child: const Text('Criar Conta'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    nameCtrl.dispose();
-    emailCtrl.dispose();
-    passCtrl.dispose();
-    confirmCtrl.dispose();
+                        },
+                    child: const Text('Criar Conta'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ).whenComplete(() {
+        nameCtrl.dispose();
+        emailCtrl.dispose();
+        passCtrl.dispose();
+        confirmCtrl.dispose();
+      });
   }
-
-}
+  }

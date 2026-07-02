@@ -1,5 +1,7 @@
 import 'dart:io' as io;
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:archive/archive.dart';
 import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -294,7 +296,7 @@ class ExportService {
 
         final fotos = await _db.getFotosByParcela(parcela.uuid);
         for (var i = 0; i < fotos.length; i++) {
-          final path = fotos[i].compressedPath ?? fotos[i].filePath;
+          final path = fotos[i].filePath;
           final f = io.File(path);
           if (await f.exists()) {
             final ext = p.extension(path);
@@ -666,5 +668,162 @@ class ExportService {
       oddRowDecoration: pw.BoxDecoration(color: rowAlternate),
       cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
     );
+  }
+
+  /// Exporta uma parcela individual como ZIP (XLSX + fotos + manifest.json).
+  /// Compartilhável offline.
+  Future<String> exportParcelaZip({
+    required Parcela parcela,
+    required List<String> fotoPaths,
+  }) async {
+    final tempDir = io.Directory.systemTemp;
+    final zipName = 'parcela_${parcela.id}_${DateTime.now().millisecondsSinceEpoch}.zip';
+    final zipPath = p.join(tempDir.path, zipName);
+
+    final zipFile = io.File(zipPath);
+    final archive = Archive();
+
+    // 1. Manifest
+    final manifest = {
+      'app': 'Urutau',
+      'version': '1.0',
+      'exportedAt': DateTime.now().toIso8601String(),
+      'parcela': {
+        'id': parcela.idParcela,
+        'propriedade': parcela.propriedade,
+        'propUt': parcela.propUt,
+        'areaHa': parcela.areaHa,
+        'observacao': parcela.observacoes,
+        'createdAt': parcela.createdAt.toIso8601String(),
+        'synced': parcela.synced,
+        'userId': parcela.userId,
+      },
+      'fotos': fotoPaths.map((f) => p.basename(f)).toList(),
+      'plantas': [],
+    };
+
+    // Add plantas info to manifest
+    final plantas = await _db.getPlantasByParcela(parcela.uuid);
+    for (final pl in plantas) {
+      (manifest['plantas'] as List).add({
+        'especie': pl.especie,
+        'alturaCm': pl.alturaCm,
+        'dapCm': pl.dapCm,
+        'categoria': pl.categoria,
+        'createdAt': pl.createdAt.toIso8601String(),
+        'fotoEspecie': pl.fotoEspeciePath != null ? p.basename(pl.fotoEspeciePath!) : null,
+      });
+    }
+
+    final manifestJson = jsonEncode(manifest);
+    archive.addFile(ArchiveFile(
+      'manifest.json',
+      manifestJson.length,
+      manifestJson.codeUnits,
+    ));
+
+    // 2. XLSX for this single parcela
+    try {
+      final xlsxBytes = await _exportSingleParcelaXlsx(parcela);
+      archive.addFile(ArchiveFile('dados.xlsx', xlsxBytes.length, xlsxBytes));
+    } catch (_) {}
+
+    // 3. Photos
+    for (final path in fotoPaths) {
+      final file = io.File(path);
+      if (await file.exists()) {
+        final bytes = await file.readAsBytes();
+        archive.addFile(ArchiveFile(
+          'fotos/${p.basename(path)}',
+          bytes.length,
+          bytes,
+        ));
+      }
+    }
+
+    // 4. Plant species photos
+    for (final pl in plantas) {
+      if (pl.fotoEspeciePath != null) {
+        final file = io.File(pl.fotoEspeciePath!);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          archive.addFile(ArchiveFile(
+            'fotos/${p.basename(pl.fotoEspeciePath!)}',
+            bytes.length,
+            bytes,
+          ));
+        }
+      }
+    }
+
+    // 5. Write ZIP
+    final encoded = ZipEncoder().encode(archive);
+    if (encoded == null) throw Exception('Falha ao criar ZIP');
+    await zipFile.writeAsBytes(encoded);
+
+    return zipPath;
+  }
+
+  Future<List<int>> _exportSingleParcelaXlsx(Parcela parcela) async {
+    final excel = Excel.createExcel();
+
+    final plantas = await _db.getPlantasByParcela(parcela.uuid);
+    final fotos = await _db.getFotosByParcela(parcela.uuid);
+
+    // Sheet: Parcelas
+    final sheetParcelas = excel['Parcelas'];
+    final headerParcelas = ['Propriedade', 'UT/Talhão', 'Nº Parcela', 'Área (ha)', 'Anotações', 'Qtd Plantas'];
+    sheetParcelas.appendRow(headerParcelas.map((h) => TextCellValue(h)).toList());
+    final rowParcela = [
+      TextCellValue(parcela.propriedade),
+      TextCellValue(parcela.propUt),
+      IntCellValue(parcela.idParcela),
+      parcela.areaHa != null ? DoubleCellValue(parcela.areaHa!) : TextCellValue(''),
+      TextCellValue(parcela.observacoes ?? ''),
+      IntCellValue(plantas.length),
+    ];
+    sheetParcelas.appendRow(rowParcela);
+
+    // Sheet: Plantas
+    final sheetPlantas = excel['Plantas'];
+    final headerPlantas = ['Propriedade', 'UT/Talhão', 'Nº Parcela', 'Espécie', 'Altura (cm)', 'DAP (cm)', 'Categoria'];
+    sheetPlantas.appendRow(headerPlantas.map((h) => TextCellValue(h)).toList());
+    for (final pl in plantas) {
+      final row = [
+        TextCellValue(parcela.propriedade),
+        TextCellValue(parcela.propUt),
+        IntCellValue(parcela.idParcela),
+        TextCellValue(pl.especie),
+        DoubleCellValue(pl.alturaCm),
+        pl.dapCm != null ? DoubleCellValue(pl.dapCm!) : TextCellValue(''),
+        IntCellValue(pl.categoria),
+      ];
+      sheetPlantas.appendRow(row);
+    }
+
+    // Sheet: Fotos
+    final sheetFotos = excel['Fotos'];
+    final headerFotos = ['Arquivo', 'Tipo'];
+    sheetFotos.appendRow(headerFotos.map((h) => TextCellValue(h)).toList());
+    for (final f in fotos) {
+      sheetFotos.appendRow([TextCellValue(p.basename(f.filePath)), TextCellValue('Parcela')]);
+    }
+    for (final pl in plantas) {
+      if (pl.fotoEspeciePath != null) {
+        sheetFotos.appendRow([TextCellValue(p.basename(pl.fotoEspeciePath!)), TextCellValue('Planta: ${pl.especie}')]);
+      }
+    }
+
+    // Remove default Sheet1
+    if (excel.sheets.containsKey('Sheet1')) excel.delete('Sheet1');
+
+    // Column widths
+    for (int i = 0; i < headerParcelas.length; i++) sheetParcelas.setColumnWidth(i, 18);
+    for (int i = 0; i < headerPlantas.length; i++) sheetPlantas.setColumnWidth(i, 16);
+    for (int i = 0; i < headerFotos.length; i++) sheetFotos.setColumnWidth(i, 18);
+
+    final bytes = excel.encode();
+    if (bytes == null) throw Exception('Falha ao gerar XLSX');
+    return bytes.toList();
   }
 }

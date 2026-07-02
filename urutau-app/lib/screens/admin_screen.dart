@@ -7,6 +7,8 @@ import 'package:drift/drift.dart' show Value;
 import '../data/database.dart';
 import '../services/sync_service.dart';
 import '../services/export_service.dart';
+import '../widgets/low_space_banner.dart';
+import 'audit_log_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -20,8 +22,10 @@ class _AdminScreenState extends State<AdminScreen> {
   List<Usuario> _usuarios = [];
   Map<String, List<Parcela>> _parcelasPorUsuario = {};
   Map<String, int> _plantasPorUsuario = {};
+  Map<String, int> _unsyncedPorUsuario = {};
   bool _isLoading = true;
   bool _isOnline = true;
+  bool _filterPendingOnly = false;
   String _searchQuery = '';
   final _searchController = TextEditingController();
 
@@ -38,11 +42,6 @@ class _AdminScreenState extends State<AdminScreen> {
   void initState() {
     super.initState();
     _carregarDados();
-    // Sync automático ao abrir
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final syncService = context.read<SyncService>();
-      syncService.autoSync();
-    });
   }
 
   @override
@@ -81,20 +80,22 @@ class _AdminScreenState extends State<AdminScreen> {
         await _db.deleteUsuarioComDados(usuario.uuid);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('"${usuario.nome}" deletado com sucesso.'),
-              backgroundColor: Colors.green[700],
-            ),
+      SnackBar(
+        content: Text('"${usuario.nome}" deletado com sucesso.'),
+        backgroundColor: Colors.green[700],
+        duration: const Duration(seconds: 3),
+      ),
           );
         }
         await _carregarDados();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Erro ao deletar: $e'),
-              backgroundColor: Colors.red[700],
-            ),
+      SnackBar(
+        content: Text('Erro ao deletar: $e'),
+        backgroundColor: Colors.red[700],
+        duration: const Duration(seconds: 5),
+      ),
           );
         }
       }
@@ -139,17 +140,18 @@ class _AdminScreenState extends State<AdminScreen> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('"${usuario.nome}" ${novoStatus ? "agora é admin" : "não é mais admin"}.'),
-              backgroundColor: Colors.green[700],
-            ),
+      SnackBar(
+        content: Text('"${usuario.nome}" ${novoStatus ? "agora é admin" : "não é mais admin"}.'),
+        backgroundColor: Colors.green[700],
+        duration: const Duration(seconds: 3),
+      ),
           );
         }
         await _carregarDados();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red[700]),
+            SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red[700], duration: const Duration(seconds: 5)),
           );
         }
       }
@@ -161,7 +163,7 @@ class _AdminScreenState extends State<AdminScreen> {
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Servidor não configurado.')),
+        const SnackBar(content: Text('Servidor não configurado.'), duration: Duration(seconds: 5)),
       );
       return;
     }
@@ -200,7 +202,7 @@ class _AdminScreenState extends State<AdminScreen> {
     if (confirmar != true) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Deletando ${usuario.nome} do servidor...')),
+      SnackBar(content: Text('Deletando ${usuario.nome} do servidor...'), duration: const Duration(seconds: 3)),
     );
 
     try {
@@ -213,6 +215,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 ? '"${usuario.nome}" removido do servidor!'
                 : 'Usuário não encontrado no servidor.'),
             backgroundColor: deleted ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -223,7 +226,7 @@ class _AdminScreenState extends State<AdminScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red, duration: const Duration(seconds: 5)),
         );
       }
     }
@@ -281,32 +284,53 @@ class _AdminScreenState extends State<AdminScreen> {
         plantasPorUsuario[usuario.uuid] = totalPlantas;
       }
 
-      final talhoes = await _db.getAllTalhoes(isAdmin: true);
+       final talhoes = await _db.getAllTalhoes(isAdmin: true);
 
-      setState(() {
-        _usuarios = usuarios;
-        _parcelasPorUsuario = parcelasPorUsuario;
-        _plantasPorUsuario = plantasPorUsuario;
-        _talhoes = talhoes;
-        _isLoading = false;
-      });
+       // Calculate unsynced parcelas per usuario
+       Map<String, int> unsyncedPorUsuario = {};
+       for (var usuario in usuarios) {
+         final unsyncedCount = todasParcelas.where((p) => p.userId == usuario.uuid && !p.synced).length;
+         unsyncedPorUsuario[usuario.uuid] = unsyncedCount;
+       }
+
+       setState(() {
+         _usuarios = usuarios;
+         _parcelasPorUsuario = parcelasPorUsuario;
+         _plantasPorUsuario = plantasPorUsuario;
+         _unsyncedPorUsuario = unsyncedPorUsuario;
+         _talhoes = talhoes;
+         _isLoading = false;
+       });
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao carregar dados: $e')),
+          SnackBar(content: Text('Erro ao carregar dados: $e'), duration: const Duration(seconds: 5)),
         );
       }
     }
   }
 
   List<Usuario> get _filteredUsuarios {
-    if (_searchQuery.isEmpty) return _usuarios;
-    final q = _searchQuery.toLowerCase();
-    return _usuarios.where((u) {
-      return u.nome.toLowerCase().contains(q) ||
-          u.email.toLowerCase().contains(q);
-    }).toList();
+    List<Usuario> usuarios = _usuarios;
+    
+    // Apply search filter
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      usuarios = usuarios.where((u) {
+        return u.nome.toLowerCase().contains(q) ||
+            u.email.toLowerCase().contains(q);
+      }).toList();
+    }
+    
+    // Apply pending-only filter
+    if (_filterPendingOnly) {
+      usuarios = usuarios.where((u) {
+        return (_unsyncedPorUsuario[u.uuid] ?? 0) > 0;
+      }).toList();
+    }
+    
+    return usuarios;
   }
 
   int get _totalParcelas {
@@ -331,31 +355,66 @@ class _AdminScreenState extends State<AdminScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Painel Administrativo'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Painel Administrativo'),
+            FutureBuilder<DateTime?>(
+              future: syncService.getLastSyncTime(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData || snapshot.data == null) {
+                  return const Text('Nunca sincronizado',
+                      style: TextStyle(fontSize: 10, color: Colors.grey));
+                }
+                final lastSync = snapshot.data!;
+                final diff = DateTime.now().difference(lastSync);
+                final color = diff.inHours < 1
+                    ? Colors.green
+                    : diff.inHours < 24
+                        ? Colors.amber
+                        : Colors.red;
+                final text = diff.inDays > 0
+                    ? '${diff.inDays}d ${diff.inHours % 24}h atrás'
+                    : diff.inHours > 0
+                        ? '${diff.inHours}h ${diff.inMinutes % 60}min atrás'
+                        : '${diff.inMinutes}min atrás';
+                return Text('Última sync: $text',
+                    style: TextStyle(fontSize: 10, color: color));
+              },
+            ),
+          ],
+        ),
         leading: null,
         automaticallyImplyLeading: false,
         actions: [
           // Botão sync
-          if (syncService.pendingCount > 0)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Badge(
-                label: Text('${syncService.pendingCount}'),
-                child: IconButton(
-                  icon: syncService.isSyncing
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.cloud_upload),
-                  onPressed: syncService.isSyncing ? null : _sync,
-                ),
-              ),
-            ),
+          FutureBuilder<bool>(
+            future: syncService.isForcedOffline,
+            builder: (context, snapshot) {
+              if (snapshot.data == true) return const SizedBox.shrink();
+              if (syncService.pendingCount > 0)
+                return Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Badge(
+                    label: Text('${syncService.pendingCount}'),
+                    child: IconButton(
+                      icon: syncService.isSyncing
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.cloud_upload),
+                      onPressed: syncService.isSyncing ? null : _sync,
+                    ),
+                  ),
+                );
+              return const SizedBox.shrink();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _carregarDados,
@@ -404,6 +463,15 @@ class _AdminScreenState extends State<AdminScreen> {
                 child: ListTile(
                   leading: Icon(Icons.sync),
                   title: Text('Sincronizar agora'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'audit_log',
+                child: ListTile(
+                  leading: Icon(Icons.history),
+                  title: Text('Registro de Auditoria'),
+                  subtitle: Text('Visualizar e exportar ações'),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -463,6 +531,8 @@ class _AdminScreenState extends State<AdminScreen> {
                       ],
                     ),
                   ),
+                // Banner de espaço em disco baixo
+                const LowSpaceBanner(),
                 _buildResumo(),
                 // Filtro sempre visível como landing
                 _buildAdminFilterBar(),
@@ -543,29 +613,52 @@ class _AdminScreenState extends State<AdminScreen> {
           const Text('Filtrar parcelas',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           const SizedBox(height: 8),
-          // Usuário
-          DropdownButtonFormField<String>(
-            decoration: InputDecoration(
-              labelText: 'Usuário',
-              prefixIcon: const Icon(Icons.person, size: 18),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8)),
-              isDense: true,
-            ),
-            value: _filterUsuarioUuid,
-            items: [
-              const DropdownMenuItem(
-                  value: null, child: Text('Todos os usuários')),
-              ..._usuarios.map((u) =>
-                  DropdownMenuItem(value: u.uuid, child: Text(u.nome))),
-            ],
-            onChanged: (v) {
-              setState(() => _filterUsuarioUuid = v);
-              _applyAdminFilter();
-            },
-          ),
+           // Usuário
+           DropdownButtonFormField<String>(
+             decoration: InputDecoration(
+               labelText: 'Usuário',
+               prefixIcon: const Icon(Icons.person, size: 18),
+               contentPadding:
+                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+               border: OutlineInputBorder(
+                   borderRadius: BorderRadius.circular(8)),
+               isDense: true,
+             ),
+             value: _filterUsuarioUuid,
+             items: [
+               const DropdownMenuItem(
+                   value: null, child: Text('Todos os usuários')),
+               ..._usuarios.map((u) =>
+                   DropdownMenuItem(value: u.uuid, child: Text(u.nome))),
+             ],
+             onChanged: (v) {
+               setState(() => _filterUsuarioUuid = v);
+               _applyAdminFilter();
+             },
+           ),
+           const SizedBox(height: 8),
+           // Pending only filter
+           CheckboxListTile(
+             title: const Text('Apenas com pendências'),
+             value: _filterPendingOnly,
+             onChanged: (bool? value) {
+               setState(() {
+                 _filterPendingOnly = value ?? false;
+               });
+               // Clear other filters when toggling pending only
+               if (value == true) {
+                 setState(() {
+                   _filterUsuarioUuid = null;
+                   _filterPropUt = null;
+                   _filterDataInicio = null;
+                   _filterDataFim = null;
+                 });
+               }
+               _applyAdminFilter();
+             },
+             controlAffinity: ListTileControlAffinity.leading,
+             contentPadding: EdgeInsets.zero,
+           ),
           const SizedBox(height: 8),
           // Talhão
           if (_talhoes.isNotEmpty)
@@ -663,10 +756,19 @@ class _AdminScreenState extends State<AdminScreen> {
   Widget _buildAdminFilterTag() {
     final parts = <String>[];
     if (_filterUsuarioUuid != null) {
-      final nome = _usuarios
-          .firstWhere((u) => u.uuid == _filterUsuarioUuid,
-              orElse: () => _usuarios.first)
-          .nome;
+       final nome = _usuarios
+           .firstWhere((u) => u.uuid == _filterUsuarioUuid,
+orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
+        id: -1,
+        uuid: '',
+        nome: 'Nenhum usuário disponível',
+        email: '',
+        senha: '',
+        isAdmin: false,
+        ativo: true,
+        createdAt: DateTime.now(),
+      ))
+           .nome;
       parts.add(nome);
     }
     if (_filterPropUt != null) parts.add(_filterPropUt!);
@@ -817,14 +919,15 @@ class _AdminScreenState extends State<AdminScreen> {
       itemCount: usuarios.length,
       itemBuilder: (context, index) {
         final usuario = usuarios[index];
-        final parcelas = parcelasMostradas[usuario.uuid] ?? [];
-        final totalPlantas = plantasMostradas[usuario.uuid] ?? 0;
+       final parcelas = parcelasMostradas[usuario.uuid] ?? [];
+         final totalPlantas = plantasMostradas[usuario.uuid] ?? 0;
+         final unsyncedCount = parcelas.where((p) => !p.synced).length;
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: Semantics(
-            label: 'Usuário ${usuario.nome}, ${parcelas.length} parcelas, $totalPlantas plantas${usuario.isAdmin ? ", administrador" : ""}',
-            child: InkWell(
+         return Card(
+           margin: const EdgeInsets.only(bottom: 10),
+           child: Semantics(
+             label: 'Usuário ${usuario.nome}, ${parcelas.length} parcelas, $unsyncedCount pendentes, $totalPlantas plantas${usuario.isAdmin ? ", administrador" : ""}',
+             child: InkWell(
               borderRadius: BorderRadius.circular(12),
               onTap: () => _abrirParcelasUsuario(usuario),
               child: Padding(
@@ -892,13 +995,15 @@ class _AdminScreenState extends State<AdminScreen> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              _infoChip(Icons.map, '${parcelas.length} parcelas'),
-                              const SizedBox(width: 12),
-                              _infoChip(Icons.grass, '$totalPlantas plantas'),
-                            ],
-                          ),
+                           Row(
+                             children: [
+                               _infoChip(Icons.map, '${parcelas.length} parcelas'),
+                               if (unsyncedCount > 0)
+                                 _infoChip(Icons.pending, '$unsyncedCount pendentes', Colors.orange),
+                               const SizedBox(width: 12),
+                               _infoChip(Icons.grass, '$totalPlantas plantas'),
+                             ],
+                           ),
                         ],
                       ),
                     ),
@@ -958,21 +1063,21 @@ class _AdminScreenState extends State<AdminScreen> {
       },
     );
   }
-
-  Widget _infoChip(IconData icon, String text) {
+  
+  Widget _infoChip(IconData icon, String text, [Color? color]) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: Colors.grey[600]),
+        Icon(icon, size: 14, color: color ?? Colors.grey[600]),
         const SizedBox(width: 4),
         Text(
           text,
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          style: TextStyle(fontSize: 12, color: color ?? Colors.grey[600]),
         ),
       ],
     );
   }
-
+  
   void _abrirParcelasUsuario(Usuario usuario) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -989,19 +1094,21 @@ class _AdminScreenState extends State<AdminScreen> {
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Configure o servidor primeiro nas configurações.'),
-        ),
+    const SnackBar(
+      content: Text('Configure o servidor primeiro nas configurações.'),
+      duration: Duration(seconds: 5),
+    ),
       );
       return;
     }
     await syncService.syncAll();
     if (mounted && syncService.lastError == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Sincronização concluída!'),
-          backgroundColor: Colors.green,
-        ),
+    const SnackBar(
+      content: Text('Sincronização concluída!'),
+      backgroundColor: Colors.green,
+      duration: Duration(seconds: 3),
+    ),
       );
     }
     _carregarDados();
@@ -1024,6 +1131,13 @@ class _AdminScreenState extends State<AdminScreen> {
       case 'sync':
         _sync();
         break;
+      case 'audit_log':
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AuditLogScreen(database: _db),
+          ),
+        );
+        break;
       case 'limpar_tudo':
         _limparTudo();
         break;
@@ -1040,13 +1154,13 @@ class _AdminScreenState extends State<AdminScreen> {
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure o servidor primeiro.')),
+        const SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
       );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Baixando fotos${userName != null ? " de $userName" : ""}...')),
+      SnackBar(content: Text('Baixando fotos${userName != null ? " de $userName" : ""}...'), duration: const Duration(seconds: 3)),
     );
 
     final path = await syncService.downloadFotosOrganizadas(
@@ -1066,10 +1180,11 @@ class _AdminScreenState extends State<AdminScreen> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Nenhuma foto encontrada no servidor ou erro na conexão.'),
-            backgroundColor: Colors.orange,
-          ),
+      const SnackBar(
+        content: Text('Nenhuma foto encontrada no servidor ou erro na conexão.'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 5),
+      ),
         );
       }
     }
@@ -1077,7 +1192,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<void> _exportarXlsx() async {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Gerando planilha completa...')),
+      const SnackBar(content: Text('Gerando planilha completa...'), duration: Duration(seconds: 3)),
     );
 
     final exportService = ExportService(_db);
@@ -1093,6 +1208,7 @@ class _AdminScreenState extends State<AdminScreen> {
               ? 'Planilha exportada com sucesso!'
               : 'Nenhuma parcela para exportar.'),
           backgroundColor: ok ? Colors.green : Colors.orange,
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -1102,13 +1218,13 @@ class _AdminScreenState extends State<AdminScreen> {
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure o servidor primeiro.')),
+        const SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
       );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Puxando dados do servidor...')),
+      const SnackBar(content: Text('Puxando dados do servidor...'), duration: Duration(seconds: 3)),
     );
 
     final importados = await syncService.pullDadosDoServidor();
@@ -1120,6 +1236,7 @@ class _AdminScreenState extends State<AdminScreen> {
           SnackBar(
             content: Text('$importados parcelas importadas do servidor. Gerando planilha...'),
             backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -1173,20 +1290,22 @@ class _AdminScreenState extends State<AdminScreen> {
       await _db.limparTodosDadosExcetoAdmin();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Todos os dados locais foram limpos! Apenas o admin foi mantido.'),
-            backgroundColor: Colors.green,
-          ),
+    const SnackBar(
+      content: Text('Todos os dados locais foram limpos! Apenas o admin foi mantido.'),
+      backgroundColor: Colors.green,
+      duration: Duration(seconds: 3),
+    ),
         );
         _carregarDados();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao limpar dados: $e'),
-            backgroundColor: Colors.red,
-          ),
+        SnackBar(
+          content: Text('Erro ao limpar dados: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
         );
       }
     }
@@ -1499,7 +1618,7 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     child: (!kIsWeb)
                         ? Image.file(
-                            File(foto.compressedPath ?? foto.filePath),
+                            File(foto.filePath),
                             width: 64,
                             height: 64,
                             fit: BoxFit.cover,
@@ -1557,13 +1676,13 @@ class _AdminUserParcelasScreen extends StatelessWidget {
     final syncService = Provider.of<SyncService>(context, listen: false);
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure o servidor primeiro.')),
+        const SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
       );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Baixando fotos da UT "$propUt"...')),
+      SnackBar(content: Text('Baixando fotos da UT "$propUt"...'), duration: const Duration(seconds: 3)),
     );
 
     final path = await syncService.downloadFotosOrganizadas(
@@ -1584,10 +1703,11 @@ class _AdminUserParcelasScreen extends StatelessWidget {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Nenhuma foto encontrada para esta UT.'),
-            backgroundColor: Colors.orange,
-          ),
+        const SnackBar(
+          content: Text('Nenhuma foto encontrada para esta UT.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 5),
+        ),
         );
       }
     }
@@ -1597,13 +1717,13 @@ class _AdminUserParcelasScreen extends StatelessWidget {
     final syncService = Provider.of<SyncService>(context, listen: false);
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure o servidor primeiro.')),
+        const SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
       );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Baixando fotos de ${usuario.nome}...')),
+      SnackBar(content: Text('Baixando fotos de ${usuario.nome}...'), duration: const Duration(seconds: 3)),
     );
 
     final path = await syncService.downloadFotosOrganizadas(
@@ -1623,10 +1743,11 @@ class _AdminUserParcelasScreen extends StatelessWidget {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Nenhuma foto encontrada no servidor.'),
-            backgroundColor: Colors.orange,
-          ),
+        const SnackBar(
+          content: Text('Nenhuma foto encontrada no servidor.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 5),
+        ),
         );
       }
     }
@@ -1634,7 +1755,7 @@ class _AdminUserParcelasScreen extends StatelessWidget {
 
   Future<void> _exportarUsuario(BuildContext context) async {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Exportando parcelas de ${usuario.nome}...')),
+      SnackBar(content: Text('Exportando parcelas de ${usuario.nome}...'), duration: const Duration(seconds: 3)),
     );
 
   final exportService = ExportService(db);
@@ -1652,6 +1773,7 @@ class _AdminUserParcelasScreen extends StatelessWidget {
               ? 'Planilha exportada com sucesso!'
               : 'Nenhuma parcela para exportar.'),
           backgroundColor: ok ? Colors.green : Colors.orange,
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -1723,7 +1845,7 @@ class _FullscreenImageViewerState extends State<_FullscreenImageViewer> {
             ),
           );
         }
-        final file = File(foto.compressedPath ?? foto.filePath);
+        final file = File(foto.filePath);
         if (!file.existsSync()) {
             return const Center(
               child: Column(

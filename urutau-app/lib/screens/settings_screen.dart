@@ -1,9 +1,18 @@
+import 'dart:io';
+import 'package:workmanager/workmanager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../data/database.dart';
 import '../services/backup_service.dart';
 import '../services/sync_service.dart';
 import '../services/theme_provider.dart';
+
+const String kPhotoQualityKey = 'photo_compression_quality';
+const int kPhotoQualityDefault = 70;
+const String kForcedOfflineKey = 'forced_offline_mode';
+const String kAutoBackupKey = 'auto_backup_enabled';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -16,14 +25,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _serverUrlController = TextEditingController();
   bool _isSaving = false;
   bool _isTesting = false;
+  bool _isScanningPhotos = false;
   String? _testResult;
   bool? _testOk;
+
+  int _photoQuality = kPhotoQualityDefault;
+  bool _forcedOffline = false;
+  bool _autoBackupEnabled = false;
 
   @override
   void initState() {
     super.initState();
     final syncService = context.read<SyncService>();
     _serverUrlController.text = syncService.serverUrl ?? '';
+    _loadPhotoQuality();
+    _loadForcedOffline();
+    _loadAutoBackup();
+  }
+
+  Future<void> _loadPhotoQuality() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _photoQuality = prefs.getInt(kPhotoQualityKey) ?? kPhotoQualityDefault;
+    });
+  }
+
+  Future<void> _loadForcedOffline() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _forcedOffline = prefs.getBool(kForcedOfflineKey) ?? false;
+    });
+  }
+
+  Future<void> _loadAutoBackup() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _autoBackupEnabled = prefs.getBool(kAutoBackupKey) ?? false;
+    });
   }
 
   @override
@@ -64,64 +102,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-        Semantics(
-          label: 'URL do servidor',
-          child: TextField(
-          controller: _serverUrlController,
-          decoration: InputDecoration(
-            labelText: 'URL do Servidor',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          keyboardType: TextInputType.url,
-        ),
-        ),
-        const SizedBox(height: 12),
+                  Semantics(
+                    label: 'URL do servidor',
+                    child: TextField(
+                      controller: _serverUrlController,
+                      decoration: InputDecoration(
+                        labelText: 'URL do Servidor',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.done,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
-        // Botões Salvar e Testar
-        Row(
-          children: [
-            Expanded(
-              child: Semantics(
-                label: 'Salvar URL do servidor',
-                button: true,
-                child: FilledButton.icon(
-                          onPressed: _isSaving ? null : _saveServerUrl,
-                          icon: _isSaving
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.save),
-              label: const Text('Salvar'),
-            ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Semantics(
-                label: 'Testar conexão com servidor',
-                button: true,
-                child: OutlinedButton.icon(
-                          onPressed: _isTesting ? null : _testConnection,
-                          icon: _isTesting
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.wifi_find),
-          label: const Text('Testar'),
-          ),
-        ),
-      ),
-    ],
-  ),
+                  // Botões Salvar e Testar
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          label: 'Salvar URL do servidor',
+                          button: true,
+                          child: FilledButton.icon(
+                            onPressed: _isSaving ? null : _saveServerUrl,
+                            icon: _isSaving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.save),
+                            label: const Text('Salvar'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Semantics(
+                          label: 'Testar conexão com servidor',
+                          button: true,
+                          child: OutlinedButton.icon(
+                            onPressed: _isTesting ? null : _testConnection,
+                            icon: _isTesting
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.wifi_find),
+                            label: const Text('Testar'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
 
                   // Resultado do teste
                   if (_testResult != null) ...[
@@ -130,9 +170,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: _testOk == true
-                            ? Colors.green[50]
-                            : Colors.red[50],
+                        color:
+                            _testOk == true ? Colors.green[50] : Colors.red[50],
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: _testOk == true
@@ -143,9 +182,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Row(
                         children: [
                           Icon(
-                            _testOk == true
-                                ? Icons.check_circle
-                                : Icons.error,
+                            _testOk == true ? Icons.check_circle : Icons.error,
                             color: _testOk == true
                                 ? Colors.green[700]
                                 : Colors.red[700],
@@ -283,7 +320,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         final msg = await BackupService.exportBackup();
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(msg)),
+                            SnackBar(
+                                content: Text(msg),
+                                duration: const Duration(seconds: 3)),
                           );
                         }
                       },
@@ -300,24 +339,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           type: FileType.any,
                           allowMultiple: false,
                         );
-                        if (result == null || result.files.isEmpty || !context.mounted) return;
+                        if (result == null ||
+                            result.files.isEmpty ||
+                            !context.mounted) return;
                         final file = result.files.single;
                         String msg;
                         if (file.path != null && file.path!.isNotEmpty) {
                           msg = await BackupService.prepareRestore(file.path!);
-                        } else if (file.bytes != null && file.bytes!.isNotEmpty) {
-                          msg = await BackupService.prepareRestoreFromBytes(file.bytes!);
+                        } else if (file.bytes != null &&
+                            file.bytes!.isNotEmpty) {
+                          msg = await BackupService.prepareRestoreFromBytes(
+                              file.bytes!);
                         } else {
                           msg = 'Não foi possível aceder ao ficheiro.';
                         }
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(msg), duration: const Duration(seconds: 6)),
+                            SnackBar(
+                                content: Text(msg),
+                                duration: const Duration(seconds: 6)),
                           );
                         }
                       },
                       icon: const Icon(Icons.restore),
                       label: const Text('Restaurar de backup'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ────────── INTEGRIDADE DAS FOTOS ──────────
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.photo_library),
+                      SizedBox(width: 8),
+                      Text(
+                        'Integridade das Fotos',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed:
+                          _isScanningPhotos ? null : _verifyPhotoIntegrity,
+                      icon: _isScanningPhotos
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.search),
+                      label: Text(
+                        _isScanningPhotos
+                            ? 'Verificando...'
+                            : 'Verificar integridade das fotos',
+                      ),
                     ),
                   ),
                 ],
@@ -355,9 +447,193 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         secondary: const Icon(Icons.contrast),
                         title: const Text('Modo Alto Contraste'),
                         value: themeProvider.isHighContrast,
-                        onChanged: (val) async => await themeProvider.setHighContrast(val),
+                        onChanged: (val) async =>
+                            await themeProvider.setHighContrast(val),
                       );
                     },
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ────────── QUALIDADE DAS FOTOS ──────────
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.image),
+                      SizedBox(width: 8),
+                      Text(
+                        'Qualidade das Fotos',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.image, size: 20),
+                        const SizedBox(width: 12),
+                        const Text('Qualidade das Fotos', style: TextStyle(fontSize: 16)),
+                        const Spacer(),
+                        Text('${_photoQuality}%', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                  Slider(
+                    value: _photoQuality.toDouble(),
+                    min: 50,
+                    max: 95,
+                    divisions: 9,
+                    label: '${_photoQuality.round()}%',
+                    onChanged: (val) async {
+                      setState(() => _photoQuality = val.round());
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setInt(kPhotoQualityKey, val.round());
+                    },
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'Maior qualidade = arquivos maiores. Recomendado: 70%.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ────────── ARMAZENAMENTO ──────────
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.storage),
+              title: const Text('Gerenciar Armazenamento'),
+              subtitle: const Text('Ver uso de disco e limpar arquivos'),
+              onTap: () => Navigator.pushNamed(context, '/storage'),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ────────── MODO OFFLINE FORÇADO ──────────
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.wifi_off),
+                      SizedBox(width: 8),
+                      Text(
+                        'Modo Offline Forçado',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.wifi_off),
+                    title: const Text('Modo Offline Forçado'),
+                    subtitle: const Text(
+                      'Esconde configurações de servidor e sincronização. '
+                      'O app funciona 100% local.',
+                    ),
+                    value: _forcedOffline,
+                    onChanged: (val) async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool(kForcedOfflineKey, val);
+                      setState(() => _forcedOffline = val);
+                    },
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'Reinicie o app para aplicar completamente.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ────────── BACKUP AUTOMÁTICO ──────────
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.schedule),
+                      SizedBox(width: 8),
+                      Text(
+                        'Backup Automático Diário',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.backup),
+                    title: const Text('Backup Automático Diário'),
+                    subtitle: const Text(
+                      'Cria backup local automaticamente a cada 24h em segundo plano.',
+                    ),
+                    value: _autoBackupEnabled,
+                    onChanged: (val) async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool(kAutoBackupKey, val);
+                      setState(() => _autoBackupEnabled = val);
+                      if (val) {
+                        await Workmanager().registerPeriodicTask(
+                          'urutau-background-backup',
+                          'localBackup',
+                          frequency: Duration(hours: 24),
+                        constraints: Constraints(
+                          networkType: NetworkType.notRequired,
+                          requiresStorageNotLow: true,
+                        ),
+                        );
+                      } else {
+                        await Workmanager().cancelByUniqueName('urutau-background-backup');
+                      }
+                    },
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'Backups são salvos localmente. Use "Exportar backup" para salvar cópia externa.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                   ),
                 ],
               ),
@@ -447,7 +723,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final url = _serverUrlController.text.trim();
     if (url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe a URL do servidor')),
+        const SnackBar(
+            content: Text('Informe a URL do servidor'),
+            duration: Duration(seconds: 5)),
       );
       return;
     }
@@ -461,6 +739,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SnackBar(
             content: Text('URL do servidor salva!'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
           ),
         );
       }
@@ -470,6 +749,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SnackBar(
             content: Text('Erro: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -487,9 +767,87 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SnackBar(
             content: Text('Sincronização concluída!'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } else if (syncService.lastError != null && syncService.lastError!.contains('planta(s) falharam')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(syncService.lastError!),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
+    }
+  }
+
+  Future<void> _verifyPhotoIntegrity() async {
+    setState(() => _isScanningPhotos = true);
+    try {
+      final db = context.read<AppDatabase>();
+      final allPaths = await db.getAllPhotoPaths();
+      final missing = <({String path, String uuid, String source})>[];
+      for (final entry in allPaths) {
+        if (!File(entry.path).existsSync()) {
+          missing.add(entry);
+        }
+      }
+
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Verificação de Fotos'),
+          content: Text(
+            missing.isEmpty
+                ? 'Todas as ${allPaths.length} fotos estão presentes.'
+                : '${missing.length} de ${allPaths.length} fotos ausentes.',
+          ),
+          actions: [
+            if (missing.isNotEmpty)
+              TextButton.icon(
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  await _cleanMissingPhotoRefs(missing);
+                },
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Limpar referências ausentes'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isScanningPhotos = false);
+    }
+  }
+
+  Future<void> _cleanMissingPhotoRefs(
+    List<({String path, String uuid, String source})> missing,
+  ) async {
+    final db = context.read<AppDatabase>();
+    for (final entry in missing) {
+      if (entry.source == 'foto') {
+        await db.cleanMissingFotoParcela(entry.uuid);
+      } else {
+        await db.cleanMissingFotoPlanta(entry.uuid);
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('${missing.length} referência(s) ausente(s) removida(s)'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 }

@@ -59,6 +59,7 @@ dependencies:
 
   # Backup: escolher ficheiro para restaurar
   file_picker: ^8.0.0
+  archive: ^3.6.1
 
   # Gráficos e estatísticas
   fl_chart: ^0.68.0

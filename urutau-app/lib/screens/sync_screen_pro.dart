@@ -187,11 +187,12 @@ class SyncScreenProState extends State<SyncScreenPro> {
     if (nonConflicted.isEmpty && _conflictKeys.isNotEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Todas as parcelas pendentes têm conflitos. Resolva antes de sincronizar.'),
-            backgroundColor: AppTheme.tertiary,
-          ),
+        const SnackBar(
+          content: Text(
+              'Todas as parcelas pendentes têm conflitos. Resolva antes de sincronizar.'),
+          backgroundColor: AppTheme.tertiary,
+          duration: Duration(seconds: 3),
+        ),
         );
       }
       return;
@@ -209,11 +210,12 @@ class SyncScreenProState extends State<SyncScreenPro> {
     if (nonConflicted.isEmpty && _selectedParcelas.isNotEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Parcelas selecionadas têm conflitos. Resolva antes de sincronizar.'),
-            backgroundColor: AppTheme.tertiary,
-          ),
+        const SnackBar(
+          content: Text(
+              'Parcelas selecionadas têm conflitos. Resolva antes de sincronizar.'),
+          backgroundColor: AppTheme.tertiary,
+          duration: Duration(seconds: 3),
+        ),
         );
       }
       return;
@@ -242,20 +244,34 @@ class SyncScreenProState extends State<SyncScreenPro> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Sincronizado: $success | Falhas: $failed'),
-            backgroundColor:
-                failed > 0 ? AppTheme.tertiary : AppTheme.secondary,
-          ),
+        SnackBar(
+          content: Text('Sincronizado: $success | Falhas: $failed'),
+          backgroundColor:
+              failed > 0 ? AppTheme.tertiary : AppTheme.secondary,
+          duration: const Duration(seconds: 5),
+        ),
         );
+        if (failed > 0) {
+          final syncService = context.read<SyncService>();
+          if (syncService.lastError != null && syncService.lastError!.contains('planta(s) falharam')) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(syncService.lastError!),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro: $e'),
-            backgroundColor: AppTheme.error,
-          ),
+        SnackBar(
+          content: Text('Erro: $e'),
+          backgroundColor: AppTheme.error,
+          duration: const Duration(seconds: 5),
+        ),
         );
       }
     } finally {
@@ -291,19 +307,21 @@ class SyncScreenProState extends State<SyncScreenPro> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Parcela deletada'),
-            backgroundColor: AppTheme.error,
-          ),
+        const SnackBar(
+          content: Text('Parcela deletada'),
+          backgroundColor: AppTheme.error,
+          duration: Duration(seconds: 3),
+        ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao deletar: $e'),
-            backgroundColor: AppTheme.error,
-          ),
+        SnackBar(
+          content: Text('Erro ao deletar: $e'),
+          backgroundColor: AppTheme.error,
+          duration: const Duration(seconds: 5),
+        ),
         );
       }
     }
@@ -388,20 +406,34 @@ class SyncScreenProState extends State<SyncScreenPro> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // URL Field
-              Text(
-                'URL DO SERVIDOR',
-                style: AppTheme.labelSmall,
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _urlController,
-                decoration: const InputDecoration(
-                  hintText: 'https://api.floresta.gov/v1',
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                ),
-              ),
+         // URL Field
+               Text(
+                 'URL DO SERVIDOR',
+                 style: AppTheme.labelSmall,
+               ),
+               const SizedBox(height: 8),
+         TextFormField(
+           controller: _urlController,
+           textInputAction: TextInputAction.done,
+           decoration: const InputDecoration(
+                   hintText: 'https://api.floresta.gov/v1',
+                   contentPadding:
+                       EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                 ),
+           validator: (value) {
+             if (value == null || value.isEmpty) {
+               return 'Informe a URL do servidor';
+             }
+             if (!value.startsWith('http://') && !value.startsWith('https://')) {
+               return 'A URL deve começar com http:// ou https://';
+             }
+             // Basic check for domain-like pattern
+             if (!value.contains('.')) {
+               return 'Informe uma URL válida';
+             }
+             return null;
+           },
+         ),
               const SizedBox(height: 16),
 
               // Test Connection Button
@@ -499,7 +531,23 @@ class SyncScreenProState extends State<SyncScreenPro> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed:
-                            _isSyncing || _pendingCount == 0 ? null : _syncAll,
+                            _isSyncing || _pendingCount == 0
+                                ? null
+                                : () async {
+                                    try {
+                                      await _syncAll();
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Erro: $e'),
+                                            backgroundColor: AppTheme.error,
+                                            duration: const Duration(seconds: 5),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.onPrimary,
                           foregroundColor: AppTheme.primary,
@@ -523,18 +571,34 @@ class SyncScreenProState extends State<SyncScreenPro> {
                     ),
                     if (_selectedParcelas.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: _isSyncing ? null : _syncSelected,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.onPrimary,
-                            side: const BorderSide(color: AppTheme.onPrimary),
-                          ),
-                          child: Text(
-                              'SINCRONIZAR SELECIONADAS (${_selectedParcelas.length})'),
+SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: _isSyncing
+                            ? null
+                            : () async {
+                                try {
+                                  await _syncSelected();
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Erro: $e'),
+                                        backgroundColor: AppTheme.error,
+                                        duration: const Duration(seconds: 5),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.onPrimary,
+                          side: const BorderSide(color: AppTheme.onPrimary),
                         ),
+                        child: Text(
+                            'SINCRONIZAR SELECIONADAS (${_selectedParcelas.length})'),
                       ),
+                    ),
                     ],
                   ],
                 ),

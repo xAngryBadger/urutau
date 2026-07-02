@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:workmanager/workmanager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'data/database.dart';
 import 'services/backup_service.dart';
 import 'services/sync_service.dart';
@@ -15,14 +16,43 @@ import 'screens/parcela_form_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/explorer_screen.dart';
+import 'screens/storage_screen.dart';
+import 'screens/integrity_error_screen.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
+    // Initialize Workmanager for background backup
+    Workmanager().initialize(callbackDispatcher);
+    
+    // Register periodic background backup (daily)
+    await Workmanager().registerPeriodicTask(
+      'urutau-background-backup',
+      'localBackup',
+      frequency: Duration(hours: 24),
+      constraints: Constraints(
+        networkType: NetworkType.notRequired,
+        requiresStorageNotLow: true,
+      ),
+    );
+
     final db = AppDatabase();
     await BackupService.runPendingRestore();
+    await BackupService.cleanPreRestoreFiles();
     await _migratePlaintextPasswords(db);
+
+  String? integrityError;
+  try {
+    final result = await db.checkIntegrity();
+    if (!result.ok) {
+      integrityError = result.error;
+    }
+  } catch (e) {
+    integrityError = e.toString();
+  }
 
     final syncService = SyncService(db);
     final themeProvider = ThemeProvider();
@@ -45,12 +75,36 @@ void main() async {
           ChangeNotifierProvider.value(value: syncService),
           ChangeNotifierProvider.value(value: themeProvider),
         ],
-        child: const UrutauApp(),
+        child: UrutauApp(integrityError: integrityError),
       ),
     );
   }, (error, stack) {
     debugPrint('Unhandled error: $error\n$stack');
     _errorStateKey.currentState?.setError(error.toString());
+  });
+}
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((taskName, inputData) async {
+    if (taskName == 'localBackup') {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final autoBackupEnabled = prefs.getBool('auto_backup_enabled') ?? false;
+        if (!autoBackupEnabled) {
+          debugPrint('Background backup skipped: auto-backup disabled');
+          return true;
+        }
+        
+        final db = AppDatabase();
+        await BackupService.exportBackgroundBackup();
+        return true;
+      } catch (e) {
+        debugPrint('Background backup failed: $e');
+        return false;
+      }
+    }
+    return false;
   });
 }
 
@@ -69,7 +123,9 @@ Future<void> _migratePlaintextPasswords(AppDatabase db) async {
 }
 
 class UrutauApp extends StatefulWidget {
-  const UrutauApp({super.key});
+  const UrutauApp({super.key, this.integrityError});
+
+  final String? integrityError;
 
   @override
   State<UrutauApp> createState() => _UrutauAppState();
@@ -80,7 +136,16 @@ class _UrutauAppState extends State<UrutauApp> {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
 
+    if (widget.integrityError != null) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: themeProvider.theme,
+        home: IntegrityErrorScreen(error: widget.integrityError!),
+      );
+    }
+
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Urutau',
       debugShowCheckedModeBanner: false,
       theme: themeProvider.theme,
@@ -140,11 +205,16 @@ class _UrutauAppState extends State<UrutauApp> {
             return MaterialPageRoute(
               builder: (_) => const SettingsScreen(),
             );
+          case '/storage':
+            return MaterialPageRoute(
+              builder: (_) => const StorageScreen(),
+            );
           case '/admin':
             final syncService = context.read<SyncService>();
             if (!syncService.isAdmin) {
               return MaterialPageRoute(
-                builder: (_) => const LoginScreen(),
+                builder: (_) => HomeScreen(),
+                settings: const RouteSettings(arguments: {'showAdminDenied': true}),
               );
             }
             return MaterialPageRoute(

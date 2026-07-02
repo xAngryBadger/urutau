@@ -1,6 +1,11 @@
+import 'dart:io' as io;
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+import '../services/backup_service.dart';
 import '../services/password_service.dart';
+import '../services/image_service.dart';
 
 part 'database.g.dart';
 
@@ -29,20 +34,27 @@ class Parcelas extends Table {
   TextColumn get propUt => text()();
   IntColumn get idParcela => integer()();
   TextColumn get observacoes => text().nullable()();
+  // Reservado para uso futuro com GPS — atualmente sem uso (GPS desativado)
   RealColumn get latitude => real().nullable()();
   RealColumn get longitude => real().nullable()();
   TextColumn get userId => text()();
-    RealColumn get areaHa => real().nullable()();
+  RealColumn get areaHa => real().nullable()();
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
+
   /// true = utilizador marcou "concluída" → pode sincronizar; false = rascunho/incompleta
-  BoolColumn get prontaParaSync => boolean().withDefault(const Constant(false))();
+  BoolColumn get prontaParaSync =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   // Soft-delete
   DateTimeColumn get deletedAt => dateTime().nullable()();
   TextColumn get deletedBy => text().nullable()();
+
   /// Quem criou esta parcela (uuid do user ou '' para seed/sistema). Usado para filtrar catálogo por usuário.
   TextColumn get createdBy => text().withDefault(const Constant(''))();
+
+  BoolColumn get parcialmenteSincronizada =>
+      boolean().withDefault(const Constant(false))();
 }
 
 class Plantas extends Table {
@@ -56,6 +68,7 @@ class Plantas extends Table {
   TextColumn get fotoEspeciePath => text().nullable()();
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   // Soft-delete
   DateTimeColumn get deletedAt => dateTime().nullable()();
 }
@@ -65,7 +78,6 @@ class FotosParcela extends Table {
   TextColumn get uuid => text().unique()();
   TextColumn get parcelaUuid => text().references(Parcelas, #uuid)();
   TextColumn get filePath => text()();
-  TextColumn get compressedPath => text().nullable()();
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -74,12 +86,16 @@ class FotosParcela extends Table {
 /// Tabela de auditoria — registra operações críticas no sistema.
 class AuditLog extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get action => text()(); // ex: 'delete_parcela', 'login', 'sync_push'
-  TextColumn get entityType => text().nullable()(); // 'parcela', 'planta', 'usuario'
+  TextColumn get action =>
+      text()(); // ex: 'delete_parcela', 'login', 'sync_push'
+  TextColumn get entityType =>
+      text().nullable()(); // 'parcela', 'planta', 'usuario'
   TextColumn get entityUuid => text().nullable()();
   TextColumn get userId => text().nullable()(); // quem fez a ação
   TextColumn get details => text().nullable()(); // JSON com detalhes extras
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  TextColumn get oldValue => text().nullable()();
+  TextColumn get newValue => text().nullable()();
 }
 
 // ============================================================
@@ -105,7 +121,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration {
@@ -118,10 +134,10 @@ class AppDatabase extends _$AppDatabase {
         if (from < 2) {
           await m.createTable(usuarios);
         }
-        if (from < 3) {
-          await m.addColumn(parcelas, parcelas.latitude);
-          await m.addColumn(parcelas, parcelas.longitude);
-        }
+  if (from < 3) {
+      await m.addColumn(parcelas, parcelas.latitude);
+      await m.addColumn(parcelas, parcelas.longitude);
+    }
         if (from < 5) {
           await _limparDadosOrfaos();
         }
@@ -148,85 +164,124 @@ class AppDatabase extends _$AppDatabase {
         if (from < 9) {
           await m.addColumn(parcelas, parcelas.prontaParaSync);
         }
-      if (from < 10) {
-        await m.addColumn(parcelas, parcelas.createdBy);
-      }
-      if (from < 11) {
-        // Re-seed: apaga seed antigo (múltiplas parcelas/UT) para re-inserir 1/UT
-        await (delete(plantas)..where((t) => t.parcelaUuid.like('seed-%'))).go();
-        await (delete(fotosParcela)..where((t) => t.parcelaUuid.like('seed-%'))).go();
-        await (delete(parcelas)..where((t) => t.uuid.like('seed-%'))).go();
-      }
-          if (from < 12) {
-            // Corrigir parcelas synced do servidor que ficaram com prontaParaSync=false
-            await (update(parcelas)
-              ..where((t) => t.synced.equals(true) & t.prontaParaSync.equals(false)))
+        if (from < 10) {
+          await m.addColumn(parcelas, parcelas.createdBy);
+        }
+        if (from < 11) {
+          // Re-seed: apaga seed antigo (múltiplas parcelas/UT) para re-inserir 1/UT
+          await (delete(plantas)..where((t) => t.parcelaUuid.like('seed-%')))
+              .go();
+          await (delete(fotosParcela)
+                ..where((t) => t.parcelaUuid.like('seed-%')))
+              .go();
+          await (delete(parcelas)..where((t) => t.uuid.like('seed-%'))).go();
+        }
+        if (from < 12) {
+          // Corrigir parcelas synced do servidor que ficaram com prontaParaSync=false
+          await (update(parcelas)
+                ..where((t) =>
+                    t.synced.equals(true) & t.prontaParaSync.equals(false)))
               .write(const ParcelasCompanion(prontaParaSync: Value(true)));
-          }
-      if (from < 13) {
-        await m.addColumn(fotosParcela, fotosParcela.deletedAt);
+        }
+        if (from < 13) {
+          await m.addColumn(fotosParcela, fotosParcela.deletedAt);
+        }
+        if (from < 14) {
+          await _createIndexes(m);
+        }
+        if (from < 15) {
+          // v15: Adicionar índices para sincronização
+          await _createIndexes(m);
+        }
+        if (from < 16) {
+          await customStatement(
+              'ALTER TABLE fotos_parcela DROP COLUMN compressed_path');
+        }
+      if (from < 17) {
+        await m.addColumn(parcelas, parcelas.parcialmenteSincronizada);
+        await m.addColumn(auditLog, auditLog.oldValue);
+        await m.addColumn(auditLog, auditLog.newValue);
       }
-if (from < 14) {
-    await _createIndexes(m);
-  }
-  if (from < 15) {
-    // v15: Adicionar índices para sincronização
-    await _createIndexes(m);
-  }
-},
+      if (from < 18) {
+      await m.addColumn(plantas, plantas.updatedAt);
+      await customStatement(
+          'UPDATE plantas SET updated_at = created_at WHERE updated_at IS NULL');
+    }
+  },
       beforeOpen: (details) async {
+        await customStatement('PRAGMA journal_mode = WAL');
+        await customStatement('PRAGMA foreign_keys = ON');
+        await customStatement('PRAGMA synchronous = NORMAL');
         await _garantirAdminSeNecessario();
         await _seedCatalogoEstatico();
+        await purgarAuditLog();
       },
     );
   }
 
   Future<void> _createIndexes(Migrator m) async {
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_plantas_parcela_uuid ON plantas(parcela_uuid)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_fotos_parcela_uuid ON fotos_parcela(parcela_uuid)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_parcelas_user_id ON parcelas(user_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_parcelas_deleted_at ON parcelas(deleted_at)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_parcelas_created_by ON parcelas(created_by)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_plantas_parcela_uuid ON plantas(parcela_uuid)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_fotos_parcela_uuid ON fotos_parcela(parcela_uuid)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_parcelas_user_id ON parcelas(user_id)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_parcelas_deleted_at ON parcelas(deleted_at)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_parcelas_created_by ON parcelas(created_by)');
     // Índices para sincronização (usados em getParcelasNaoSincronizadas)
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_parcelas_synced ON parcelas(synced)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_parcelas_prontaParaSync ON parcelas(pronta_para_sync)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_parcelas_synced ON parcelas(synced)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_parcelas_prontaParaSync ON parcelas(pronta_para_sync)');
     // Índice composto para busca eficiente de parcelas não sincronizadas
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_parcelas_sync_status ON parcelas(synced, pronta_para_sync, deleted_at)');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_parcelas_sync_status ON parcelas(synced, pronta_para_sync, deleted_at)');
   }
 
   /// Migra senhas armazenadas em plaintext para formato hash (SHA-256 + salt).
   /// Mantém compatibilidade: se já estiver no formato hash, não faz nada.
   Future<void> _migrarSenhasParaHash() async {
-    try {
-      final todosUsuarios = await (select(usuarios)).get();
-      for (final user in todosUsuarios) {
-        if (!PasswordService.isHashed(user.senha)) {
-          final hashedPassword = PasswordService.hashPassword(user.senha);
-          await (update(usuarios)..where((t) => t.uuid.equals(user.uuid)))
-              .write(UsuariosCompanion(senha: Value(hashedPassword)));
+    await transaction(() async {
+      try {
+        final todosUsuarios = await (select(usuarios)).get();
+        for (final user in todosUsuarios) {
+          if (!PasswordService.isHashed(user.senha)) {
+            final String hashed;
+            if (user.senha == 'servidor' || user.senha == 'importado') {
+              hashed = PasswordService.generateServerPlaceholder();
+            } else {
+              hashed = PasswordService.hashPassword(user.senha);
+            }
+            await (update(usuarios)..where((t) => t.uuid.equals(user.uuid)))
+                .write(UsuariosCompanion(senha: Value(hashed)));
+          }
         }
+      } catch (e) {
+        print('[DB] Password migration failed: $e');
       }
-    } catch (e) {
-      print('[DB] Password migration failed: $e');
-    }
+    });
   }
 
   /// Migra dados existentes: tenta extrair propriedade do campo propUt.
   /// Se propUt contém " - " (ex: "Fazenda São João - UT 01"), separa.
   Future<void> _migrarPropriedadeDeProput() async {
-    final todasParcelas = await (select(parcelas)).get();
-    for (final p in todasParcelas) {
-      if (p.propriedade.isEmpty && p.propUt.contains(' - ')) {
-        final parts = p.propUt.split(' - ');
-        final prop = parts.first.trim();
-        final ut = parts.sublist(1).join(' - ').trim();
-        await (update(parcelas)..where((t) => t.uuid.equals(p.uuid)))
-            .write(ParcelasCompanion(
-          propriedade: Value(prop),
-          propUt: Value(ut.isEmpty ? p.propUt : ut),
-        ));
+    await transaction(() async {
+      final todasParcelas = await (select(parcelas)).get();
+      for (final p in todasParcelas) {
+        if (p.propriedade.isEmpty && p.propUt.contains(' - ')) {
+          final parts = p.propUt.split(' - ');
+          final prop = parts.first.trim();
+          final ut = parts.sublist(1).join(' - ').trim();
+          await (update(parcelas)..where((t) => t.uuid.equals(p.uuid)))
+              .write(ParcelasCompanion(
+            propriedade: Value(prop),
+            propUt: Value(ut.isEmpty ? p.propUt : ut),
+          ));
+        }
       }
-    }
+    });
   }
 
   /// Garante que existe pelo menos 1 admin no sistema.
@@ -243,7 +298,8 @@ if (from < 14) {
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .get();
     if (todosUsers.isNotEmpty) {
-      await (update(usuarios)..where((t) => t.uuid.equals(todosUsers.first.uuid)))
+      await (update(usuarios)
+            ..where((t) => t.uuid.equals(todosUsers.first.uuid)))
           .write(const UsuariosCompanion(isAdmin: Value(true)));
     }
     // Se não há nenhum usuário, o primeiro a se cadastrar vira admin
@@ -329,32 +385,34 @@ VGVG0069;UT04;0.0;1''';
   /// Idempotente: só roda se não existir nenhuma parcela com UUID 'seed-'.
   /// NÃO apaga parcelas vindas do servidor (pb-); dados do servidor e seed coexistem.
   Future<void> _seedCatalogoEstatico() async {
-    final probe = await (select(parcelas)
-      ..where((t) => t.uuid.like('seed-%'))
-      ..limit(1))
-    .get();
-    if (probe.isNotEmpty) return;
+    await transaction(() async {
+      final probe = await (select(parcelas)
+            ..where((t) => t.uuid.like('seed-%'))
+            ..limit(1))
+          .get();
+      if (probe.isNotEmpty) return;
 
-    final now = DateTime.now();
-    for (final line in _catalogoCsv.split('\n')) {
-      if (line.trim().isEmpty) continue;
-      final parts = line.split(';');
-      if (parts.length < 4) continue;
-      final prop = parts[0].trim();
-      final ut = parts[1].trim();
-      final uuid = 'seed-$prop-$ut-1';
-    await into(parcelas).insert(ParcelasCompanion.insert(
-      uuid: uuid,
-      propriedade: Value(prop),
-      propUt: ut,
-      idParcela: 1,
-      userId: '',
-      synced: const Value(true),
-      prontaParaSync: const Value(true),
-      createdAt: Value(now),
-      updatedAt: Value(now),
-    ));
-    }
+      final now = DateTime.now();
+      for (final line in _catalogoCsv.split('\n')) {
+        if (line.trim().isEmpty) continue;
+        final parts = line.split(';');
+        if (parts.length < 4) continue;
+        final prop = parts[0].trim();
+        final ut = parts[1].trim();
+        final uuid = 'seed-$prop-$ut-1';
+        await into(parcelas).insert(ParcelasCompanion.insert(
+          uuid: uuid,
+          propriedade: Value(prop),
+          propUt: ut,
+          idParcela: 1,
+          userId: '',
+          synced: const Value(true),
+          prontaParaSync: const Value(true),
+          createdAt: Value(now),
+          updatedAt: Value(now),
+        ));
+      }
+    });
   }
 
   /// Remove parcelas/plantas/fotos de usuários que não existem mais
@@ -362,73 +420,139 @@ VGVG0069;UT04;0.0;1''';
     final todosUsuarios = await (select(usuarios)).get();
     final uuidsValidos = todosUsuarios.map((u) => u.uuid).toSet();
 
-    // Busca todas as parcelas
     final todasParcelas = await (select(parcelas)).get();
+    final orphanPaths = <String>[];
     for (final parcela in todasParcelas) {
       if (!uuidsValidos.contains(parcela.userId)) {
-        // Usuário não existe mais: apagar parcela e seus dados
-        await deleteAllPlantasByParcela(parcela.uuid);
-        await deleteAllFotosByParcela(parcela.uuid);
-        await deleteParcela(parcela.uuid);
+        final fotos = await getFotosByParcela(parcela.uuid);
+        orphanPaths.addAll(fotos.map((f) => f.filePath));
+        final plantas = await getPlantasByParcela(parcela.uuid);
+        for (final planta in plantas) {
+          if (planta.fotoEspeciePath != null)
+            orphanPaths.add(planta.fotoEspeciePath!);
+        }
       }
     }
+
+    await transaction(() async {
+      for (final parcela in todasParcelas) {
+        if (!uuidsValidos.contains(parcela.userId)) {
+          await deleteAllPlantasByParcela(parcela.uuid);
+          await deleteAllFotosByParcela(parcela.uuid);
+          await deleteParcela(parcela.uuid);
+        }
+      }
+    });
+
+    await ImageService.deletePhotos(orphanPaths);
   }
 
   /// Apaga um usuário e TODOS os seus dados (parcelas, plantas, fotos)
   Future<void> deleteUsuarioComDados(String uuid) async {
-    // 1. Buscar todas as parcelas do usuário
-    final parcelasUser = await (select(parcelas)..where((t) => t.userId.equals(uuid))).get();
+    final parcelasUser =
+        await (select(parcelas)..where((t) => t.userId.equals(uuid))).get();
+    final photoPaths = <String>[];
+    for (final parcela in parcelasUser) {
+      final fotos = await (select(fotosParcela)
+            ..where((t) => t.parcelaUuid.equals(parcela.uuid)))
+          .get();
+      photoPaths.addAll(fotos.map((f) => f.filePath));
+      final plantasList = await (select(plantas)
+            ..where((t) => t.parcelaUuid.equals(parcela.uuid)))
+          .get();
+      for (final planta in plantasList) {
+        if (planta.fotoEspeciePath != null)
+          photoPaths.add(planta.fotoEspeciePath!);
+      }
+    }
+
+  await ImageService.deletePhotos(photoPaths);
+  await transaction(() async {
     for (final parcela in parcelasUser) {
       await deleteAllPlantasByParcela(parcela.uuid);
       await deleteAllFotosByParcela(parcela.uuid);
       await deleteParcela(parcela.uuid);
     }
-    // 2. Deletar o usuário
     await deleteUsuario(uuid);
+  });
   }
 
-  /// Remove todas as parcelas sincronizadas (importadas do servidor).
-  /// Preserva parcelas locais não sincronizadas (trabalho do utilizador).
   Future<void> deleteAllSyncedParcelas() async {
     final synced = await (select(parcelas)
-      ..where((t) => t.synced.equals(true) & t.deletedAt.isNull())).get();
+          ..where((t) => t.synced.equals(true) & t.deletedAt.isNull()))
+        .get();
+    final photoPaths = <String>[];
     for (final p in synced) {
-      await (delete(plantas)..where((t) => t.parcelaUuid.equals(p.uuid))).go();
-      await (delete(fotosParcela)..where((t) => t.parcelaUuid.equals(p.uuid))).go();
-      await (delete(parcelas)..where((t) => t.uuid.equals(p.uuid))).go();
+      final fotos = await getFotosByParcela(p.uuid);
+      photoPaths.addAll(fotos.map((f) => f.filePath));
     }
+    await transaction(() async {
+      for (final p in synced) {
+        await (delete(plantas)..where((t) => t.parcelaUuid.equals(p.uuid)))
+            .go();
+        await (delete(fotosParcela)..where((t) => t.parcelaUuid.equals(p.uuid)))
+            .go();
+        await (delete(parcelas)..where((t) => t.uuid.equals(p.uuid))).go();
+      }
+    });
+    await ImageService.deletePhotos(photoPaths);
   }
 
-  /// Limpa TUDO exceto admins (reset completo)
   Future<void> limparTodosDadosExcetoAdmin() async {
-    await delete(fotosParcela).go();
-    await delete(plantas).go();
-    await delete(parcelas).go();
-    // Apagar todos os usuários exceto admins
-    await (delete(usuarios)..where((t) => t.isAdmin.equals(false))).go();
+    try {
+      await BackupService.exportBackup();
+    } catch (_) {}
+    final allFotos = await (select(fotosParcela)).get();
+    final allPlantas = await (select(plantas)
+          ..where((t) => t.fotoEspeciePath.isNotNull()))
+        .get();
+    final photoPaths = <String>[
+      ...allFotos.map((f) => f.filePath),
+      ...allPlantas.map((p) => p.fotoEspeciePath!),
+    ];
+    
+    // Delete photo files directly
+    for (final path in photoPaths) {
+      final file = io.File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    }
+    
+    // Delete photos directory
+    final appDir = await getApplicationDocumentsDirectory();
+    final photosDir = io.Directory(p.join(appDir.path, 'fotos'));
+    if (await photosDir.exists()) {
+      await photosDir.delete(recursive: true);
+    }
+
+    await transaction(() async {
+      await delete(fotosParcela).go();
+      await delete(plantas).go();
+      await delete(parcelas).go();
+      await (delete(usuarios)..where((t) => t.isAdmin.equals(false))).go();
+    });
   }
 
   // ========== USUARIOS ==========
 
-  Future<List<Usuario>> getAllUsuarios() =>
-      (select(usuarios)
-            ..where((t) => t.ativo.equals(true))
-            ..orderBy([(t) => OrderingTerm.asc(t.nome)]))
-          .get();
+  Future<List<Usuario>> getAllUsuarios() => (select(usuarios)
+        ..where((t) => t.ativo.equals(true))
+        ..orderBy([(t) => OrderingTerm.asc(t.nome)]))
+      .get();
 
   Future<Usuario?> getUsuarioByEmail(String email) =>
-      (select(usuarios)..where((t) => t.email.equals(email)))
-          .getSingleOrNull();
+      (select(usuarios)..where((t) => t.email.equals(email))).getSingleOrNull();
 
   Future<Usuario?> getUsuarioByUuid(String uuid) =>
-      (select(usuarios)..where((t) => t.uuid.equals(uuid)))
-          .getSingleOrNull();
+      (select(usuarios)..where((t) => t.uuid.equals(uuid))).getSingleOrNull();
 
   Future<Usuario?> autenticarUsuario(String email, String senha) async {
     final user = await (select(usuarios)
-      ..where((t) => t.email.equals(email) & t.ativo.equals(true)))
-      .getSingleOrNull();
+          ..where((t) => t.email.equals(email) & t.ativo.equals(true)))
+        .getSingleOrNull();
     if (user == null) return null;
+    if (PasswordService.isServerPlaceholder(user.senha)) return null;
     if (PasswordService.verifyPassword(senha, user.senha)) {
       return user;
     }
@@ -437,7 +561,8 @@ VGVG0069;UT04;0.0;1''';
 
   Future<int> insertUsuario(UsuariosCompanion usuario) {
     // Hash a senha se está em plaintext
-    if (usuario.senha.present && !PasswordService.isHashed(usuario.senha.value)) {
+    if (usuario.senha.present &&
+        !PasswordService.isHashed(usuario.senha.value)) {
       final hashed = PasswordService.hashPassword(usuario.senha.value);
       usuario = usuario.copyWith(senha: Value(hashed));
     }
@@ -456,60 +581,52 @@ VGVG0069;UT04;0.0;1''';
   /// Usado para reconciliar UUID local com o ID do PocketBase.
   Future<void> remapUsuarioUuid(String oldUuid, String newUuid) async {
     if (oldUuid == newUuid) return;
-    await customStatement('BEGIN TRANSACTION');
-    try {
+    await transaction(() async {
       await (update(parcelas)..where((t) => t.userId.equals(oldUuid)))
           .write(ParcelasCompanion(userId: Value(newUuid)));
       await (update(parcelas)..where((t) => t.createdBy.equals(oldUuid)))
           .write(ParcelasCompanion(createdBy: Value(newUuid)));
       await (update(usuarios)..where((t) => t.uuid.equals(oldUuid)))
           .write(UsuariosCompanion(uuid: Value(newUuid)));
-      await customStatement('COMMIT');
-    } catch (e) {
-      await customStatement('ROLLBACK');
-      rethrow;
-    }
+    });
   }
 
   /// Atualiza o UUID de uma parcela e cascata para plantas e fotos.
   /// Usado para mapear UUID local → PocketBase record ID após push.
   Future<void> remapParcelaUuid(String oldUuid, String newUuid) async {
     if (oldUuid == newUuid) return;
-    await customStatement('BEGIN TRANSACTION');
-    try {
+    await transaction(() async {
       await (update(plantas)..where((t) => t.parcelaUuid.equals(oldUuid)))
           .write(PlantasCompanion(parcelaUuid: Value(newUuid)));
       await (update(fotosParcela)..where((t) => t.parcelaUuid.equals(oldUuid)))
           .write(FotosParcelaCompanion(parcelaUuid: Value(newUuid)));
       await (update(parcelas)..where((t) => t.uuid.equals(oldUuid)))
           .write(ParcelasCompanion(uuid: Value(newUuid)));
-      await customStatement('COMMIT');
-    } catch (e) {
-      await customStatement('ROLLBACK');
-      rethrow;
-    }
+    });
   }
 
   /// Verifica se já existe parcela com mesmos (propUt, idParcela, userId).
-  Future<Parcela?> findParcelaDuplicada(String propUt, int idParcela, String userId) =>
+  Future<Parcela?> findParcelaDuplicada(
+          String propUt, int idParcela, String userId) =>
       (select(parcelas)
-        ..where((t) =>
-            t.propUt.equals(propUt) &
-            t.idParcela.equals(idParcela) &
-            t.userId.equals(userId) &
-            t.deletedAt.isNull()))
+            ..where((t) =>
+                t.propUt.equals(propUt) &
+                t.idParcela.equals(idParcela) &
+                t.userId.equals(userId) &
+                t.deletedAt.isNull()))
           .getSingleOrNull();
 
   /// Parcela disponível (userId vazio) com mesmo (propriedade, propUt, idParcela).
   /// Evita duplicação ao criar nova parcela após limpar.
-  Future<Parcela?> findParcelaDisponivel(String propriedade, String propUt, int idParcela) =>
+  Future<Parcela?> findParcelaDisponivel(
+          String propriedade, String propUt, int idParcela) =>
       (select(parcelas)
-        ..where((t) =>
-            t.propriedade.equals(propriedade) &
-            t.propUt.equals(propUt) &
-            t.idParcela.equals(idParcela) &
-            t.userId.equals('') &
-            t.deletedAt.isNull()))
+            ..where((t) =>
+                t.propriedade.equals(propriedade) &
+                t.propUt.equals(propUt) &
+                t.idParcela.equals(idParcela) &
+                t.userId.equals('') &
+                t.deletedAt.isNull()))
           .getSingleOrNull();
 
   /// Verifica se já existe outra parcela (excluindo [excludeUuid]) com mesmo (propriedade, propUt, idParcela).
@@ -559,14 +676,14 @@ VGVG0069;UT04;0.0;1''';
     DateTime? dataInicio,
     DateTime? dataFim,
   }) {
-  final query = select(parcelas)..where((t) => t.deletedAt.isNull());
-  if (!isAdmin && userId != null) {
-    query.where((t) =>
-        t.createdBy.equals(userId) |
-        t.createdBy.equals('') |
-        t.userId.equals(userId));
-  }
-  if (propriedade != null && propriedade.isNotEmpty) {
+    final query = select(parcelas)..where((t) => t.deletedAt.isNull());
+    if (!isAdmin && userId != null) {
+      query.where((t) =>
+          t.createdBy.equals(userId) |
+          t.createdBy.equals('') |
+          t.userId.equals(userId));
+    }
+    if (propriedade != null && propriedade.isNotEmpty) {
       query.where((t) => t.propriedade.equals(propriedade));
     }
     if (propUt != null && propUt.isNotEmpty) {
@@ -585,7 +702,8 @@ VGVG0069;UT04;0.0;1''';
 
   /// Retorna lista de propriedades únicas.
   /// Se não admin: só parcelas que o user criou (createdBy), que são seed (createdBy=''), ou que está trabalhando (userId).
-  Future<List<String>> getAllPropriedades({String? userId, bool isAdmin = false}) async {
+  Future<List<String>> getAllPropriedades(
+      {String? userId, bool isAdmin = false}) async {
     final query = select(parcelas)..where((t) => t.deletedAt.isNull());
     if (!isAdmin && userId != null) {
       query.where((t) =>
@@ -603,7 +721,8 @@ VGVG0069;UT04;0.0;1''';
   }
 
   /// Retorna lista de talhões/UTs únicos (propUt), opcionalmente filtrado por propriedade.
-  Future<List<String>> getAllTalhoes({String? userId, bool isAdmin = false, String? propriedade}) async {
+  Future<List<String>> getAllTalhoes(
+      {String? userId, bool isAdmin = false, String? propriedade}) async {
     final query = select(parcelas)..where((t) => t.deletedAt.isNull());
     if (!isAdmin && userId != null) {
       query.where((t) =>
@@ -651,13 +770,20 @@ VGVG0069;UT04;0.0;1''';
   }
 
   /// Retorna a última parcela criada (para sugerir a próxima).
-  Future<Parcela?> getLastParcela({String? userId, bool isAdmin = false, String? propriedade, String? propUt}) async {
+  Future<Parcela?> getLastParcela(
+      {String? userId,
+      bool isAdmin = false,
+      String? propriedade,
+      String? propUt}) async {
     final query = select(parcelas)..where((t) => t.deletedAt.isNull());
     if (!isAdmin && userId != null) {
       query.where((t) =>
-          t.createdBy.equals(userId) | t.createdBy.equals('') | t.userId.equals(userId));
+          t.createdBy.equals(userId) |
+          t.createdBy.equals('') |
+          t.userId.equals(userId));
     }
-    if (propriedade != null) query.where((t) => t.propriedade.equals(propriedade));
+    if (propriedade != null)
+      query.where((t) => t.propriedade.equals(propriedade));
     if (propUt != null) query.where((t) => t.propUt.equals(propUt));
     query.orderBy([(t) => OrderingTerm.desc(t.idParcela)]);
     query.limit(1);
@@ -668,7 +794,7 @@ VGVG0069;UT04;0.0;1''';
   Future<List<Parcela>> getParcelasNaoSincronizadas({String? userId}) {
     final query = select(parcelas)
       ..where((t) =>
-          t.synced.equals(false) &
+          (t.synced.equals(false) | t.parcialmenteSincronizada.equals(true)) &
           t.deletedAt.isNull() &
           t.prontaParaSync.equals(true));
     if (userId != null) {
@@ -689,8 +815,13 @@ VGVG0069;UT04;0.0;1''';
         .get();
   }
 
-  Future<Parcela?> getParcelaByUuid(String uuid, {bool includeDeleted = false}) =>
-      (select(parcelas)..where((t) => t.uuid.equals(uuid) & (includeDeleted ? const Constant(true) : t.deletedAt.isNull()))).getSingleOrNull();
+  Future<Parcela?> getParcelaByUuid(String uuid,
+          {bool includeDeleted = false}) =>
+      (select(parcelas)
+            ..where((t) =>
+                t.uuid.equals(uuid) &
+                (includeDeleted ? const Constant(true) : t.deletedAt.isNull())))
+          .getSingleOrNull();
 
   Future<int> insertParcela(ParcelasCompanion parcela) =>
       into(parcelas).insert(parcela);
@@ -703,15 +834,21 @@ VGVG0069;UT04;0.0;1''';
 
   Future<void> marcarParcelaSynced(String uuid) =>
       (update(parcelas)..where((t) => t.uuid.equals(uuid)))
-          .write(const ParcelasCompanion(synced: Value(true)));
+          .write(const ParcelasCompanion(
+              synced: Value(true), parcialmenteSincronizada: Value(false)));
 
-  Stream<List<Parcela>> watchAllParcelas({String? userId, bool isAdmin = false}) {
+  Future<void> marcarParcelaParcialmenteSincronizada(String uuid) =>
+      (update(parcelas)..where((t) => t.uuid.equals(uuid)))
+          .write(const ParcelasCompanion(parcialmenteSincronizada: Value(true)));
+
+  Stream<List<Parcela>> watchAllParcelas(
+      {String? userId, bool isAdmin = false}) {
     final query = select(parcelas)..where((t) => t.deletedAt.isNull());
     if (!isAdmin && userId != null) {
       query.where((t) =>
-        t.createdBy.equals(userId) |
-        t.createdBy.equals('') |
-        t.userId.equals(userId));
+          t.createdBy.equals(userId) |
+          t.createdBy.equals('') |
+          t.userId.equals(userId));
     }
     query.orderBy([(t) => OrderingTerm.desc(t.createdAt)]);
     return query.watch();
@@ -722,7 +859,8 @@ VGVG0069;UT04;0.0;1''';
     final count = parcelas.id.count();
     final query = selectOnly(parcelas)
       ..addColumns([count])
-      ..where(parcelas.synced.equals(false))
+      ..where(parcelas.synced.equals(false) |
+          parcelas.parcialmenteSincronizada.equals(true))
       ..where(parcelas.deletedAt.isNull())
       ..where(parcelas.prontaParaSync.equals(true));
     if (userId != null) {
@@ -736,15 +874,17 @@ VGVG0069;UT04;0.0;1''';
 
   Future<List<Planta>> getPlantasByParcela(String parcelaUuid) =>
       (select(plantas)
-        ..where((t) => t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull())
-        ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-      .get();
+            ..where(
+                (t) => t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull())
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
 
   Future<int> insertPlanta(PlantasCompanion planta) =>
       into(plantas).insert(planta);
 
   Future<int> updatePlanta(PlantasCompanion planta, String uuid) =>
-      (update(plantas)..where((t) => t.uuid.equals(uuid))).write(planta);
+      (update(plantas)..where((t) => t.uuid.equals(uuid)))
+          .write(planta.copyWith(updatedAt: Value(DateTime.now())));
 
   Future<int> deletePlanta(String uuid) =>
       (delete(plantas)..where((t) => t.uuid.equals(uuid))).go();
@@ -754,25 +894,29 @@ VGVG0069;UT04;0.0;1''';
 
   Future<void> marcarPlantaSynced(String uuid) =>
       (update(plantas)..where((t) => t.uuid.equals(uuid)))
-          .write(const PlantasCompanion(synced: Value(true)));
+          .write(PlantasCompanion(
+              synced: Value(true), updatedAt: Value(DateTime.now())));
 
   Stream<List<Planta>> watchPlantasByParcela(String parcelaUuid) =>
       (select(plantas)
-        ..where((t) => t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull())
-        ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-        .watch();
+            ..where(
+                (t) => t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull())
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .watch();
 
   // ========== FOTOS PARCELA ==========
 
   Future<List<FotosParcelaData>> getFotosByParcela(String parcelaUuid) =>
       (select(fotosParcela)
-        ..where((t) => t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull()))
-      .get();
+            ..where((t) =>
+                t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull()))
+          .get();
 
   Stream<List<FotosParcelaData>> watchFotosByParcela(String parcelaUuid) =>
       (select(fotosParcela)
-        ..where((t) => t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull()))
-      .watch();
+            ..where((t) =>
+                t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull()))
+          .watch();
 
   Future<int> insertFotoParcela(FotosParcelaCompanion foto) =>
       into(fotosParcela).insert(foto);
@@ -781,8 +925,7 @@ VGVG0069;UT04;0.0;1''';
       (delete(fotosParcela)..where((t) => t.uuid.equals(uuid))).go();
 
   Future<int> deleteAllFotosByParcela(String parcelaUuid) =>
-      (delete(fotosParcela)
-            ..where((t) => t.parcelaUuid.equals(parcelaUuid)))
+      (delete(fotosParcela)..where((t) => t.parcelaUuid.equals(parcelaUuid)))
           .go();
 
   Future<void> marcarFotoSynced(String uuid) =>
@@ -790,31 +933,34 @@ VGVG0069;UT04;0.0;1''';
           .write(const FotosParcelaCompanion(synced: Value(true)));
 
   Future<List<FotosParcelaData>> getFotosNaoSincronizadas() =>
-      (select(fotosParcela)..where((t) => t.synced.equals(false) & t.deletedAt.isNull())).get();
+      (select(fotosParcela)
+            ..where((t) => t.synced.equals(false) & t.deletedAt.isNull()))
+          .get();
 
   // ========== SOFT-DELETE ==========
 
   /// Soft-deleta uma parcela (marca deletedAt + deletedBy, não remove do DB).
   Future<void> softDeleteParcela(String uuid, {String? deletedBy}) async {
     final now = DateTime.now();
-    await customStatement('BEGIN TRANSACTION');
-    try {
+    await transaction(() async {
       await (update(parcelas)..where((t) => t.uuid.equals(uuid)))
           .write(ParcelasCompanion(
         deletedAt: Value(now),
         deletedBy: Value(deletedBy),
       ));
-      await (update(plantas)..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
-          .write(PlantasCompanion(deletedAt: Value(now)));
-      await (update(fotosParcela)..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
+      await (update(plantas)
+            ..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
+          .write(PlantasCompanion(deletedAt: Value(now), updatedAt: Value(now)));
+      await (update(fotosParcela)
+            ..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
           .write(FotosParcelaCompanion(deletedAt: Value(now)));
-      await customStatement('COMMIT');
-    } catch (e) {
-      await customStatement('ROLLBACK');
-      rethrow;
-    }
-    await logAudit('soft_delete_parcela', entityType: 'parcela',
-        entityUuid: uuid, userId: deletedBy);
+      await logAudit('soft_delete_parcela',
+          entityType: 'parcela',
+          entityUuid: uuid,
+          userId: deletedBy,
+          oldValue: 'ativo',
+          newValue: 'deletado');
+    });
   }
 
   /// Restaura uma parcela soft-deletada.
@@ -822,30 +968,36 @@ VGVG0069;UT04;0.0;1''';
     final parcela = await getParcelaByUuid(uuid, includeDeleted: true);
     if (parcela == null || parcela.deletedAt == null) return;
     final deletedAtTs = parcela.deletedAt!;
-    await customStatement('BEGIN TRANSACTION');
-    try {
+    await transaction(() async {
       await (update(parcelas)..where((t) => t.uuid.equals(uuid)))
           .write(const ParcelasCompanion(
         deletedAt: Value(null),
       ));
-      await (update(plantas)..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.equals(deletedAtTs)))
-          .write(const PlantasCompanion(deletedAt: Value(null)));
-      await (update(fotosParcela)..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.equals(deletedAtTs)))
+      await (update(plantas)
+            ..where((t) =>
+                t.parcelaUuid.equals(uuid) & t.deletedAt.equals(deletedAtTs)))
+          .write(PlantasCompanion(deletedAt: Value(null), updatedAt: Value(DateTime.now())));
+      await (update(fotosParcela)
+            ..where((t) =>
+                t.parcelaUuid.equals(uuid) & t.deletedAt.equals(deletedAtTs)))
           .write(const FotosParcelaCompanion(deletedAt: Value(null)));
-      await customStatement('COMMIT');
-    } catch (e) {
-      await customStatement('ROLLBACK');
-      rethrow;
-    }
-    await logAudit('restore_parcela', entityType: 'parcela', entityUuid: uuid);
+      await logAudit('restore_parcela',
+          entityType: 'parcela',
+          entityUuid: uuid,
+          oldValue: 'deletado',
+          newValue: 'restaurado');
+    });
   }
 
   /// Lista parcelas soft-deletadas (lixeira).
-  Future<List<Parcela>> getParcelasDeletadas({String? userId, bool isAdmin = false}) {
+  Future<List<Parcela>> getParcelasDeletadas(
+      {String? userId, bool isAdmin = false}) {
     final query = select(parcelas)..where((t) => t.deletedAt.isNotNull());
     if (!isAdmin && userId != null) {
       query.where((t) =>
-          t.createdBy.equals(userId) | t.createdBy.equals('') | t.userId.equals(userId));
+          t.createdBy.equals(userId) |
+          t.createdBy.equals('') |
+          t.userId.equals(userId));
     }
     query.orderBy([(t) => OrderingTerm.desc(t.deletedAt)]);
     return query.get();
@@ -855,26 +1007,45 @@ VGVG0069;UT04;0.0;1''';
   Future<int> purgarDeletados({int diasRetencao = 30}) async {
     final cutoff = DateTime.now().subtract(Duration(days: diasRetencao));
     final parcelasParaPurgar = await (select(parcelas)
-          ..where((t) => t.deletedAt.isNotNull() & t.deletedAt.isSmallerThanValue(cutoff)))
+          ..where((t) =>
+              t.deletedAt.isNotNull() & t.deletedAt.isSmallerThanValue(cutoff)))
         .get();
-    int count = 0;
+    final photoPaths = <String>[];
+    for (final p in parcelasParaPurgar) {
+      final fotos = await getFotosByParcela(p.uuid);
+      photoPaths.addAll(fotos.map((f) => f.filePath));
+      final plantas = await getPlantasByParcela(p.uuid);
+      for (final planta in plantas) {
+        if (planta.fotoEspeciePath != null)
+          photoPaths.add(planta.fotoEspeciePath!);
+      }
+    }
+
+  int count = 0;
+  await ImageService.deletePhotos(photoPaths);
+  await transaction(() async {
     for (final p in parcelasParaPurgar) {
       await deleteAllPlantasByParcela(p.uuid);
       await deleteAllFotosByParcela(p.uuid);
       await deleteParcela(p.uuid);
       count++;
     }
-    return count;
+  });
+
+  return count;
   }
 
   // ========== AUDIT LOG ==========
 
   /// Registra uma ação no log de auditoria.
-  Future<void> logAudit(String action, {
+  Future<void> logAudit(
+    String action, {
     String? entityType,
     String? entityUuid,
     String? userId,
     String? details,
+    String? oldValue,
+    String? newValue,
   }) async {
     await into(auditLog).insert(AuditLogCompanion.insert(
       action: action,
@@ -882,15 +1053,38 @@ VGVG0069;UT04;0.0;1''';
       entityUuid: Value(entityUuid),
       userId: Value(userId),
       details: Value(details),
+      oldValue: Value(oldValue),
+      newValue: Value(newValue),
     ));
   }
 
   /// Retorna últimas entradas do audit log.
-  Future<List<AuditLogData>> getAuditLog({int limit = 100}) =>
-      (select(auditLog)
-            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
-            ..limit(limit))
-          .get();
+  Future<List<AuditLogData>> getAuditLog({
+    int limit = 100,
+    int offset = 0,
+    String? entityType,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    final query = select(auditLog)
+      ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+      ..limit(limit, offset: offset);
+    if (entityType != null) {
+      query.where((t) => t.entityType.equals(entityType));
+    }
+    if (startDate != null) {
+      query.where((t) => t.createdAt.isBiggerOrEqualValue(startDate));
+    }
+    if (endDate != null) {
+      query.where((t) => t.createdAt.isSmallerOrEqualValue(endDate));
+    }
+    return query.get();
+  }
+
+  Future<void> purgarAuditLog() async {
+    await customStatement(
+        "DELETE FROM audit_log WHERE created_at < datetime('now', '-90 days')");
+  }
 
   // ========== FIRST-RUN ADMIN SETUP ==========
 
@@ -905,7 +1099,8 @@ VGVG0069;UT04;0.0;1''';
   }
 
   /// Cria o primeiro usuário como admin (first-run wizard).
-  Future<int> criarPrimeiroAdmin(String uuid, String nome, String email, String senha) async {
+  Future<int> criarPrimeiroAdmin(
+      String uuid, String nome, String email, String senha) async {
     return insertUsuario(UsuariosCompanion.insert(
       uuid: uuid,
       nome: nome,
@@ -920,5 +1115,101 @@ VGVG0069;UT04;0.0;1''';
     final hashed = PasswordService.hashPassword(novaSenha);
     await (update(usuarios)..where((t) => t.uuid.equals(uuid)))
         .write(UsuariosCompanion(senha: Value(hashed)));
+  }
+
+  Future<List<({String path, String uuid, String source})>>
+      getAllPhotoPaths() async {
+    final results = <({String path, String uuid, String source})>[];
+    final fotos = await (select(fotosParcela)).get();
+    for (final f in fotos) {
+      results.add((path: f.filePath, uuid: f.uuid, source: 'foto'));
+    }
+    final todasPlantas = await (select(plantas)).get();
+    for (final p in todasPlantas) {
+      if (p.fotoEspeciePath != null) {
+        results.add((path: p.fotoEspeciePath!, uuid: p.uuid, source: 'planta'));
+      }
+    }
+    return results;
+  }
+
+  Future<void> cleanMissingFotoParcela(String uuid) async {
+    await (delete(fotosParcela)..where((t) => t.uuid.equals(uuid))).go();
+  }
+
+  Future<void> cleanMissingFotoPlanta(String uuid) async {
+    await (update(plantas)..where((t) => t.uuid.equals(uuid)))
+        .write(PlantasCompanion(fotoEspeciePath: Value(null), updatedAt: Value(DateTime.now())));
+  }
+
+  /// Verifica e corrige referências órfãs de fotos no banco de dados.
+  /// Retorna (orphanedCount, unreferencedFilesCount)
+  Future<(int, int)> checkAndFixOrphanedPhotos() async {
+    final allPaths = await getAllPhotoPaths();
+    final missingFromDb = <String>[];
+    final existingPaths = <String>[];
+
+    for (final entry in allPaths) {
+      final file = io.File(entry.path);
+      if (!await file.exists()) {
+        missingFromDb.add(entry.path);
+      } else {
+        existingPaths.add(entry.path);
+      }
+    }
+
+    // Remove DB references to missing files
+    int removedCount = 0;
+    for (final entry in allPaths) {
+      final file = io.File(entry.path);
+      if (!await file.exists()) {
+        if (entry.source == 'foto') {
+          await cleanMissingFotoParcela(entry.uuid);
+        } else {
+          await cleanMissingFotoPlanta(entry.uuid);
+        }
+        removedCount++;
+      }
+    }
+
+    // Find files on disk not in DB
+    final appDir = await getApplicationDocumentsDirectory();
+    final photosDir = io.Directory(p.join(appDir.path, 'fotos'));
+    int unreferencedCount = 0;
+    if (await photosDir.exists()) {
+      await for (final entity in photosDir.list(recursive: true)) {
+        if (entity is io.File) {
+          final path = entity.path;
+          if (!existingPaths.contains(path)) {
+            unreferencedCount++;
+          }
+        }
+      }
+    }
+
+    return (removedCount, unreferencedCount);
+  }
+
+  Future<({bool ok, String? error})> checkIntegrity() async {
+    try {
+      final integrityRows = await customSelect('PRAGMA integrity_check').get();
+      final integrityResult =
+          integrityRows.first.read<String>('integrity_check');
+      if (integrityResult != 'ok') {
+        return (ok: false, error: 'Integrity check: $integrityResult');
+      }
+
+      final fkRows = await customSelect('PRAGMA foreign_key_check').get();
+      if (fkRows.isNotEmpty) {
+        return (
+          ok: false,
+          error: 'Foreign key violation (${fkRows.length} row(s))'
+        );
+      }
+
+      return (ok: true, error: null);
+    } catch (e) {
+      return (ok: false, error: 'Database check error: $e');
+    }
   }
 }

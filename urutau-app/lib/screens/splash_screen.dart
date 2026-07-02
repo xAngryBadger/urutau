@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../data/database.dart';
 import '../services/sync_service.dart';
 
 /// Splash screen com imagem completa do Urutau.
@@ -16,17 +18,35 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 1500), _navigate);
+      _runStartupMaintenance().then((_) => _navigate());
     });
+  }
+
+  Future<void> _runStartupMaintenance() async {
+    try {
+      final db = context.read<AppDatabase>();
+      final result = await db.checkAndFixOrphanedPhotos();
+      if (result.$1 > 0 || result.$2 > 0) {
+        debugPrint('Startup maintenance: fixed ${result.$1} orphaned DB refs, found ${result.$2} unreferenced files');
+      }
+    } catch (e) {
+      debugPrint('Startup maintenance failed (non-critical): $e');
+    }
   }
 
   Future<void> _navigate() async {
     if (!mounted) return;
-    final syncService = context.read<SyncService>();
-    final user = syncService.currentUser;
-    if (user != null) {
-      Navigator.of(context).pushReplacementNamed('/home');
-    } else {
+    try {
+      final syncService = context.read<SyncService>();
+      final user = syncService.currentUser;
+      if (user != null) {
+        Navigator.of(context).pushReplacementNamed('/home');
+      } else {
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+    } catch (e) {
+      // If anything goes wrong, go to login as fallback
+      if (!mounted) return;
       Navigator.of(context).pushReplacementNamed('/login');
     }
   }

@@ -1,11 +1,14 @@
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
 import '../services/sync_service.dart';
 import '../services/export_service.dart';
 import '../services/image_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/low_space_banner.dart';
 
 enum _ParcelaOwnership { mine, free, other }
 
@@ -331,11 +334,11 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: ctrl,
-                autofocus: true,
-                textCapitalization: TextCapitalization.characters,
-                decoration: InputDecoration(
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
                   hintText: hint ?? label,
                   border: const OutlineInputBorder(),
                 ),
@@ -405,7 +408,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (!syncService.isConfigured || !await syncService.hasInternet()) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sem conexão. Verifique a internet.')),
+          const SnackBar(
+          content: Text('Sem conexão. Verifique a internet.'),
+          duration: Duration(seconds: 5),
+        ),
         );
       }
       return;
@@ -476,12 +482,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitulo,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
+                   ),
+                   const SizedBox(height: 4),
+                   Text(
+                     subtitulo,
+                     style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
+                   ),
                 ],
               ),
             ),
@@ -523,11 +529,13 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
   Future<void> _showSyncOptions() async {
     final myId = _myUserId;
     final syncService = context.read<SyncService>();
-    if (!syncService.isConfigured) {
+if (!syncService.isConfigured) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Configure o servidor nas definições primeiro.')),
+          content: Text('Configure o servidor nas definições primeiro.'),
+          duration: Duration(seconds: 5),
+        ),
         );
       }
       return;
@@ -560,9 +568,11 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
 
     if (pending.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Nenhuma parcela concluída para sincronizar.')),
+            content: Text('Nenhuma parcela concluída para sincronizar.'),
+            duration: Duration(seconds: 3),
+          ),
         );
       }
       return;
@@ -616,10 +626,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           Navigator.pop(ctx);
           if (selected.isEmpty) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Seleccione pelo menos uma parcela.')),
-              );
+ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Seleccione pelo menos uma parcela.'),
+                    duration: Duration(seconds: 3),
+                  ),
+                );
             }
             return;
           }
@@ -655,12 +667,13 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           if (conflitoMessages.isNotEmpty && selected.length < pending.length) {
             msg += ' Parcelas em conflito ficam marcadas com aviso.';
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(msg),
-              backgroundColor: result.sent > 0 ? Colors.green : Colors.orange,
-            ),
-          );
+ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: result.sent > 0 ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
         },
       ),
     );
@@ -730,6 +743,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           SnackBar(
             content: Text('$cleared parcela(s) removida(s) do cache local.'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -741,8 +755,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (!syncService.isConfigured) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Configure o servidor nas definições primeiro.')),
+        const SnackBar(
+          content: Text('Configure o servidor nas definições primeiro.'),
+          duration: Duration(seconds: 5),
+        ),
         );
       }
       return;
@@ -774,24 +790,26 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     await _refreshNivel();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(syncService.lastError ?? 'Sincronização concluída!'),
-          backgroundColor:
-              syncService.lastError != null ? Colors.red : Colors.green,
-        ),
-      );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(syncService.lastError ?? 'Sincronização concluída!'),
+        backgroundColor:
+            syncService.lastError != null ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 5),
+      ),
+    );
     }
   }
 
   // Pull de parcelas desativado — catálogo é estático/local.
   Future<void> _doPull() async {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('O catálogo de parcelas é local e já está carregado.')),
-      );
+ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Configure o servidor nas definições primeiro.'),
+            duration: Duration(seconds: 5),
+          ),
+        );
     }
     }
 
@@ -800,9 +818,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     final user = syncService.currentUser;
     if (user == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Faça login para exportar.')),
-        );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Faça login para exportar.'),
+          duration: Duration(seconds: 5),
+        ),
+      );
       }
       return;
     }
@@ -849,15 +870,20 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       if (!syncService.isConfigured) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Configure o servidor nas definições.')),
+          const SnackBar(
+            content: Text('Configure o servidor nas definições.'),
+            duration: Duration(seconds: 5),
+          ),
           );
         }
         return;
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('A atualizar lista do servidor...')),
+          const SnackBar(
+          content: Text('A atualizar lista do servidor...'),
+          duration: Duration(seconds: 3),
+        ),
         );
       }
       try {
@@ -869,9 +895,11 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Erro ao atualizar: $e'),
-                backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Erro ao atualizar: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
           );
         }
         return;
@@ -932,9 +960,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     final user = syncService.currentUser;
     if (user == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Faça login para exportar fotos.')),
-        );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Faça login para exportar fotos.'),
+          duration: Duration(seconds: 5),
+        ),
+      );
       }
       return;
     }
@@ -984,9 +1015,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (choice == null || !mounted) return;
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('A preparar fotos...')),
-      );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('A preparar fotos...'),
+        duration: Duration(seconds: 3),
+      ),
+    );
     }
     final exportService = ExportService(_db);
     String? prop;
@@ -1030,16 +1064,134 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         SnackBar(
           content: Text(msg),
           backgroundColor: ok ? Colors.green : Colors.orange,
+          duration: const Duration(seconds: 3),
         ),
       );
     }
   }
 
-  Future<void> _doExport(String key, Usuario user) async {
+  Future<void> _exportarZip() async {
+    // Só disponível dentro de uma UT (depth == 2)
+    if (_caminho.length < 2) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Abra uma UT para exportar uma parcela individual.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    final prop = _caminho[0]['value']!;
+    final ut = _caminho[1]['value']!;
+
+    final exportService = ExportService(_db);
+
+    // Busca parcelas nesta UT
+    final syncService = context.read<SyncService>();
+    final userId = syncService.currentUser?.uuid;
+    final isAdmin = syncService.isAdmin;
+
+    final parcelas = await _db.getParcelasByHierarchy(
+      propriedade: prop,
+      propUt: ut,
+      userId: isAdmin ? null : userId,
+      isAdmin: isAdmin,
+    );
+
+    if (parcelas.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Nenhuma parcela nesta UT.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Selecionar parcela
+    final choice = await showDialog<Parcela>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text('Exportar ZIP — $prop / $ut'),
+        children: parcelas.map((p) => SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, p),
+          child: Padding(
+            padding: EdgeInsets.zero,
+            child: Text('Parcela ${p.idParcela} — ${p.synced ? "Sync" : "Local"}'),
+          ),
+        )).toList(),
+      ),
+    );
+
+    if (choice == null || !mounted) return;
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('A gerar planilha...')),
+        const SnackBar(
+          content: Text('A preparar ZIP...'),
+          duration: Duration(seconds: 3),
+        ),
       );
+    }
+
+    try {
+      final fotos = await _db.getFotosByParcela(choice.uuid);
+      final fotoPaths = fotos.map((f) => f.filePath).toList();
+
+      final zipPath = await exportService.exportParcelaZip(
+        parcela: choice,
+        fotoPaths: fotoPaths,
+      );
+
+      if (!mounted) return;
+
+      await Share.shareXFiles([XFile(zipPath)], text: 'Parcela ${choice.idParcela}');
+
+      // Clean up temp zip file after a short delay
+      Future.delayed(const Duration(seconds: 10), () {
+        try {
+          final zipFile = io.File(zipPath);
+          if (zipFile.existsSync()) {
+            zipFile.deleteSync();
+          }
+        } catch (_) {}
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('ZIP exportado com sucesso!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao exportar: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _doExport(String key, Usuario user) async {
+    if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('A gerar planilha...'),
+        duration: Duration(seconds: 3),
+      ),
+    );
     }
     final exportService = ExportService(_db);
     String? prop;
@@ -1083,6 +1235,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           content:
               Text(ok ? 'Planilha exportada.' : 'Sem parcelas para exportar.'),
           backgroundColor: ok ? Colors.green : Colors.orange,
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -1141,14 +1294,43 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F5F5),
-        appBar: AppBar(
-          backgroundColor: AppTheme.tertiary,
-          foregroundColor: Colors.white,
-          iconTheme: const IconThemeData(color: Colors.white),
+         appBar: AppBar(
+           backgroundColor: AppTheme.tertiary,
+           foregroundColor: Theme.of(context).colorScheme.onPrimary,
+           iconTheme: IconThemeData(color: Theme.of(context).colorScheme.onPrimary),
           title: syncService.currentUser != null
-              ? Text(
-                  syncService.currentUser!.nome,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      syncService.currentUser!.nome,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    FutureBuilder<DateTime?>(
+                      future: syncService.getLastSyncTime(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData || snapshot.data == null) {
+                          return const Text('Nunca sincronizado',
+                              style: TextStyle(fontSize: 10, color: Colors.grey));
+                        }
+                        final lastSync = snapshot.data!;
+                        final diff = DateTime.now().difference(lastSync);
+                        final color = diff.inHours < 1
+                            ? Colors.green
+                            : diff.inHours < 24
+                                ? Colors.amber
+                                : Colors.red;
+                        final text = diff.inDays > 0
+                            ? '${diff.inDays}d ${diff.inHours % 24}h atrás'
+                            : diff.inHours > 0
+                                ? '${diff.inHours}h ${diff.inMinutes % 60}min atrás'
+                                : '${diff.inMinutes}min atrás';
+                        return Text('Última sync: $text',
+                            style: TextStyle(fontSize: 10, color: color));
+                      },
+                    ),
+                  ],
                 )
               : null,
           centerTitle: true,
@@ -1165,16 +1347,17 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
               label: 'Consultar parcelas no servidor',
               button: true,
               child: IconButton(
-                icon: const Icon(Icons.visibility, color: Colors.white),
+                 icon: Icon(Icons.visibility, color: Theme.of(context).colorScheme.onPrimary),
                 onPressed: syncService.isConfigured
                     ? (_caminho.length == 2
                         ? _showParcelasFeitasServidor
                         : () {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Abra uma UT para ver as parcelas já feitas dessa UT.'),
-                              ),
+          const SnackBar(
+            content: Text(
+                'Abra uma UT para ver as parcelas já feitas dessa UT.'),
+            duration: Duration(seconds: 3),
+          ),
                             );
                           })
                     : null,
@@ -1183,29 +1366,36 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                     : 'Disponível apenas dentro de uma UT',
               ),
             ),
-            Semantics(
-              label: 'Sincronização',
-              button: true,
-              child: IconButton(
-                icon: Badge(
-                  isLabelVisible: syncService.pendingCount > 0,
-                  label: Text('${syncService.pendingCount}'),
-                  child: Icon(
-                    syncService.pendingCount > 0
-                        ? Icons.cloud_off
-                        : Icons.cloud_done,
-                    color: Colors.white,
-                  ),
-                ),
-                onPressed: _showSyncOptions,
-                tooltip: 'Sincronização',
-              ),
+            FutureBuilder<bool>(
+              future: syncService.isForcedOffline,
+              builder: (context, snapshot) {
+                if (snapshot.data == true) return const SizedBox.shrink();
+                return Semantics(
+                  label: 'Sincronização',
+                  button: true,
+                  child: IconButton(
+                     icon: Badge(
+                       isLabelVisible: syncService.pendingCount > 0,
+                       label: Text('${syncService.pendingCount}'),
+                       backgroundColor: Theme.of(context).colorScheme.primary,
+                       child: Icon(
+                           syncService.pendingCount > 0
+                               ? Icons.cloud_off
+                               : Icons.cloud_done,
+                           color: Theme.of(context).colorScheme.onPrimary,
+                         ),
+                     ),
+                   onPressed: _showSyncOptions,
+                   tooltip: 'Sincronização',
+                 ),
+               );
+              },
             ),
             Semantics(
               label: 'Menu de opções',
               button: true,
               child: PopupMenuButton<String>(
-                iconColor: Colors.white,
+                       iconColor: Theme.of(context).colorScheme.onPrimary,
                 onSelected: (v) {
                   switch (v) {
                     case 'export_xlsx':
@@ -1213,6 +1403,9 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                       break;
                     case 'export_fotos':
                       _exportarFotos();
+                      break;
+                    case 'export_zip':
+                      _exportarZip();
                       break;
                     case 'settings':
                       Navigator.of(context).pushNamed('/settings');
@@ -1240,6 +1433,15 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                     ),
                   ),
                   const PopupMenuItem(
+                    value: 'export_zip',
+                    child: ListTile(
+                      leading: Icon(Icons.download),
+                      title: Text('Exportar parcela ZIP'),
+                      subtitle: Text('Disponível dentro de uma UT'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuItem(
                     value: 'settings',
                     child: ListTile(
                       leading: Icon(Icons.settings),
@@ -1263,6 +1465,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         body: Column(
           children: [
             _buildSyncBanner(syncService),
+            const LowSpaceBanner(),
             _buildHeader(depth),
             Expanded(
               child: _loading
@@ -1354,14 +1557,14 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
 
   // ─── Header (Breadcrumbs + Search) ────────────────────
 
-  Widget _buildHeader(int depth) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
-      ),
+   Widget _buildHeader(int depth) {
+     return Container(
+       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+       decoration: BoxDecoration(
+         color: Theme.of(context).colorScheme.surface,
+         borderRadius: BorderRadius.circular(14),
+         border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
+       ),
       child: Column(
         children: [
           Padding(
@@ -1383,11 +1586,11 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                     return Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: Icon(Icons.chevron_right,
-                              size: 16, color: Colors.grey[400]),
-                        ),
+                   Padding(
+                     padding: const EdgeInsets.symmetric(horizontal: 2),
+                     child: Icon(Icons.chevron_right,
+                         size: 16, color: Theme.of(context).dividerColor),
+                   ),
                         _breadcrumb(
                           icon: step['tipo'] == 'Propriedade'
                               ? Icons.forest
@@ -1410,26 +1613,26 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
               child: TextField(
                 controller: _searchController,
                 onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  prefixIcon:
-                      Icon(Icons.search, size: 20, color: Colors.grey[400]),
-                  hintText: 'Pesquisar ID ou área...',
-                  hintStyle: TextStyle(color: Colors.grey[400]),
-                  isDense: true,
-                  filled: true,
-                  fillColor: const Color(0xFFF5F5F5),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: Colors.grey[300]!),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: Colors.grey[300]!),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppTheme.primary),
-                  ),
+                 decoration: InputDecoration(
+                   prefixIcon:
+                       Icon(Icons.search, size: 20, color: Theme.of(context).iconTheme.color),
+                   hintText: 'Pesquisar ID ou área...',
+                   hintStyle: TextStyle(color: Theme.of(context).hintColor),
+                   isDense: true,
+                   filled: true,
+                   fillColor: Theme.of(context).colorScheme.surfaceVariant,
+                   border: OutlineInputBorder(
+                     borderRadius: BorderRadius.circular(10),
+                     borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                   ),
+                   enabledBorder: OutlineInputBorder(
+                     borderRadius: BorderRadius.circular(10),
+                     borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                   ),
+                   focusedBorder: OutlineInputBorder(
+                     borderRadius: BorderRadius.circular(10),
+                     borderSide: const BorderSide(color: AppTheme.primary),
+                   ),
                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
@@ -1440,47 +1643,47 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     );
   }
 
-  Widget _breadcrumb({
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    VoidCallback? onTap,
-  }) {
-    return Semantics(
-      label: isActive ? label : 'Navegar para $label',
-      button: !isActive,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: isActive
-              ? BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                )
-              : null,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon,
-                  size: 14,
-                  color: isActive ? AppTheme.primary : Colors.grey[500]),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isActive ? AppTheme.primary : Colors.grey[600],
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+   Widget _breadcrumb({
+     required IconData icon,
+     required String label,
+     required bool isActive,
+     VoidCallback? onTap,
+   }) {
+     return Semantics(
+       label: isActive ? label : 'Navegar para $label',
+       button: !isActive,
+       child: InkWell(
+         borderRadius: BorderRadius.circular(6),
+         onTap: onTap,
+         child: Container(
+           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+           decoration: isActive
+               ? BoxDecoration(
+                   color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                   borderRadius: BorderRadius.circular(6),
+                 )
+               : null,
+           child: Row(
+             mainAxisSize: MainAxisSize.min,
+             children: [
+               Icon(icon,
+                   size: 14,
+                   color: isActive ? Theme.of(context).colorScheme.primary : Theme.of(context).textTheme.bodySmall?.color),
+               const SizedBox(width: 4),
+               Text(
+                 label,
+                 style: TextStyle(
+                   color: isActive ? Theme.of(context).colorScheme.primary : Theme.of(context).textTheme.bodySmall?.color,
+                   fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                   fontSize: 13,
+                 ),
+               ),
+             ],
+           ),
+         ),
+       ),
+     );
+   }
 
   // ─── Add Button ───────────────────────────────────────
 
@@ -1495,8 +1698,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           child: ElevatedButton.icon(
             onPressed: _adicionar,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
+               backgroundColor: AppTheme.primary,
+               foregroundColor: Theme.of(context).colorScheme.onPrimary,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
@@ -1540,15 +1743,15 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             final prop = e.value;
             final utCount = _contagemUts[prop] ?? 0;
             final info = _propriedadeInfo[prop];
-            return [
-              const SizedBox(height: 4),
-              Card(
-                elevation: 0,
-                color: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.grey[200]!),
-                ),
+             return [
+               const SizedBox(height: 4),
+               Card(
+                 elevation: 0,
+                 color: Theme.of(context).colorScheme.surface,
+                 shape: RoundedRectangleBorder(
+                   borderRadius: BorderRadius.circular(12),
+                   side: BorderSide(color: Theme.of(context).dividerColor),
+                 ),
                 child: Semantics(
                   label:
                       'Propriedade $prop, $utCount UT${utCount != 1 ? 's' : ''}',
@@ -1558,8 +1761,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     leading: CircleAvatar(
                       backgroundColor: AppTheme.primary,
-                      child: const Icon(Icons.forest,
-                          color: Colors.white, size: 20),
+        child: Icon(Icons.forest,
+            color: Theme.of(context).colorScheme.onPrimary, size: 20),
                     ),
                     title: Text(prop,
                         style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -1568,8 +1771,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                       children: [
                         Text(
                           '$utCount UT${utCount != 1 ? 's' : ''}',
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                           style:
+                               TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
                         ),
                         if (info != null && info.total > 0) _ownershipBar(info),
                       ],
@@ -1597,13 +1800,13 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         final count = _contagemParcelas[ut] ?? 0;
         final info = _utInfo[ut];
 
-        return Card(
-          elevation: 0,
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey[200]!),
-          ),
+         return Card(
+           elevation: 0,
+           color: Theme.of(context).colorScheme.surface,
+           shape: RoundedRectangleBorder(
+             borderRadius: BorderRadius.circular(12),
+             side: BorderSide(color: Theme.of(context).dividerColor),
+           ),
           child: Semantics(
             label: 'UT $ut, $count parcela${count != 1 ? 's' : ''}',
             child: ListTile(
@@ -1612,17 +1815,17 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               leading: CircleAvatar(
                 backgroundColor: AppTheme.tertiaryContainer,
-                child: const Icon(Icons.map, color: Colors.white, size: 20),
+                 child: Icon(Icons.map, color: Theme.of(context).colorScheme.onPrimary, size: 20),
               ),
               title:
                   Text(ut, style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '$count parcela${count != 1 ? 's' : ''}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
+                   Text(
+                     '$count parcela${count != 1 ? 's' : ''}',
+                     style: TextStyle(fontSize: 12, color: Theme.of(context).disabledColor),
+                   ),
                   if (info != null && info.total > 0) _ownershipBar(info),
                 ],
               ),
@@ -1670,17 +1873,17 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         }
         final subtitle = parts.join(' · ');
 
-        return Card(
-          elevation: 0,
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: hasWork
-                  ? AppTheme.primary.withValues(alpha: 0.3)
-                  : Colors.grey[200]!,
-            ),
-          ),
+         return Card(
+           elevation: 0,
+           color: Theme.of(context).colorScheme.surface,
+           shape: RoundedRectangleBorder(
+             borderRadius: BorderRadius.circular(12),
+             side: BorderSide(
+               color: hasWork
+                   ? AppTheme.primary.withValues(alpha: 0.3)
+                   : Theme.of(context).dividerColor,
+             ),
+           ),
           child: Semantics(
             label: 'Parcela ${p.idParcela}, $statusLabel',
             button: true,
@@ -1689,16 +1892,18 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               leading: CircleAvatar(
-                backgroundColor:
-                    hasWork ? AppTheme.primary : Colors.blueGrey[300],
-                child: Text(
-                  '${p.idParcela}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
+                 backgroundColor:
+                     hasWork ? AppTheme.primary : Theme.of(context).colorScheme.secondaryContainer,
+                 child: Text(
+                   '${p.idParcela}',
+                   style: TextStyle(
+                     color: hasWork
+                         ? Theme.of(context).colorScheme.onPrimary
+                         : Theme.of(context).colorScheme.onSecondaryContainer,
+                     fontWeight: FontWeight.bold,
+                     fontSize: 14,
+                   ),
+                 ),
               ),
               title: Row(
                 children: [
@@ -1843,9 +2048,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (mounted) {
       await _refreshNivel();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Dados da parcela limpos.'),
-            backgroundColor: Colors.green),
+      const SnackBar(
+          content: Text('Dados da parcela limpos.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3)),
       );
     }
   }
@@ -1887,9 +2093,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Erro ao apagar no servidor: $e'),
-                backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Erro ao apagar no servidor: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5)),
           );
         }
       }
@@ -1908,8 +2115,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (mounted) {
       await _refreshNivel();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Parcela apagada.'), backgroundColor: Colors.green),
+      const SnackBar(
+          content: Text('Parcela apagada.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3)),
       );
     }
   }
@@ -1979,12 +2188,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
               '${info.free} livre${info.free != 1 ? 's' : ''}',
               Colors.blue,
             ),
-          if (info.other > 0)
-            _ownershipChip(
-              Icons.lock,
-              '${info.other} outra${info.other != 1 ? 's' : ''}',
-              Colors.grey,
-            ),
+           if (info.other > 0)
+             _ownershipChip(
+               Icons.lock,
+               '${info.other} outra${info.other != 1 ? 's' : ''}',
+Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).colorScheme.onSurface,
+             ),
         ],
       ),
     );
@@ -2023,30 +2232,30 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              depth == 0
-                  ? Icons.forest
-                  : depth == 1
-                      ? Icons.map
-                      : Icons.description,
-              size: 56,
-              color: Colors.grey[300],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              depth == 0
-                  ? 'Nenhuma propriedade encontrada'
-                  : depth == 1
-                      ? 'Nenhuma UT nesta propriedade'
-                      : 'Nenhuma parcela nesta UT',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
+             Icon(
+               depth == 0
+                   ? Icons.forest
+                   : depth == 1
+                       ? Icons.map
+                       : Icons.description,
+               size: 56,
+               color: Theme.of(context).dividerColor,
+             ),
+             const SizedBox(height: 12),
+             Text(
+               depth == 0
+                   ? 'Nenhuma propriedade encontrada'
+                   : depth == 1
+                       ? 'Nenhuma UT nesta propriedade'
+                       : 'Nenhuma parcela nesta UT',
+               style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
+             ),
             const SizedBox(height: 8),
-            Text(
-              'Toque no botão abaixo para criar, ou puxe dados do servidor.',
-              style: TextStyle(color: Colors.grey[400], fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
+             Text(
+               'Toque no botão abaixo para criar, ou puxe dados do servidor.',
+               style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 12),
+               textAlign: TextAlign.center,
+             ),
             // Botão de pull removido (catálogo é estático)
           ],
         ),
@@ -2125,11 +2334,11 @@ class _SyncListSheetState extends State<_SyncListSheet> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    hasConflict
-                        ? 'Puxámos o servidor. Parcelas em conflito não podem ser enviadas.'
-                        : 'Marque as parcelas que deseja enviar.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
+                     hasConflict
+                         ? 'Puxámos o servidor. Parcelas em conflito não podem ser enviadas.'
+                         : 'Marque as parcelas que deseja enviar.',
+                     style: TextStyle(fontSize: 12, color: Theme.of(context).disabledColor),
+                   ),
                 ],
               ),
             ),

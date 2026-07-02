@@ -20,6 +20,8 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+    ndkVersion = "28.2.13676358"
+
     signingConfigs {
         create("release") {
             val keystorePath = System.getenv("KEYSTORE_FILE") ?: ""

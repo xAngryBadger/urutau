@@ -1,15 +1,24 @@
 import 'package:flutter/foundation.dart';
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 // [GPS DESATIVADO - MANUTENÇÃO] Reativar quando integrar com app de mapas
 // import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/database.dart';
+import '../services/backup_service.dart';
+import '../services/export_service.dart';
 import '../services/image_service.dart';
 import '../services/sync_service.dart';
+import '../services/storage_service.dart';
 import 'planta_form_screen.dart';
+
+const String kPhotoQualityKey = 'photo_compression_quality';
+const int kPhotoQualityDefault = 70;
 
 class ParcelaFormScreen extends StatefulWidget {
   final String? parcelaUuid; // null = nova, preenchido = edição
@@ -40,6 +49,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   final _observacoesController = TextEditingController();
   final _uuid = const Uuid();
 
+  late SharedPreferences _prefs;
+
   List<String> _propriedadesSugestoes = [];
   List<String> _utSugestoes = [];
 
@@ -61,6 +72,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   @override
   void initState() {
     super.initState();
+    _initAsync();
+  }
+
+  Future<void> _initAsync() async {
+    _prefs = await SharedPreferences.getInstance();
     if (widget.parcelaUuid != null) {
       _isEditing = true;
       _currentUuid = widget.parcelaUuid;
@@ -127,7 +143,10 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     _plantas = await _db.getPlantasByParcela(_currentUuid!);
     _fotos = await _db.getFotosByParcela(_currentUuid!);
     if (mounted) setState(() => _isLoading = false);
-    if (mounted && parcela != null && parcela.synced && parcela.prontaParaSync) {
+    if (mounted &&
+        parcela != null &&
+        parcela.synced &&
+        parcela.prontaParaSync) {
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _showEditarSyncedAviso());
     }
@@ -290,7 +309,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         _propUtController.text.isNotEmpty ||
         _idParcelaController.text.isNotEmpty ||
         _plantas.isNotEmpty ||
-        _novasFotosPaths.isNotEmpty) return true;
+        _novasFotosPaths.isNotEmpty ||
+        _observacoesController.text.trim().isNotEmpty) return true;
     return false;
   }
 
@@ -341,18 +361,19 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           } else if (choice == 'discard') {
             if (_isEditing && _currentUuid != null) {
               await _limparDadosParcela(_currentUuid!);
-              if (mounted) {
-                setState(() {
-                  _propriedadeController.clear();
-                  _propUtController.clear();
-                  _idParcelaController.clear();
-                  _observacoesController.clear();
-                  _plantas = [];
-                  _fotos = [];
-                  _novasFotosPaths.clear();
-                  _isEditing = false;
-                });
-              }
+            }
+            await ImageService.deletePhotos(_novasFotosPaths);
+            if (mounted) {
+              setState(() {
+                _propriedadeController.clear();
+                _propUtController.clear();
+                _idParcelaController.clear();
+                _observacoesController.clear();
+                _plantas = [];
+                _fotos = [];
+                _novasFotosPaths.clear();
+                _isEditing = false;
+              });
             }
             if (mounted) Navigator.of(context).pop(true);
           }
@@ -372,6 +393,15 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                   icon: const Icon(Icons.skip_next),
                   onPressed: _goToNextParcela,
                   tooltip: 'Próxima parcela (mesmo UT)',
+                ),
+              ),
+              Semantics(
+                label: 'Exportar ZIP',
+                button: true,
+                child: IconButton(
+                  icon: const Icon(Icons.download),
+                  onPressed: _exportZip,
+                  tooltip: 'Exportar ZIP (dados + fotos)',
                 ),
               ),
               Semantics(
@@ -431,6 +461,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                                 enabled: !widget.readOnly,
                                 controller: textController,
                                 focusNode: focusNode,
+                                textInputAction: TextInputAction.next,
                                 decoration: InputDecoration(
                                   labelText: 'Propriedade *',
                                   hintText: 'Ex: Fazenda São João',
@@ -478,6 +509,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                                 enabled: !widget.readOnly,
                                 controller: textController,
                                 focusNode: focusNode,
+                                textInputAction: TextInputAction.next,
                                 decoration: InputDecoration(
                                   labelText: 'UT / Talhão *',
                                   hintText: 'Ex: UT 01, Talhão A',
@@ -508,6 +540,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                           child: TextFormField(
                             controller: _idParcelaController,
                             enabled: !widget.readOnly,
+                            textInputAction: TextInputAction.next,
                             decoration: InputDecoration(
                               labelText: 'Número da parcela *',
                               hintText: 'Você define (ex: 1, 2, 3...)',
@@ -540,6 +573,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                           child: TextFormField(
                             controller: _observacoesController,
                             enabled: !widget.readOnly,
+                            textInputAction: TextInputAction.newline,
                             decoration: InputDecoration(
                               labelText: 'Anotações (opcional)',
                               hintText: 'Anotações sobre a parcela...',
@@ -957,12 +991,29 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         await ImageService.deletePhoto(planta.fotoEspeciePath!);
       }
       await _db.deletePlanta(planta.uuid);
+      // Audit log for planta deletion
+      await _db.logAudit('delete', entityType: 'planta', entityUuid: planta.uuid, newValue: 'deleted');
       setState(() => _plantas.removeWhere((p) => p.uuid == planta.uuid));
     }
   }
 
   Future<void> _tirarFotoParcela() async {
     final picker = ImagePicker();
+
+    // Verifica espaço em disco antes de abrir câmera/galeria
+    final freeGB = await StorageService.getFreeSpaceGB();
+    if (StorageService.isCritical(freeGB)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Espaço insuficiente (${freeGB.toStringAsFixed(2)} GB). Libere espaço antes de fotografar.'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
 
     // Escolher origem
     final source = await showModalBottomSheet<String>(
@@ -1002,8 +1053,10 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         maxWidth: 2048,
       );
       for (final photo in photos) {
-        final savedPath = await ImageService.savePhotoLocally(photo.path);
-        setState(() => _novasFotosPaths.add(savedPath));
+        final savedPath = await _saveAndCompressPhoto(photo.path);
+        if (savedPath != null) {
+          setState(() => _novasFotosPaths.add(savedPath));
+        }
       }
     } else {
       // Câmera (uma foto por vez)
@@ -1013,9 +1066,46 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         maxWidth: 2048,
       );
       if (photo != null) {
-        final savedPath = await ImageService.savePhotoLocally(photo.path);
-        setState(() => _novasFotosPaths.add(savedPath));
+        final savedPath = await _saveAndCompressPhoto(photo.path);
+        if (savedPath != null) {
+          setState(() => _novasFotosPaths.add(savedPath));
+        }
       }
+    }
+  }
+
+  /// Salva a foto localmente e aplica compressão com a qualidade configurada pelo usuário.
+  Future<String?> _saveAndCompressPhoto(String photoPath) async {
+    try {
+      final quality = _prefs.getInt(kPhotoQualityKey) ?? kPhotoQualityDefault;
+      final photoFile = io.File(photoPath);
+      final compressed = await ImageService.compressImage(photoFile, quality: quality);
+      if (compressed != null) {
+        // Generate thumbnail with error handling
+        try {
+          await ImageService.generateThumbnail(compressed);
+        } catch (e) {
+          debugPrint('Thumbnail generation failed (non-critical): $e');
+        }
+        return compressed.path;
+      }
+      // Fallback: salva sem compressão se falhar
+      final fallback = await ImageService.savePhotoLocally(photoPath);
+      try {
+        await ImageService.generateThumbnail(io.File(fallback));
+      } catch (e) {
+        debugPrint('Thumbnail generation failed (non-critical): $e');
+      }
+      return fallback;
+    } catch (e) {
+      debugPrint('Erro ao salvar/comprimir foto: $e');
+      final fallback = await ImageService.savePhotoLocally(photoPath);
+      try {
+        await ImageService.generateThumbnail(io.File(fallback));
+      } catch (e) {
+        debugPrint('Thumbnail generation failed (non-critical): $e');
+      }
+      return fallback;
     }
   }
 
@@ -1045,12 +1135,15 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         throw Exception('Usuário não identificado. Faça login novamente.');
       }
       await _writeParcela(prontaParaSync: false);
+      // Audit log for parcela creation (draft)
+      await _db.logAudit('create', entityType: 'parcela', entityUuid: _currentUuid!, newValue: 'draft');
       if (mounted) {
         await context.read<SyncService>().refreshPendingCount();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Rascunho guardado. Pode retomar depois.'),
             backgroundColor: Colors.blue,
+            duration: Duration(seconds: 4),
           ),
         );
         Navigator.of(context).pop(true);
@@ -1058,7 +1151,10 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Erro: $e'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4)),
         );
       }
     } finally {
@@ -1075,6 +1171,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           content:
               Text('Adicione pelo menos 1 planta para concluir a parcela.'),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
         ),
       );
       return;
@@ -1087,6 +1184,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         throw Exception('Usuário não identificado. Faça login novamente.');
       }
       await _writeParcela(prontaParaSync: true);
+      // Audit log for parcela creation/update
+      final action = _isEditing ? 'update' : 'create';
+      await _db.logAudit(action, entityType: 'parcela', entityUuid: _currentUuid!, newValue: action);
       if (mounted) {
         await context.read<SyncService>().refreshPendingCount();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1094,6 +1194,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             content:
                 Text('Parcela concluída. Pode sincronizar quando tiver rede.'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 4),
           ),
         );
         Navigator.of(context).pop(true);
@@ -1102,7 +1203,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Erro ao salvar: $e'), backgroundColor: Colors.red),
+              content: Text('Erro ao salvar: $e'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5)),
         );
       }
     } finally {
@@ -1174,28 +1277,43 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   Future<void> _limparDadosParcela(String uuid) async {
     final p = await _db.getParcelaByUuid(uuid);
     if (p == null) return;
-    for (final planta in await _db.getPlantasByParcela(uuid)) {
-      if (planta.fotoEspeciePath != null) {
-        await ImageService.deletePhoto(planta.fotoEspeciePath!);
-      }
+
+    // Pre-backup de segurança antes de operação destrutiva
+    try {
+      await BackupService.exportBackup();
+    } catch (_) {
+      // Non-critical — continue
     }
-    for (final foto in await _db.getFotosByParcela(uuid)) {
-      await ImageService.deletePhoto(foto.filePath);
+
+    try {
+      await _db.transaction(() async {
+        for (final planta in await _db.getPlantasByParcela(uuid)) {
+          if (planta.fotoEspeciePath != null) {
+            await ImageService.deletePhoto(planta.fotoEspeciePath!);
+          }
+        }
+        for (final foto in await _db.getFotosByParcela(uuid)) {
+          await ImageService.deletePhoto(foto.filePath);
+        }
+        await _db.deleteAllPlantasByParcela(uuid);
+        await _db.deleteAllFotosByParcela(uuid);
+        await _db.updateParcela(
+          ParcelasCompanion(
+            userId: const drift.Value(''),
+            observacoes: const drift.Value(null),
+            latitude: const drift.Value(null),
+            longitude: const drift.Value(null),
+            synced: const drift.Value(false),
+            prontaParaSync: const drift.Value(false),
+            updatedAt: drift.Value(DateTime.now()),
+          ),
+          uuid,
+        );
+      });
+    } catch (e) {
+      debugPrint('Erro ao limpar dados da parcela: $e');
+      rethrow;
     }
-    await _db.deleteAllPlantasByParcela(uuid);
-    await _db.deleteAllFotosByParcela(uuid);
-    await _db.updateParcela(
-      ParcelasCompanion(
-        userId: const drift.Value(''),
-        observacoes: const drift.Value(null),
-        latitude: const drift.Value(null),
-        longitude: const drift.Value(null),
-      synced: const drift.Value(false),
-      prontaParaSync: const drift.Value(false),
-        updatedAt: drift.Value(DateTime.now()),
-      ),
-      uuid,
-    );
   }
 
   Future<void> _confirmDelete() async {
@@ -1224,6 +1342,77 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     if (confirm == true && _currentUuid != null) {
       await _limparDadosParcela(_currentUuid!);
       if (mounted) Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _exportZip() async {
+    if (_currentUuid == null) return;
+
+    final exportService = ExportService(_db);
+    final parcela = await _db.getParcelaByUuid(_currentUuid!);
+    if (parcela == null) return;
+
+    final fotos = await _db.getFotosByParcela(_currentUuid!);
+    final fotoPaths = fotos.map((f) => f.filePath).toList();
+
+    // Mostra diálogo de progresso
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Preparando ZIP...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final zipPath = await exportService.exportParcelaZip(
+        parcela: parcela,
+        fotoPaths: fotoPaths,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Fecha loading
+
+      // Compartilha
+      await Share.shareXFiles([XFile(zipPath)], text: 'Parcela ${parcela.idParcela}');
+
+      // Clean up temp zip file after a short delay
+      Future.delayed(const Duration(seconds: 10), () {
+        try {
+          final zipFile = io.File(zipPath);
+          if (zipFile.existsSync()) {
+            zipFile.deleteSync();
+          }
+        } catch (_) {}
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('ZIP exportado com sucesso!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Fecha loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao exportar: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 }

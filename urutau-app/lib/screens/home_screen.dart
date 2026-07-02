@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../data/database.dart';
 import '../services/sync_service.dart';
+import '../widgets/low_space_banner.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,6 +14,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   AppDatabase get _db => context.read<AppDatabase>();
+  bool _adminDeniedBannerShown = false;
 
   // ── Estado do filtro ──
   bool _filterActive = false;
@@ -30,10 +32,25 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadTalhoes();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final syncService = context.read<SyncService>();
-      syncService.autoSync();
-    });
+    
+    // Check for admin denied argument and show SnackBar if present
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map<String, dynamic> && 
+        args['showAdminDenied'] == true && 
+        !_adminDeniedBannerShown) {
+      _adminDeniedBannerShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Acesso restrito a administradores'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      });
+    }
   }
 
   Future<void> _loadTalhoes() async {
@@ -94,6 +111,29 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.normal,
                   ),
                 ),
+              FutureBuilder<DateTime?>(
+                future: syncService.getLastSyncTime(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data == null) {
+                    return const Text('Nunca sincronizado',
+                        style: TextStyle(fontSize: 10, color: Colors.grey));
+                  }
+                  final lastSync = snapshot.data!;
+                  final diff = DateTime.now().difference(lastSync);
+                  final color = diff.inHours < 1
+                      ? Colors.green
+                      : diff.inHours < 24
+                          ? Colors.amber
+                          : Colors.red;
+                  final text = diff.inDays > 0
+                      ? '${diff.inDays}d ${diff.inHours % 24}h atrás'
+                      : diff.inHours > 0
+                          ? '${diff.inHours}h ${diff.inMinutes % 60}min atrás'
+                          : '${diff.inMinutes}min atrás';
+                  return Text('Última sync: $text',
+                      style: TextStyle(fontSize: 10, color: color));
+                },
+              ),
             ],
           ),
         ),
@@ -115,33 +155,40 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => setState(() => _showFilterBar = !_showFilterBar),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: syncService.pendingCount > 0
-                ? Badge(
-                    label: Text('${syncService.pendingCount}'),
-                    child: IconButton(
-                      icon: syncService.isSyncing
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.cloud_upload),
-                      onPressed: syncService.isSyncing ? null : () => _sync(),
-                      tooltip: 'Sincronizar dados',
-                    ),
-                  )
-                : IconButton(
-                    icon: const Icon(Icons.cloud_done),
-                    onPressed: null,
-                    tooltip: 'Tudo sincronizado',
-                    color: Colors.green[200],
-                  ),
-          ),
+            FutureBuilder<bool>(
+              future: syncService.isForcedOffline,
+              builder: (context, snapshot) {
+                final isForcedOffline = snapshot.data == true;
+                if (isForcedOffline) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: syncService.pendingCount > 0
+                      ? Badge(
+                          label: Text('${syncService.pendingCount}'),
+                          child: IconButton(
+                            icon: syncService.isSyncing
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.cloud_upload),
+                            onPressed: syncService.isSyncing ? null : () => _sync(),
+                            tooltip: 'Sincronizar dados',
+                          ),
+                        )
+                      : IconButton(
+                          icon: const Icon(Icons.cloud_done),
+                          onPressed: null,
+                          tooltip: 'Tudo sincronizado',
+                          color: Colors.green[200],
+                        ),
+                );
+              },
+            ),
           PopupMenuButton<String>(
             onSelected: _onMenuSelected,
             itemBuilder: (context) => [
@@ -187,6 +234,8 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           // Banner de status
           _buildStatusBanner(syncService),
+          // Banner de espaço em disco baixo
+          const LowSpaceBanner(),
           // Barra de filtro (colapsável)
           if (_showFilterBar) _buildFilterBar(syncService),
           // Tag de filtro ativo
@@ -712,9 +761,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Configure o servidor primeiro nas configurações.'),
-        ),
+    const SnackBar(
+      content: Text('Configure o servidor primeiro nas configurações.'),
+      duration: Duration(seconds: 5),
+    ),
       );
       return;
     }
@@ -896,20 +946,21 @@ class _HomeScreenState extends State<HomeScreen> {
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure o servidor primeiro.')),
-      );
-      return;
-    }
-    if (!await syncService.hasInternet()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sem conexão com a internet.')),
-      );
+    const SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
+  );
+  return;
+}
+
+  if (!await syncService.hasInternet()) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sem conexão com a internet.'), duration: Duration(seconds: 5)),
+    );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Baixando suas parcelas do servidor...')),
-    );
+    const SnackBar(content: Text('Baixando suas parcelas do servidor...'), duration: Duration(seconds: 3)),
+  );
 
     try {
       final importados = await syncService.pullDadosDoServidor(
@@ -918,12 +969,13 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(importados > 0
-                ? '$importados parcela(s) importada(s) do servidor.'
-                : 'Nenhuma parcela nova encontrada.'),
-            backgroundColor: importados > 0 ? Colors.green : Colors.blue,
-          ),
+        SnackBar(
+          content: Text(importados > 0
+              ? '$importados parcela(s) importada(s) do servidor.'
+              : 'Nenhuma parcela nova encontrada.'),
+          backgroundColor: importados > 0 ? Colors.green : Colors.blue,
+          duration: const Duration(seconds: 3),
+        ),
         );
         _loadTalhoes();
       }
@@ -931,7 +983,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red, duration: const Duration(seconds: 5)),
         );
       }
     }
@@ -941,13 +993,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure o servidor primeiro.')),
-      );
-      return;
-    }
+    const SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
+    );
+    return;
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Baixando suas fotos do servidor...')),
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Baixando suas fotos do servidor...'), duration: Duration(seconds: 3)),
     );
 
     final path = await syncService.downloadFotosOrganizadas(
@@ -967,10 +1019,11 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Nenhuma foto encontrada ou erro na conexão.'),
-            backgroundColor: Colors.orange,
-          ),
+      const SnackBar(
+        content: Text('Nenhuma foto encontrada ou erro na conexão.'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 5),
+      ),
         );
       }
     }

@@ -41,6 +41,7 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
   String? _fotoPath;
   bool _isEditing = false;
   String? _currentUuid;
+  bool _isSaving = false;
 
   bool _useNomePopular = true;
   List<EspecieItem> _allSpecies = [];
@@ -308,6 +309,7 @@ Semantics(
           controller: _especieController,
           focusNode: _especieFocusNode,
           autocorrect: false,
+          textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
                     labelText: 'Espécie *',
                     hintText: _useNomePopular
@@ -327,8 +329,8 @@ Semantics(
                   ),
                   textCapitalization: TextCapitalization.words,
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                        RegExp(r'[a-zA-ZÀ-ÿ0-9\s\-]')),
+          FilteringTextInputFormatter.allow(
+              RegExp(r"[a-zA-ZÀ-ÿ0-9\s\-.()'-]")),
                   ],
                   onChanged: (v) {
                     setState(() {
@@ -355,8 +357,8 @@ Semantics(
                   },
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Informe a espécie';
-                    if (!RegExp(r'^[a-zA-ZÀ-ÿ0-9\s\-]+$').hasMatch(v)) {
-                      return 'Apenas letras, números, espaços e hífens';
+        if (!RegExp(r"^[a-zA-ZÀ-ÿ0-9\s\-.()'-]+$").hasMatch(v)) {
+          return 'Apenas letras, números, espaços, hífens, pontos e parênteses';
                     }
                     return null;
                   },
@@ -458,14 +460,15 @@ Semantics(
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                     ],
-                    onChanged: (_) => _updateCategoria(),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Informe a altura';
-                      final val = double.tryParse(v.replaceAll(',', '.'));
-                      if (val == null || val <= 0) return 'Valor inválido';
-                      return null;
-                    },
-                  ),
+onChanged: (_) => _updateCategoria(),
+                     validator: (v) {
+                       if (v == null || v.isEmpty) return 'Informe a altura';
+                       final val = double.tryParse(v.replaceAll(',', '.'));
+                       if (val == null || val <= 0) return 'Valor inválido';
+                       return null;
+                     },
+                     textInputAction: TextInputAction.next,
+                   ),
                 ),
               const SizedBox(height: 16),
               if (!_categoriaManual)
@@ -474,41 +477,42 @@ Semantics(
                   child: _mostrarDAP
                       ? Column(
                           children: [
-                            Semantics(
-                              label: 'Diâmetro à altura do peito',
-                              child: TextFormField(
-                                controller: _dapController,
-                                decoration: InputDecoration(
-                                  labelText: 'DAP (cm) *',
-                                  hintText: 'Diâmetro à altura do peito',
-                                  prefixIcon: const Icon(Icons.straighten),
-                                  suffixText: 'cm',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  helperText:
-                                      'Obrigatório para plantas com altura ≥ 50cm',
-                                ),
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                      RegExp(r'[0-9.,]')),
-                                ],
-                                onChanged: (_) => _updateCategoria(),
-                                validator: (v) {
-                                  if (!_mostrarDAP) return null;
-                                  if (v == null || v.isEmpty) {
-                                    return 'DAP obrigatório para altura ≥ 50cm';
-                                  }
-                                  final val =
-                                      double.tryParse(v.replaceAll(',', '.'));
-                                  if (val == null || val <= 0) {
-                                    return 'Valor inválido';
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ),
+Semantics(
+                               label: 'Diâmetro à altura do peito',
+                               child: TextFormField(
+                                 controller: _dapController,
+                                 decoration: InputDecoration(
+                                   labelText: 'DAP (cm) *',
+                                   hintText: 'Diâmetro à altura do peito',
+                                   prefixIcon: const Icon(Icons.straighten),
+                                   suffixText: 'cm',
+                                   border: OutlineInputBorder(
+                                     borderRadius: BorderRadius.circular(12),
+                                   ),
+                                   helperText:
+                                       'Obrigatório para plantas com altura ≥ 50cm',
+                                 ),
+                                 keyboardType: TextInputType.number,
+                                 inputFormatters: [
+                                   FilteringTextInputFormatter.allow(
+                                       RegExp(r'[0-9.,]')),
+                                 ],
+                                 onChanged: (_) => _updateCategoria(),
+                                 validator: (v) {
+                                   if (!_mostrarDAP) return null;
+                                   if (v == null || v.isEmpty) {
+                                     return 'DAP obrigatório para altura ≥ 50cm';
+                                   }
+                                   final val =
+                                       double.tryParse(v.replaceAll(',', '.'));
+                                   if (val == null || val <= 0) {
+                                     return 'Valor inválido';
+                                   }
+                                   return null;
+                                 },
+                                 textInputAction: TextInputAction.done,
+                               ),
+                             ),
                             const SizedBox(height: 16),
                           ],
                         )
@@ -602,9 +606,15 @@ Semantics(
               Semantics(
                 label: 'Salvar planta',
                 button: true,
-                child: FilledButton.icon(
-                  onPressed: _salvarPlanta,
-                  icon: const Icon(Icons.check),
+      child: FilledButton.icon(
+        onPressed: _isSaving ? null : _salvarPlanta,
+        icon: _isSaving
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.check),
                   label: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
@@ -674,6 +684,7 @@ Semantics(
             'Foto obrigatória para espécie NI (não identificada)',
           ),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
         ),
       );
       return;
@@ -692,40 +703,46 @@ Semantics(
       cat = calcularCategoria(altura, dap);
     }
 
-    final companion = PlantasCompanion(
-      uuid: drift.Value(_currentUuid!),
-      parcelaUuid: drift.Value(widget.parcelaUuid),
-      especie: drift.Value(_especieController.text.trim()),
-      alturaCm: drift.Value(altura),
-      dapCm: drift.Value(dap),
-      categoria: drift.Value(cat),
-      fotoEspeciePath: drift.Value(_fotoPath),
-      synced: const drift.Value(false),
-    );
+  final companion = PlantasCompanion(
+  uuid: drift.Value(_currentUuid!),
+  parcelaUuid: drift.Value(widget.parcelaUuid),
+  especie: drift.Value(_especieController.text.trim()),
+  alturaCm: drift.Value(altura),
+  dapCm: drift.Value(dap),
+  categoria: drift.Value(cat),
+  fotoEspeciePath: drift.Value(_fotoPath),
+  synced: const drift.Value(false),
+  updatedAt: drift.Value(DateTime.now()),
+  );
 
-    if (_isEditing) {
-      await _db.updatePlanta(companion, _currentUuid!);
-    } else {
-      await _db.insertPlanta(companion);
-    }
-
-    final planta = Planta(
-      id: 0,
-      uuid: _currentUuid!,
-      parcelaUuid: widget.parcelaUuid,
-      especie: _especieController.text.trim(),
-      alturaCm: altura,
-      dapCm: dap,
-      categoria: cat,
-      fotoEspeciePath: _fotoPath,
-      synced: false,
-      createdAt: _isEditing && widget.existingPlanta != null
-          ? widget.existingPlanta!.createdAt
-          : DateTime.now(),
-    );
-
-    if (mounted) {
-      Navigator.of(context).pop(planta);
-    }
+  if (_isEditing) {
+    await _db.updatePlanta(companion, _currentUuid!);
+    // Audit log for planta update
+    await _db.logAudit('update', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'updated');
+  } else {
+    await _db.insertPlanta(companion);
+    // Audit log for planta creation
+    await _db.logAudit('create', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'created');
   }
+
+final planta = Planta(
+  id: 0,
+  uuid: _currentUuid!,
+  parcelaUuid: widget.parcelaUuid,
+  especie: _especieController.text.trim(),
+  alturaCm: altura,
+  dapCm: dap,
+  categoria: cat,
+  fotoEspeciePath: _fotoPath,
+  synced: false,
+  createdAt: _isEditing && widget.existingPlanta != null
+      ? widget.existingPlanta!.createdAt
+      : DateTime.now(),
+  updatedAt: DateTime.now(),
+  );
+
+  if (mounted) {
+    Navigator.of(context).pop(planta);
+  }
+}
 }

@@ -52,4 +52,11 @@ class PasswordService {
     final digest = sha256.convert(bytes);
     return digest.toString();
   }
+
+  static bool isServerPlaceholder(String storedValue) => storedValue.startsWith('SRV:');
+
+  static String generateServerPlaceholder() {
+    final random = DateTime.now().microsecondsSinceEpoch.toString();
+    return 'SRV:${hashPassword(random)}';
+  }
 }

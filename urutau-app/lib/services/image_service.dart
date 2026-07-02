@@ -1,10 +1,12 @@
 import 'dart:io' if (dart.library.html) 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
+import '../services/storage_service.dart';
 
 class ImageService {
   static const _uuid = Uuid();
@@ -13,6 +15,15 @@ class ImageService {
   /// Foto original ~5MB → comprimida ~500KB-1MB.
   static Future<File?> compressImage(File file, {int quality = 70}) async {
     if (kIsWeb) return null; // Web não suporta compressão local
+    
+    // Verifica espaço em disco antes de comprimir
+    final freeGB = await StorageService.getFreeSpaceGB();
+    if (StorageService.isCritical(freeGB)) {
+      throw Exception(
+          'Espaço em disco extremamente baixo (${freeGB.toStringAsFixed(2)} GB). '
+          'Libere espaço antes de capturar fotos.');
+    }
+
     try {
       final dir = await getApplicationDocumentsDirectory();
       final compressedDir = Directory(p.join(dir.path, 'compressed'));
@@ -78,6 +89,33 @@ class ImageService {
     }
   }
 
+  static Future<void> deletePhotos(List<String> paths) async {
+    for (final path in paths) {
+      await deletePhoto(path);
+    }
+  }
+
+  static Future<Directory> getPhotosDir() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return Directory(p.join(dir.path, 'fotos'));
+  }
+
+  static Future<void> deletePhotosDir() async {
+    if (kIsWeb) return;
+    try {
+      final photosDir = await getPhotosDir();
+      if (photosDir.existsSync()) {
+        await for (final entity in photosDir.list()) {
+          if (entity is File) {
+            await entity.delete();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Erro ao limpar diretório de fotos: $e');
+    }
+  }
+
   /// Limpa fotos comprimidas após sincronização bem-sucedida.
   static Future<void> cleanCompressedPhotos() async {
     if (kIsWeb) return;
@@ -90,6 +128,38 @@ class ImageService {
       }
     } catch (e) {
       debugPrint('Erro ao limpar fotos comprimidas: $e');
+    }
+  }
+
+  /// Gera thumbnail 300px da foto para uso em grids/listas.
+  static Future<File?> generateThumbnail(File sourceImage, {int width = 300}) async {
+    if (kIsWeb) return null;
+    try {
+      final bytes = await sourceImage.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final decodedImage = frame.image;
+      final thumbnailBytes = await FlutterImageCompress.compressWithList(
+        bytes,
+        minWidth: width,
+        minHeight: (width * decodedImage.height / decodedImage.width).round(),
+        quality: 70,
+      );
+      
+      if (thumbnailBytes == null) return null;
+      
+      final dir = await getApplicationDocumentsDirectory();
+      final thumbDir = Directory(p.join(dir.path, 'thumbnails'));
+      if (!thumbDir.existsSync()) {
+        thumbDir.createSync(recursive: true);
+      }
+      
+      final thumbPath = p.join(thumbDir.path, 'thumb_${_uuid.v4()}.jpg');
+      await File(thumbPath).writeAsBytes(thumbnailBytes);
+      return File(thumbPath);
+    } catch (e) {
+      debugPrint('Thumbnail generation failed: $e');
+      return null;
     }
   }
 
@@ -112,8 +182,9 @@ class ImageService {
     }
     final file = File(path);
     if (!file.existsSync()) {
+      debugPrint('Foto ausente: $path');
       return const _BrokenImagePlaceholder();
-    }
+  }
     return Image.file(
       file,
       fit: fit,
