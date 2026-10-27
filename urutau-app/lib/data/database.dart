@@ -106,6 +106,9 @@ class AuditLog extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase._internal(super.e);
 
+  /// Construtor para testes: injeta um QueryExecutor (ex.: NativeDatabase.memory()).
+  AppDatabase.forTesting(QueryExecutor e) : super(e);
+
   static AppDatabase? _instance;
 
   factory AppDatabase() {
@@ -1081,9 +1084,31 @@ VGVG0069;UT04;0.0;1''';
     return query.get();
   }
 
-  Future<void> purgarAuditLog() async {
+  /// (Q1) Purga automática da auditoria DESLIGADA por padrão.
+  ///
+  /// Antes: beforeOpen chamava este método em CADA abertura do app e ele fazia
+  /// DELETE de linhas com >90 dias — a trilha de auditoria se auto-destruía,
+  /// perdendo evidência exatamente quando a auditoria externa pediria histórico.
+  ///
+  /// Segundo achado (Q1): o DELETE antigo comparava `created_at` (INTEGER,
+  /// epoch seconds — formato padrão do drift) com `datetime('now',...)`, que
+  /// devolve TEXTO. No SQLite, INTEGER < TEXT é SEMPRE verdadeiro, então a
+  /// purga nem respeitava os 90 dias: apagava a tabela INTEIRA a cada abertura.
+  /// Corrigido com CAST(strftime('%s',...) AS INTEGER).
+  ///
+  /// Agora: no-op enquanto `auditAutoPurgeEnabled` for false (default). Só com
+  /// decisão EXPLÍCITA do operador (liga a flag) a purga roda — e ainda assim é
+  /// hard delete, por isso está documentada como ação destrutiva deliberada.
+  /// O histórico permanece integral no comportamento padrão.
+  static bool auditAutoPurgeEnabled = false;
+
+  Future<void> purgarAuditLog(
+      {Duration retencao = const Duration(days: 90)}) async {
+    if (!auditAutoPurgeEnabled) return;
+    final dias = retencao.inDays;
+    // created_at é INTEGER (epoch seconds) no drift — compara com inteiro.
     await customStatement(
-        "DELETE FROM audit_log WHERE created_at < datetime('now', '-90 days')");
+        "DELETE FROM audit_log WHERE created_at < CAST(strftime('%s', 'now', '-$dias days') AS INTEGER)");
   }
 
   // ========== FIRST-RUN ADMIN SETUP ==========
