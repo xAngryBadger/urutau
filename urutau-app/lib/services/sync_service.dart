@@ -16,7 +16,7 @@ import '../widgets/conflict_resolution_dialog.dart';
 import 'image_service.dart';
 import 'secure_storage_service.dart';
 import 'password_service.dart';
-import '../../main.dart' as main;
+import '../main.dart' as main;
 
 const String kForcedOfflineKey = 'forced_offline_mode';
 
