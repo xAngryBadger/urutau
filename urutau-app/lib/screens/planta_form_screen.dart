@@ -739,6 +739,7 @@ final planta = Planta(
       ? widget.existingPlanta!.createdAt
       : DateTime.now(),
   updatedAt: DateTime.now(),
+  fotoAusente: false,
   );
 
   if (mounted) {
