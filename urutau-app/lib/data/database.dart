@@ -71,6 +71,11 @@ class Plantas extends Table {
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   // Soft-delete
   DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// (Q2) true = fotoEspeciePath aponta para arquivo ausente no disco.
+  /// O PATH permanece (evidência do original); a marcação informa a UI.
+  BoolColumn get fotoAusente =>
+      boolean().withDefault(const Constant(false))();
 }
 
 class FotosParcela extends Table {
@@ -81,6 +86,11 @@ class FotosParcela extends Table {
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// (Q2) true = arquivo não encontrado no disco. A LINHA permanece como
+  /// evidência de que a foto existiu — nunca deletar (auditoria).
+  BoolColumn get arquivoAusente =>
+      boolean().withDefault(const Constant(false))();
 }
 
 /// Tabela de auditoria — registra operações críticas no sistema.
@@ -124,7 +134,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration {
@@ -210,6 +220,11 @@ class AppDatabase extends _$AppDatabase {
       await customStatement(
           'UPDATE plantas SET updated_at = created_at WHERE updated_at IS NULL');
     }
+      if (from < 19) {
+        // Q2: marcar ausência de arquivo sem apagar evidência
+        await m.addColumn(fotosParcela, fotosParcela.arquivoAusente);
+        await m.addColumn(plantas, plantas.fotoAusente);
+      }
   },
       beforeOpen: (details) async {
         await customStatement('PRAGMA journal_mode = WAL');
@@ -1158,13 +1173,20 @@ VGVG0069;UT04;0.0;1''';
     return results;
   }
 
+  /// (Q2) Marca a foto da parcela como ausente (soft) — NUNCA deleta a linha.
+  /// A evidência de que a foto existiu permanece no banco para auditoria.
   Future<void> cleanMissingFotoParcela(String uuid) async {
-    await (delete(fotosParcela)..where((t) => t.uuid.equals(uuid))).go();
+    await (update(fotosParcela)..where((t) => t.uuid.equals(uuid)))
+        .write(const FotosParcelaCompanion(arquivoAusente: Value(true)));
   }
 
+  /// (Q2) Marca a foto da planta como ausente (soft) — MANTÉM fotoEspeciePath
+  /// (evidência do caminho original); apenas sinaliza a ausência.
   Future<void> cleanMissingFotoPlanta(String uuid) async {
     await (update(plantas)..where((t) => t.uuid.equals(uuid)))
-        .write(PlantasCompanion(fotoEspeciePath: Value(null), updatedAt: Value(DateTime.now())));
+        .write(PlantasCompanion(
+            fotoAusente: const Value(true),
+            updatedAt: Value(DateTime.now())));
   }
 
   /// Verifica e corrige referências órfãs de fotos no banco de dados.
@@ -1183,8 +1205,8 @@ VGVG0069;UT04;0.0;1''';
       }
     }
 
-    // Remove DB references to missing files
-    int removedCount = 0;
+    // (Q2) MARCA referências a arquivos ausentes — nunca deleta (evidência).
+    int markedCount = 0;
     for (final entry in allPaths) {
       final file = io.File(entry.path);
       if (!await file.exists()) {
@@ -1193,7 +1215,7 @@ VGVG0069;UT04;0.0;1''';
         } else {
           await cleanMissingFotoPlanta(entry.uuid);
         }
-        removedCount++;
+        markedCount++;
       }
     }
 
@@ -1212,7 +1234,7 @@ VGVG0069;UT04;0.0;1''';
       }
     }
 
-    return (removedCount, unreferencedCount);
+    return (markedCount, unreferencedCount);
   }
 
   Future<({bool ok, String? error})> checkIntegrity() async {

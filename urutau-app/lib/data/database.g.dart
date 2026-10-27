@@ -1346,6 +1346,16 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
   late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
       'deleted_at', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _fotoAusenteMeta =
+      const VerificationMeta('fotoAusente');
+  @override
+  late final GeneratedColumn<bool> fotoAusente = GeneratedColumn<bool>(
+      'foto_ausente', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("foto_ausente" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -1359,7 +1369,8 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
         synced,
         createdAt,
         updatedAt,
-        deletedAt
+        deletedAt,
+        fotoAusente
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1432,6 +1443,12 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
       context.handle(_deletedAtMeta,
           deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
     }
+    if (data.containsKey('foto_ausente')) {
+      context.handle(
+          _fotoAusenteMeta,
+          fotoAusente.isAcceptableOrUnknown(
+              data['foto_ausente']!, _fotoAusenteMeta));
+    }
     return context;
   }
 
@@ -1465,6 +1482,8 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
       deletedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+      fotoAusente: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}foto_ausente'])!,
     );
   }
 
@@ -1487,6 +1506,10 @@ class Planta extends DataClass implements Insertable<Planta> {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
+
+  /// (Q2) true = fotoEspeciePath aponta para arquivo ausente no disco.
+  /// O PATH permanece (evidência do original); a marcação informa a UI.
+  final bool fotoAusente;
   const Planta(
       {required this.id,
       required this.uuid,
@@ -1499,7 +1522,8 @@ class Planta extends DataClass implements Insertable<Planta> {
       required this.synced,
       required this.createdAt,
       required this.updatedAt,
-      this.deletedAt});
+      this.deletedAt,
+      required this.fotoAusente});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1521,6 +1545,7 @@ class Planta extends DataClass implements Insertable<Planta> {
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
+    map['foto_ausente'] = Variable<bool>(fotoAusente);
     return map;
   }
 
@@ -1543,6 +1568,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
+      fotoAusente: Value(fotoAusente),
     );
   }
 
@@ -1562,6 +1588,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+      fotoAusente: serializer.fromJson<bool>(json['fotoAusente']),
     );
   }
   @override
@@ -1580,6 +1607,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+      'fotoAusente': serializer.toJson<bool>(fotoAusente),
     };
   }
 
@@ -1595,7 +1623,8 @@ class Planta extends DataClass implements Insertable<Planta> {
           bool? synced,
           DateTime? createdAt,
           DateTime? updatedAt,
-          Value<DateTime?> deletedAt = const Value.absent()}) =>
+          Value<DateTime?> deletedAt = const Value.absent(),
+          bool? fotoAusente}) =>
       Planta(
         id: id ?? this.id,
         uuid: uuid ?? this.uuid,
@@ -1611,6 +1640,7 @@ class Planta extends DataClass implements Insertable<Planta> {
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+        fotoAusente: fotoAusente ?? this.fotoAusente,
       );
   Planta copyWithCompanion(PlantasCompanion data) {
     return Planta(
@@ -1629,6 +1659,8 @@ class Planta extends DataClass implements Insertable<Planta> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+      fotoAusente:
+          data.fotoAusente.present ? data.fotoAusente.value : this.fotoAusente,
     );
   }
 
@@ -1646,7 +1678,8 @@ class Planta extends DataClass implements Insertable<Planta> {
           ..write('synced: $synced, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('deletedAt: $deletedAt')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('fotoAusente: $fotoAusente')
           ..write(')'))
         .toString();
   }
@@ -1664,7 +1697,8 @@ class Planta extends DataClass implements Insertable<Planta> {
       synced,
       createdAt,
       updatedAt,
-      deletedAt);
+      deletedAt,
+      fotoAusente);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1680,7 +1714,8 @@ class Planta extends DataClass implements Insertable<Planta> {
           other.synced == this.synced &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.deletedAt == this.deletedAt);
+          other.deletedAt == this.deletedAt &&
+          other.fotoAusente == this.fotoAusente);
 }
 
 class PlantasCompanion extends UpdateCompanion<Planta> {
@@ -1696,6 +1731,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
+  final Value<bool> fotoAusente;
   const PlantasCompanion({
     this.id = const Value.absent(),
     this.uuid = const Value.absent(),
@@ -1709,6 +1745,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
+    this.fotoAusente = const Value.absent(),
   });
   PlantasCompanion.insert({
     this.id = const Value.absent(),
@@ -1723,6 +1760,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
+    this.fotoAusente = const Value.absent(),
   })  : uuid = Value(uuid),
         parcelaUuid = Value(parcelaUuid),
         especie = Value(especie),
@@ -1741,6 +1779,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
+    Expression<bool>? fotoAusente,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1755,6 +1794,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
+      if (fotoAusente != null) 'foto_ausente': fotoAusente,
     });
   }
 
@@ -1770,7 +1810,8 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       Value<bool>? synced,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
-      Value<DateTime?>? deletedAt}) {
+      Value<DateTime?>? deletedAt,
+      Value<bool>? fotoAusente}) {
     return PlantasCompanion(
       id: id ?? this.id,
       uuid: uuid ?? this.uuid,
@@ -1784,6 +1825,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
+      fotoAusente: fotoAusente ?? this.fotoAusente,
     );
   }
 
@@ -1826,6 +1868,9 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
+    if (fotoAusente.present) {
+      map['foto_ausente'] = Variable<bool>(fotoAusente.value);
+    }
     return map;
   }
 
@@ -1843,7 +1888,8 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
           ..write('synced: $synced, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('deletedAt: $deletedAt')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('fotoAusente: $fotoAusente')
           ..write(')'))
         .toString();
   }
@@ -1909,9 +1955,27 @@ class $FotosParcelaTable extends FotosParcela
   late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
       'deleted_at', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _arquivoAusenteMeta =
+      const VerificationMeta('arquivoAusente');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, uuid, parcelaUuid, filePath, synced, createdAt, deletedAt];
+  late final GeneratedColumn<bool> arquivoAusente = GeneratedColumn<bool>(
+      'arquivo_ausente', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("arquivo_ausente" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        uuid,
+        parcelaUuid,
+        filePath,
+        synced,
+        createdAt,
+        deletedAt,
+        arquivoAusente
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1957,6 +2021,12 @@ class $FotosParcelaTable extends FotosParcela
       context.handle(_deletedAtMeta,
           deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
     }
+    if (data.containsKey('arquivo_ausente')) {
+      context.handle(
+          _arquivoAusenteMeta,
+          arquivoAusente.isAcceptableOrUnknown(
+              data['arquivo_ausente']!, _arquivoAusenteMeta));
+    }
     return context;
   }
 
@@ -1980,6 +2050,8 @@ class $FotosParcelaTable extends FotosParcela
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       deletedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+      arquivoAusente: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}arquivo_ausente'])!,
     );
   }
 
@@ -1998,6 +2070,10 @@ class FotosParcelaData extends DataClass
   final bool synced;
   final DateTime createdAt;
   final DateTime? deletedAt;
+
+  /// (Q2) true = arquivo não encontrado no disco. A LINHA permanece como
+  /// evidência de que a foto existiu — nunca deletar (auditoria).
+  final bool arquivoAusente;
   const FotosParcelaData(
       {required this.id,
       required this.uuid,
@@ -2005,7 +2081,8 @@ class FotosParcelaData extends DataClass
       required this.filePath,
       required this.synced,
       required this.createdAt,
-      this.deletedAt});
+      this.deletedAt,
+      required this.arquivoAusente});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2018,6 +2095,7 @@ class FotosParcelaData extends DataClass
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
+    map['arquivo_ausente'] = Variable<bool>(arquivoAusente);
     return map;
   }
 
@@ -2032,6 +2110,7 @@ class FotosParcelaData extends DataClass
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
+      arquivoAusente: Value(arquivoAusente),
     );
   }
 
@@ -2046,6 +2125,7 @@ class FotosParcelaData extends DataClass
       synced: serializer.fromJson<bool>(json['synced']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+      arquivoAusente: serializer.fromJson<bool>(json['arquivoAusente']),
     );
   }
   @override
@@ -2059,6 +2139,7 @@ class FotosParcelaData extends DataClass
       'synced': serializer.toJson<bool>(synced),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+      'arquivoAusente': serializer.toJson<bool>(arquivoAusente),
     };
   }
 
@@ -2069,7 +2150,8 @@ class FotosParcelaData extends DataClass
           String? filePath,
           bool? synced,
           DateTime? createdAt,
-          Value<DateTime?> deletedAt = const Value.absent()}) =>
+          Value<DateTime?> deletedAt = const Value.absent(),
+          bool? arquivoAusente}) =>
       FotosParcelaData(
         id: id ?? this.id,
         uuid: uuid ?? this.uuid,
@@ -2078,6 +2160,7 @@ class FotosParcelaData extends DataClass
         synced: synced ?? this.synced,
         createdAt: createdAt ?? this.createdAt,
         deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+        arquivoAusente: arquivoAusente ?? this.arquivoAusente,
       );
   FotosParcelaData copyWithCompanion(FotosParcelaCompanion data) {
     return FotosParcelaData(
@@ -2089,6 +2172,9 @@ class FotosParcelaData extends DataClass
       synced: data.synced.present ? data.synced.value : this.synced,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+      arquivoAusente: data.arquivoAusente.present
+          ? data.arquivoAusente.value
+          : this.arquivoAusente,
     );
   }
 
@@ -2101,14 +2187,15 @@ class FotosParcelaData extends DataClass
           ..write('filePath: $filePath, ')
           ..write('synced: $synced, ')
           ..write('createdAt: $createdAt, ')
-          ..write('deletedAt: $deletedAt')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('arquivoAusente: $arquivoAusente')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, uuid, parcelaUuid, filePath, synced, createdAt, deletedAt);
+  int get hashCode => Object.hash(id, uuid, parcelaUuid, filePath, synced,
+      createdAt, deletedAt, arquivoAusente);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2119,7 +2206,8 @@ class FotosParcelaData extends DataClass
           other.filePath == this.filePath &&
           other.synced == this.synced &&
           other.createdAt == this.createdAt &&
-          other.deletedAt == this.deletedAt);
+          other.deletedAt == this.deletedAt &&
+          other.arquivoAusente == this.arquivoAusente);
 }
 
 class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
@@ -2130,6 +2218,7 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
   final Value<bool> synced;
   final Value<DateTime> createdAt;
   final Value<DateTime?> deletedAt;
+  final Value<bool> arquivoAusente;
   const FotosParcelaCompanion({
     this.id = const Value.absent(),
     this.uuid = const Value.absent(),
@@ -2138,6 +2227,7 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
     this.synced = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
+    this.arquivoAusente = const Value.absent(),
   });
   FotosParcelaCompanion.insert({
     this.id = const Value.absent(),
@@ -2147,6 +2237,7 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
     this.synced = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
+    this.arquivoAusente = const Value.absent(),
   })  : uuid = Value(uuid),
         parcelaUuid = Value(parcelaUuid),
         filePath = Value(filePath);
@@ -2158,6 +2249,7 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
     Expression<bool>? synced,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? deletedAt,
+    Expression<bool>? arquivoAusente,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2167,6 +2259,7 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
       if (synced != null) 'synced': synced,
       if (createdAt != null) 'created_at': createdAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
+      if (arquivoAusente != null) 'arquivo_ausente': arquivoAusente,
     });
   }
 
@@ -2177,7 +2270,8 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
       Value<String>? filePath,
       Value<bool>? synced,
       Value<DateTime>? createdAt,
-      Value<DateTime?>? deletedAt}) {
+      Value<DateTime?>? deletedAt,
+      Value<bool>? arquivoAusente}) {
     return FotosParcelaCompanion(
       id: id ?? this.id,
       uuid: uuid ?? this.uuid,
@@ -2186,6 +2280,7 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
       synced: synced ?? this.synced,
       createdAt: createdAt ?? this.createdAt,
       deletedAt: deletedAt ?? this.deletedAt,
+      arquivoAusente: arquivoAusente ?? this.arquivoAusente,
     );
   }
 
@@ -2213,6 +2308,9 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
+    if (arquivoAusente.present) {
+      map['arquivo_ausente'] = Variable<bool>(arquivoAusente.value);
+    }
     return map;
   }
 
@@ -2225,7 +2323,8 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
           ..write('filePath: $filePath, ')
           ..write('synced: $synced, ')
           ..write('createdAt: $createdAt, ')
-          ..write('deletedAt: $deletedAt')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('arquivoAusente: $arquivoAusente')
           ..write(')'))
         .toString();
   }
@@ -3447,6 +3546,7 @@ typedef $$PlantasTableCreateCompanionBuilder = PlantasCompanion Function({
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
+  Value<bool> fotoAusente,
 });
 typedef $$PlantasTableUpdateCompanionBuilder = PlantasCompanion Function({
   Value<int> id,
@@ -3461,6 +3561,7 @@ typedef $$PlantasTableUpdateCompanionBuilder = PlantasCompanion Function({
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
+  Value<bool> fotoAusente,
 });
 
 final class $$PlantasTableReferences
@@ -3526,6 +3627,9 @@ class $$PlantasTableFilterComposer
   ColumnFilters<DateTime> get deletedAt => $composableBuilder(
       column: $table.deletedAt, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<bool> get fotoAusente => $composableBuilder(
+      column: $table.fotoAusente, builder: (column) => ColumnFilters(column));
+
   $$ParcelasTableFilterComposer get parcelaUuid {
     final $$ParcelasTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -3590,6 +3694,9 @@ class $$PlantasTableOrderingComposer
   ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
       column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get fotoAusente => $composableBuilder(
+      column: $table.fotoAusente, builder: (column) => ColumnOrderings(column));
+
   $$ParcelasTableOrderingComposer get parcelaUuid {
     final $$ParcelasTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -3653,6 +3760,9 @@ class $$PlantasTableAnnotationComposer
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
 
+  GeneratedColumn<bool> get fotoAusente => $composableBuilder(
+      column: $table.fotoAusente, builder: (column) => column);
+
   $$ParcelasTableAnnotationComposer get parcelaUuid {
     final $$ParcelasTableAnnotationComposer composer = $composerBuilder(
         composer: this,
@@ -3709,6 +3819,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
+            Value<bool> fotoAusente = const Value.absent(),
           }) =>
               PlantasCompanion(
             id: id,
@@ -3723,6 +3834,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt,
+            fotoAusente: fotoAusente,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -3737,6 +3849,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
+            Value<bool> fotoAusente = const Value.absent(),
           }) =>
               PlantasCompanion.insert(
             id: id,
@@ -3751,6 +3864,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt,
+            fotoAusente: fotoAusente,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>
@@ -3815,6 +3929,7 @@ typedef $$FotosParcelaTableCreateCompanionBuilder = FotosParcelaCompanion
   Value<bool> synced,
   Value<DateTime> createdAt,
   Value<DateTime?> deletedAt,
+  Value<bool> arquivoAusente,
 });
 typedef $$FotosParcelaTableUpdateCompanionBuilder = FotosParcelaCompanion
     Function({
@@ -3825,6 +3940,7 @@ typedef $$FotosParcelaTableUpdateCompanionBuilder = FotosParcelaCompanion
   Value<bool> synced,
   Value<DateTime> createdAt,
   Value<DateTime?> deletedAt,
+  Value<bool> arquivoAusente,
 });
 
 final class $$FotosParcelaTableReferences extends BaseReferences<_$AppDatabase,
@@ -3874,6 +3990,10 @@ class $$FotosParcelaTableFilterComposer
   ColumnFilters<DateTime> get deletedAt => $composableBuilder(
       column: $table.deletedAt, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<bool> get arquivoAusente => $composableBuilder(
+      column: $table.arquivoAusente,
+      builder: (column) => ColumnFilters(column));
+
   $$ParcelasTableFilterComposer get parcelaUuid {
     final $$ParcelasTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -3922,6 +4042,10 @@ class $$FotosParcelaTableOrderingComposer
   ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
       column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get arquivoAusente => $composableBuilder(
+      column: $table.arquivoAusente,
+      builder: (column) => ColumnOrderings(column));
+
   $$ParcelasTableOrderingComposer get parcelaUuid {
     final $$ParcelasTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -3969,6 +4093,9 @@ class $$FotosParcelaTableAnnotationComposer
 
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get arquivoAusente => $composableBuilder(
+      column: $table.arquivoAusente, builder: (column) => column);
 
   $$ParcelasTableAnnotationComposer get parcelaUuid {
     final $$ParcelasTableAnnotationComposer composer = $composerBuilder(
@@ -4021,6 +4148,7 @@ class $$FotosParcelaTableTableManager extends RootTableManager<
             Value<bool> synced = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
+            Value<bool> arquivoAusente = const Value.absent(),
           }) =>
               FotosParcelaCompanion(
             id: id,
@@ -4030,6 +4158,7 @@ class $$FotosParcelaTableTableManager extends RootTableManager<
             synced: synced,
             createdAt: createdAt,
             deletedAt: deletedAt,
+            arquivoAusente: arquivoAusente,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -4039,6 +4168,7 @@ class $$FotosParcelaTableTableManager extends RootTableManager<
             Value<bool> synced = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
+            Value<bool> arquivoAusente = const Value.absent(),
           }) =>
               FotosParcelaCompanion.insert(
             id: id,
@@ -4048,6 +4178,7 @@ class $$FotosParcelaTableTableManager extends RootTableManager<
             synced: synced,
             createdAt: createdAt,
             deletedAt: deletedAt,
+            arquivoAusente: arquivoAusente,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (
