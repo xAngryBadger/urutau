@@ -60,9 +60,20 @@ class ConflictInfo {
 
   static String normalizeValue(dynamic value) {
     if (value == null) return '';
-    if (value is double || value is int) {
-      // Normalize numbers to avoid precision issues (e.g., 1.5 vs 1.50)
-      return value.toDouble().toString();
+    if (value is int) {
+      // Ints have no fractional part: 42 must stay '42', not '42.0'.
+      // (Bug Q0: value.toDouble().toString() turned int 42 into '42.0', which
+      // made fromSyncComparison flag false conflicts on numeric fields.)
+      return value.toString();
+    }
+    if (value is double) {
+      // Whole doubles collapse to the int form so 42.0 == 42 across
+      // int/double JSON representations; fractions keep their value
+      // (e.g., 1.5 vs 1.50 both normalize to '1.5').
+      if (value == value.roundToDouble()) {
+        return value.toInt().toString();
+      }
+      return value.toString();
     }
     if (value is DateTime) {
       // Normalize dates to ISO8601
