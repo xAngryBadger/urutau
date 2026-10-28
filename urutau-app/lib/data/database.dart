@@ -6,6 +6,10 @@ import 'package:path/path.dart' as p;
 import '../services/backup_service.dart';
 import '../services/password_service.dart';
 import '../services/image_service.dart';
+// >>> t9 patch: inicio (imports ANTES do part — Dart exige essa ordem)
+import 'migrations/mrv_tables.dart';
+import 'migrations/mrv_migration.dart';
+// <<< t9 patch: fim
 
 part 'database.g.dart';
 
@@ -55,6 +59,27 @@ class Parcelas extends Table {
 
   BoolColumn get parcialmenteSincronizada =>
       boolean().withDefault(const Constant(false))();
+
+  // >>> t9 patch: inicio — MRV (v20)
+  // projeto/modalidade (D-02)
+  TextColumn get projetoId => text().nullable()();
+  // chave de negócio legível da parcela (RS-02). NAO é UNIQUE: o app permite
+  // parcela duplicada entre coletores e SINALIZA o conflito
+  // (findParcelaDuplicada). Índice único quebraria essa feature (Compat-UNIQUE).
+  TextColumn get parcelaIdText => text().nullable()();
+  // geo obrigatória (RC-10): {"tipo","coordenadas","crs","acuracia_m",
+  //                          "n_satelites","fix_em","fonte"}
+  TextColumn get geoJson => text().nullable()();
+  // unidade amostral (RS-01)
+  RealColumn get areaM2 => real().nullable()();
+  TextColumn get unidadeForma => text().nullable()(); // retangular|circular|quadrada
+  RealColumn get raioM => real().nullable()();
+  TextColumn get statusParcela =>
+      text().nullable().withDefault(const Constant('ativa'))();
+  TextColumn get marcador => text().nullable()(); // estaca/plaqueta (RS-02)
+  TextColumn get protocoloVersao => text().nullable()(); // SOP aplicado (RC-11)
+  TextColumn get substitutaDe => text().nullable()(); // rastreio de substituição (RS-06)
+  // <<< t9 patch: fim
 }
 
 class Plantas extends Table {
@@ -112,7 +137,18 @@ class AuditLog extends Table {
 // DATABASE
 // ============================================================
 
-@DriftDatabase(tables: [Usuarios, Parcelas, Plantas, FotosParcela, AuditLog])
+@DriftDatabase(tables: [
+  Usuarios, Parcelas, Plantas, FotosParcela, AuditLog,
+  // >>> t9 patch: inicio — MRV v20..v23
+  ProjetosMrv, PeriodosMonitoramento, Campanhas, DesenhoAmostral,
+  ProtocolosMedicao, AmostrasParcela,
+  Individuos, MedicoesIndividuo, PlantacaoUts, MedicoesPlantacao,
+  RestauracaoProjetos, RestauracaoUts, MedicoesRestauracao, CoberturasAmostra,
+  AtivosBrutos, Dispositivos, TrilhaAuditoria,
+  EspeciesCatalogo, EquacoesAlometricas, CalculosMrv, ResultadosAmostra,
+  Papeis, UsuarioPapeis, Incidentes, VerificacoesInternas, Competencias,
+  // <<< t9 patch: fim
+])
 class AppDatabase extends _$AppDatabase {
   AppDatabase._internal(super.e);
 
@@ -134,7 +170,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 24; // t9: MRV v20..v24, por cima da v19 (43a165e)
 
   @override
   MigrationStrategy get migration {
@@ -225,6 +261,24 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(fotosParcela, fotosParcela.arquivoAusente);
         await m.addColumn(plantas, plantas.fotoAusente);
       }
+      // >>> t9 patch: inicio — migracao MRV v20..v24
+      if (from < 20) {
+        await _mrvV20Ddl(m);
+        // dev-codigo: o hunk original chamava so v20. O backfill das colunas
+        // de parcela + indices + semente do protocolo SOP-MRV vive em
+        // MrvMigration.v19() (o patch a marcou "nunca chamar", mas o proprio
+        // teste mrv_migration_test.dart exige parcela_id_text/area_m2/geo_json
+        // e o SOP-MRV semeado). Roda DEPOIS do DDL (as colunas passam a
+        // existir) e ANTES de v20 (scaffold LEGADO depende das colunas).
+        await MrvMigration.v19(m);
+        await MrvMigration.v20(m);
+      }
+      if (from < 21) { await _mrvV21Ddl(m); await MrvMigration.v21(m); }
+      if (from < 22) { await _mrvV22Ddl(m); await MrvMigration.v22(m); }
+      if (from < 23) { await _mrvV23Ddl(m); await MrvMigration.v23(m); }
+      // v24 nao tem DDL: e o marco de depreciacao controlada. Nada e dropado.
+      if (from < 24) { await MrvMigration.v24(m); }
+      // <<< t9 patch: fim
   },
       beforeOpen: (details) async {
         await customStatement('PRAGMA journal_mode = WAL');
@@ -257,6 +311,63 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
         'CREATE INDEX IF NOT EXISTS idx_parcelas_sync_status ON parcelas(synced, pronta_para_sync, deleted_at)');
   }
+
+  // >>> t9 patch: inicio — DDL do modelo MRV (v20..v23)
+  // createTable/addColumn precisam das instancias geradas pelo build_runner,
+  // que so existem como campos desta classe. Por isso o DDL fica aqui, e o SQL
+  // puro (indices + backfill) fica em migrations/mrv_migration.dart.
+  // Nenhuma coluna nova NOT NULL sem default; nenhum drop.
+
+  Future<void> _mrvV20Ddl(Migrator m) async {
+    // 10 colunas de parcela — vieram para a v20 porque a v19 committed
+    // (43a165e) é so do Q2.
+    await m.addColumn(parcelas, parcelas.projetoId);
+    await m.addColumn(parcelas, parcelas.parcelaIdText);
+    await m.addColumn(parcelas, parcelas.geoJson);
+    await m.addColumn(parcelas, parcelas.areaM2);
+    await m.addColumn(parcelas, parcelas.unidadeForma);
+    await m.addColumn(parcelas, parcelas.raioM);
+    await m.addColumn(parcelas, parcelas.statusParcela);
+    await m.addColumn(parcelas, parcelas.marcador);
+    await m.addColumn(parcelas, parcelas.protocoloVersao);
+    await m.addColumn(parcelas, parcelas.substitutaDe);
+    await m.createTable(projetosMrv);
+    await m.createTable(periodosMonitoramento);
+    await m.createTable(campanhas);
+    await m.createTable(desenhoAmostral);
+    await m.createTable(protocolosMedicao);
+    await m.createTable(amostrasParcela);
+    await m.createTable(individuos);
+    await m.createTable(medicoesIndividuo);
+    await m.createTable(plantacaoUts);
+    await m.createTable(restauracaoProjetos);
+    await m.createTable(restauracaoUts);
+    await m.createTable(medicoesRestauracao);
+    await m.createTable(medicoesPlantacao);
+    await m.createTable(coberturasAmostra);
+  }
+
+  Future<void> _mrvV21Ddl(Migrator m) async {
+    await m.createTable(ativosBrutos);
+    await m.createTable(dispositivos);
+    await m.createTable(trilhaAuditoria);
+  }
+
+  Future<void> _mrvV22Ddl(Migrator m) async {
+    await m.createTable(especiesCatalogo);
+    await m.createTable(equacoesAlometricas);
+    await m.createTable(calculosMrv);
+    await m.createTable(resultadosAmostra);
+  }
+
+  Future<void> _mrvV23Ddl(Migrator m) async {
+    await m.createTable(papeis);
+    await m.createTable(usuarioPapeis);
+    await m.createTable(incidentes);
+    await m.createTable(verificacoesInternas);
+    await m.createTable(competencias);
+  }
+  // <<< t9 patch: fim
 
   /// Migra senhas armazenadas em plaintext para formato hash (SHA-256 + salt).
   /// Mantém compatibilidade: se já estiver no formato hash, não faz nada.
@@ -618,6 +729,20 @@ VGVG0069;UT04;0.0;1''';
           .write(PlantasCompanion(parcelaUuid: Value(newUuid)));
       await (update(fotosParcela)..where((t) => t.parcelaUuid.equals(oldUuid)))
           .write(FotosParcelaCompanion(parcelaUuid: Value(newUuid)));
+      // >>> t9 patch: inicio — cascade MRV (RS-02)
+      // Linhas MRV apontam para parcelas.uuid por texto; sem este cascade o
+      // remap (sync_service _syncParcela) as deixaria orfas de identidade.
+      await (update(individuos)..where((t) => t.parcelaUuid.equals(oldUuid)))
+          .write(IndividuosCompanion(parcelaUuid: Value(newUuid)));
+      await (update(amostrasParcela)..where((t) => t.parcelaUuid.equals(oldUuid)))
+          .write(AmostrasParcelaCompanion(parcelaUuid: Value(newUuid)));
+      // ativos_brutos: so os de escopo parcela (vinculo polimorfico)
+      await (update(ativosBrutos)
+            ..where((t) =>
+                t.entidadeTipo.equals('parcela') &
+                t.entidadeUuid.equals(oldUuid)))
+          .write(AtivosBrutosCompanion(entidadeUuid: Value(newUuid)));
+      // <<< t9 patch: fim
       await (update(parcelas)..where((t) => t.uuid.equals(oldUuid)))
           .write(ParcelasCompanion(uuid: Value(newUuid)));
     });
