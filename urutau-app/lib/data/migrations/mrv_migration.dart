@@ -124,7 +124,14 @@ class MrvMigration {
         "'fechada', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
 
     // 20.2 parcelas.projeto_id = 'LEGADO'.
-    "UPDATE parcelas SET projeto_id = 'LEGADO-PROJ-0000' WHERE projeto_id IS NULL",
+    // GUARD (t9): só atribui o placeholder enquanto LEGADO for o ÚNICO projeto.
+    // Premissa verificada no device (projetos_mrv = 1 registro) e provada em
+    // SQLite nos 3 cenários (sozinho preenche / com projeto real não suga /
+    // idempotente). Sem o guard, quando projetos reais nascerem, parcela
+    // legitimamente sem projeto seria sugada para o placeholder PARA SEMPRE —
+    // ver impl-migracao-drift.md §10.5.
+    "UPDATE parcelas SET projeto_id = 'LEGADO-PROJ-0000' "
+    "WHERE projeto_id IS NULL AND (SELECT COUNT(*) FROM projetos_mrv) = 1",
 
     // 20.3 Uma amostra por parcela que tenha plantas — INCLUSIVE soft-deletada.
     // Decisão explícita: o backfill é de EVIDÊNCIA, não de listagem. O app
