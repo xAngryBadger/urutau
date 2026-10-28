@@ -1627,35 +1627,39 @@ class SyncService extends ChangeNotifier {
           );
     });
 
-    // 2. Enviar as plantas desta parcela — rastreia falhas individualmente
-    // Primeiro, coleta IDs das plantas existentes no servidor para deletar ANTES de criar
-    final oldPlantaIds = <String>[];
-    try {
-      final existingPlantas = await _withRetry(
-        () => _pb!.collection('plantas').getFullList(
-              filter: 'parcela = "${record.id}"',
-            ),
-      );
-      oldPlantaIds.addAll(existingPlantas.map((r) => r.id));
-    } catch (e) {
-      debugPrint('Aviso: não foi possível buscar plantas existentes: $e');
-    }
-
-    // 3. Deleta plantas antigas do servidor ANTES de criar novas (idempotente)
-    for (final oldId in oldPlantaIds) {
-      try {
-        await _pb!.collection('plantas').delete(oldId);
-      } catch (_) {}
-    }
-
+    // 2. UPSERT versionado das plantas (Q3 motor Fase 2 — fim do delete+recreate)
+    // ANTES: coletava todas as plantas do servidor, DELETAVA todas e recriava.
+    // Se o create falhasse no meio, o servidor perdia plantas que existiam; a
+    // retry seguinte deletava até as já criadas. AGORA: upsert por
+    // (parcela, uuid_local), last-writer-wins por updated_at (política
+    // documentada: campo numérico/texto — o updated_at mais recente vence).
+    // Push normal NUNCA faz delete cego.
     final plantas = await _db.getPlantasByParcela(parcela.uuid);
     bool allPlantasOk = true;
     final List<String> plantaErrors = [];
 
+    // Índice do que está no servidor por uuid_local. Registros SEM uuid_local
+    // (legado pré-Fase-1) ficam fora do upsert por identidade — não são
+    // apagados (regra P-2: evidência sobrevive) e sua normalização é v25+.
+    final existentes = <String, RecordModel>{};
+    try {
+      final serverPlantas = await _withRetry(
+        () => _pb!.collection('plantas').getFullList(
+              filter: 'parcela = "${record.id}"',
+            ),
+      );
+      for (final r in serverPlantas) {
+        final u = r.data['uuid_local'];
+        if (u is String && u.isNotEmpty) existentes[u] = r;
+      }
+    } catch (e) {
+      debugPrint('Aviso: não foi possível buscar plantas existentes: $e');
+    }
+
     for (int i = 0; i < plantas.length; i++) {
       final planta = plantas[i];
       try {
-        // Enviar sempre números (0 quando "só categoria") para não exigir mudanças no servidor
+        final existente = existentes[planta.uuid];
         final plantaBody = <String, dynamic>{
           'parcela': record.id,
           'especie': planta.especie,
@@ -1663,6 +1667,9 @@ class SyncService extends ChangeNotifier {
           'dap_cm': planta.dapCm,
           'categoria': planta.categoria,
           'created_at': planta.createdAt.toIso8601String(),
+          // Fase 1: identidade + versão para o upsert
+          'uuid_local': planta.uuid,
+          'updated_at': planta.updatedAt.toIso8601String(),
         };
 
         // Pré-calcula caminho da foto para criar MultipartFile fresco a cada retry
@@ -1679,27 +1686,84 @@ class SyncService extends ChangeNotifier {
           }
         }
 
-        await _withRetry(() async {
-          final freshPlantaFiles = <http.MultipartFile>[];
-          if (plantaFotoPath != null) {
-            freshPlantaFiles.add(await http.MultipartFile.fromPath(
-              'foto_especie',
-              plantaFotoPath,
-              filename: plantaFotoName,
-            ));
+        RecordModel resultado;
+        if (existente == null) {
+          plantaBody['version'] = 1;
+          resultado = await _withRetry(() async {
+            final freshPlantaFiles = <http.MultipartFile>[];
+            if (plantaFotoPath != null) {
+              freshPlantaFiles.add(await http.MultipartFile.fromPath(
+                'foto_especie',
+                plantaFotoPath,
+                filename: plantaFotoName,
+              ));
+            }
+            return _pb!.collection('plantas').create(
+                  body: plantaBody,
+                  files: freshPlantaFiles,
+                );
+          });
+        } else {
+          // last-writer-wins por updated_at
+          final serverUpdated = DateTime.tryParse(
+              existente.data['updated_at']?.toString() ?? '');
+          final localNewer = serverUpdated == null ||
+              planta.updatedAt.isAfter(serverUpdated);
+          if (localNewer) {
+            plantaBody['version'] =
+                ((existente.data['version'] as num?)?.toInt() ?? 1) + 1;
+            resultado = await _withRetry(() async {
+              final freshPlantaFiles = <http.MultipartFile>[];
+              if (plantaFotoPath != null) {
+                freshPlantaFiles.add(await http.MultipartFile.fromPath(
+                  'foto_especie',
+                  plantaFotoPath,
+                  filename: plantaFotoName,
+                ));
+              }
+              return _pb!.collection('plantas').update(
+                    existente.id,
+                    body: plantaBody,
+                    files: freshPlantaFiles,
+                  );
+            });
+          } else {
+            // servidor mais novo: política last-writer-wins = servidor vence.
+            // Não sobrescreve; marca synced (cópia local é histórico) e loga —
+            // a reconciliação completa de plantas é o item 6 (pull).
+            debugPrint(
+                'Planta ${planta.uuid}: servidor mais novo, update ignorado');
+            resultado = existente;
           }
-          return _pb!.collection('plantas').create(
-                body: plantaBody,
-                files: freshPlantaFiles,
-              );
-        });
+        }
 
         await _db.marcarPlantaSynced(planta.uuid);
+        if (planta.serverPlantaId != resultado.id) {
+          await _db.atualizarServerPlantaId(planta.uuid, resultado.id);
+        }
       } catch (e) {
         allPlantasOk = false;
         plantaErrors.add('Planta ${planta.especie}: $e');
         debugPrint('Erro ao enviar planta ${planta.uuid}: $e');
       }
+    }
+
+    // Propaga deleções locais: planta no servidor (identificada por uuid_local)
+    // sem par local vivo é removida — deleção EXPLÍCITA por identidade, não o
+    // delete-all cego de antes. Legado sem uuid_local fica intacto (P-2).
+    try {
+      final vivas = plantas.map((p) => p.uuid).toSet();
+      for (final entry in existentes.entries) {
+        if (vivas.contains(entry.key)) continue;
+        try {
+          await _pb!.collection('plantas').delete(entry.value.id);
+          debugPrint('Planta ${entry.key}: deletada localmente, removida do servidor');
+        } catch (e) {
+          debugPrint('Aviso: falha ao propagar delete de ${entry.key}: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('Aviso: propagação de deletes falhou: $e');
     }
 
     // 4. Só marca tudo como synced se TODAS as plantas foram enviadas

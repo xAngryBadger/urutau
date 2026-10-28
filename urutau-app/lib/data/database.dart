@@ -1126,6 +1126,11 @@ VGVG0069;UT04;0.0;1''';
     return id;
   }
 
+  /// (Q3 motor Fase 2) Guarda a ponte local→servidor da planta após o upsert.
+  Future<int> atualizarServerPlantaId(String uuid, String serverId) =>
+      (update(plantas)..where((t) => t.uuid.equals(uuid)))
+          .write(PlantasCompanion(serverPlantaId: Value(serverId)));
+
   Future<int> deleteFotoParcela(String uuid) =>
       (delete(fotosParcela)..where((t) => t.uuid.equals(uuid))).go();
 
