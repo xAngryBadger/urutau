@@ -1098,8 +1098,24 @@ VGVG0069;UT04;0.0;1''';
                 t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull()))
           .watch();
 
-  Future<int> insertFotoParcela(FotosParcelaCompanion foto) =>
-      into(fotosParcela).insert(foto);
+  Future<int> insertFotoParcela(FotosParcelaCompanion foto) async {
+    final id = await into(fotosParcela).insert(foto);
+    // >>> t9 S2 (H4): foto nova nasce no catálogo de evidência
+    final uuid = foto.uuid.value;
+    final path = foto.filePath.value;
+    if (uuid != null && path != null) {
+      await registrarFotoCatalogo(
+        objetoUuid: uuid,
+        entidadeTipo: 'parcela',
+        entidadeUuid: foto.parcelaUuid.value ?? '',
+        caminhoOriginal: path,
+        // createdAt tem DEFAULT (currentDateAndTime): no companion pode estar
+        // ausente e .value lançaria — agora() é o mesmo instante do default.
+        capturadoEm: DateTime.now(),
+      );
+    }
+    return id;
+  }
 
   Future<int> deleteFotoParcela(String uuid) =>
       (delete(fotosParcela)..where((t) => t.uuid.equals(uuid))).go();
@@ -1338,18 +1354,185 @@ VGVG0069;UT04;0.0;1''';
   /// (Q2) Marca a foto da parcela como ausente (soft) — NUNCA deleta a linha.
   /// A evidência de que a foto existiu permanece no banco para auditoria.
   Future<void> cleanMissingFotoParcela(String uuid) async {
+    final foto = await (select(fotosParcela)
+          ..where((t) => t.uuid.equals(uuid)))
+        .getSingleOrNull();
+    if (foto == null) return;
+
     await (update(fotosParcela)..where((t) => t.uuid.equals(uuid)))
         .write(const FotosParcelaCompanion(arquivoAusente: Value(true)));
+
+    // >>> t9 S2: catalogo de evidencia
+    // uuid do ativo = 'legado-ativo-' || uuid da foto — MESMO esquema do
+    // backfill v21, para que a linha existente seja atualizada e não duplicada.
+    await _sincAtivosBrutos(
+      ativoUuid: 'legado-ativo-${foto.uuid}',
+      entidadeTipo: 'parcela',
+      // entidade_uuid é a PARCELA, não a foto — é assim que o backfill v21
+      // gravou, e misturar os dois critérios duplicaria a linha.
+      entidadeUuid: foto.parcelaUuid,
+      caminhoOriginal: foto.filePath,
+      capturadoEm: foto.createdAt,
+      status: 'ausente',
+    );
+    // <<< t9 S2: fim
   }
 
   /// (Q2) Marca a foto da planta como ausente (soft) — MANTÉM fotoEspeciePath
   /// (evidência do caminho original); apenas sinaliza a ausência.
   Future<void> cleanMissingFotoPlanta(String uuid) async {
+    final planta = await (select(plantas)
+          ..where((t) => t.uuid.equals(uuid)))
+        .getSingleOrNull();
+    if (planta == null) return;
+
     await (update(plantas)..where((t) => t.uuid.equals(uuid)))
         .write(PlantasCompanion(
             fotoAusente: const Value(true),
             updatedAt: Value(DateTime.now())));
+
+    // >>> t9 S2: catalogo de evidencia
+    // Decisão D-1 (ids-e-momentos.md §3.2): no caminho AO VIVO o tipo é
+    // 'planta' e o entidade_uuid é o uuid da PLANTA — não o 'legado-med-'
+    // inventado pelo backfill, que é artefato de migração.
+    // O uuid do ativo mantém o prefixo 'legado-ativo-' só para alcançar a
+    // linha já backfillada desta mesma planta; linhas novas passam a usar
+    // 'ativo-' via _registrarFotoPresente (H3).
+    await _sincAtivosBrutos(
+      ativoUuid: 'legado-ativo-${planta.uuid}',
+      entidadeTipo: 'planta',
+      entidadeUuid: planta.uuid,
+      caminhoOriginal: planta.fotoEspeciePath,
+      capturadoEm: planta.createdAt,
+      status: 'ausente',
+    );
+    // <<< t9 S2: fim
   }
+
+  // >>> t9 S2: inicio — sincronia do catálogo de evidência
+  /// Sincroniza ativos_brutos com o estado do arquivo em disco.
+  ///
+  /// NUNCA deleta linha: cria se não existir (foto nascida DEPOIS da migração
+  /// v21) e atualiza se existir (linha backfillada). É o ponto onde o detector
+  /// (checkAndFixOrphanedPhotos) e o catálogo finalmente se encontram.
+  ///
+  /// sha256 fica NULL de propósito: calcular hash é o S3, que depende do gate
+  /// Q4. Não inventar hash.
+  Future<void> _sincAtivosBrutos({
+    required String ativoUuid,
+    required String entidadeTipo,
+    required String entidadeUuid,
+    required String? caminhoOriginal,
+    required DateTime? capturadoEm,
+    required String status, // 'pendente_hash' | 'ausente' | 'presente'
+  }) async {
+    final existente = await (select(ativosBrutos)
+          ..where((t) => t.uuid.equals(ativoUuid)))
+        .getSingleOrNull();
+
+    if (existente == null) {
+      await into(ativosBrutos).insert(AtivosBrutosCompanion.insert(
+        // required = valor cru no Companion.insert (Value é para update/nullable)
+        uuid: ativoUuid,
+        entidadeTipo: entidadeTipo,
+        entidadeUuid: entidadeUuid,
+        papel: const Value('bruto'),
+        mime: const Value('image/jpeg'),
+        caminhoOriginal: Value(caminhoOriginal),
+        capturadoEm: Value(capturadoEm),
+        status: Value(status),
+        sha256Verificado: const Value(false),
+      ));
+    } else {
+      await (update(ativosBrutos)..where((t) => t.uuid.equals(ativoUuid)))
+          .write(AtivosBrutosCompanion(
+        status: Value(status),
+        caminhoOriginal: Value(caminhoOriginal),
+        updatedAt: Value(DateTime.now()),
+      ));
+    }
+  }
+
+  /// Caminho "foto nova" (G1): registra a linha no catálogo com
+  /// status='pendente_hash' (arquivo existe; hash é o S3).
+  ///
+  /// ADAPTAÇÃO AO D-1 (aplicador, dono do H4): o patch sugere prefixo 'ativo-'
+  /// para o caminho ao vivo, mas 'legado-ativo-<uuid>' é a identidade que o
+  /// backfill v21 gravou. Usar prefixo diferente criaria uma SEGUNDA linha para
+  /// objetos que já existiam na migração (foto backfillada / planta com foto) —
+  /// duplicata silenciosa. Aqui o prefixo é único: atualiza a linha existente
+  /// e cria só quando não há. O espírito do D-1 (não inventar 'legado-med-'
+  /// no caminho ao vivo) está mantido: entidade_tipo/entidade_uuid novos usam
+  /// 'planta' + plantas.uuid; linhas legadas conservam sua identidade.
+  Future<void> registrarFotoCatalogo({
+    required String objetoUuid,
+    required String entidadeTipo, // 'parcela' | 'planta'
+    required String entidadeUuid,
+    required String? caminhoOriginal,
+    required DateTime? capturadoEm,
+  }) async {
+    await _sincAtivosBrutos(
+      ativoUuid: 'legado-ativo-$objetoUuid',
+      entidadeTipo: entidadeTipo,
+      entidadeUuid: entidadeUuid,
+      caminhoOriginal: caminhoOriginal,
+      capturadoEm: capturadoEm,
+      status: 'pendente_hash',
+    );
+  }
+
+  // >>> t9 S2: inicio — arquivo reapareceu (ex.: restore de backup)
+  /// HOJE as flags são write-once: nada as desliga. Se o usuário restaurar um
+  /// backup e os arquivos voltarem, a linha continua marcada como ausente para
+  /// sempre — e o catálogo junto. Estes dois métodos fecham esse buraco.
+  ///
+  /// O guard `WHERE <flag> = true` é o que torna barato: no estado normal zero
+  /// linhas casam, e o UPDATE não faz nada.
+
+  Future<void> restaurarFotoParcela(String uuid) async {
+    final foto = await (select(fotosParcela)
+          ..where((t) => t.uuid.equals(uuid)))
+        .getSingleOrNull();
+    if (foto == null || !foto.arquivoAusente) return;
+
+    final linhas = await (update(fotosParcela)
+          ..where((t) => t.uuid.equals(uuid) & t.arquivoAusente.equals(true)))
+        .write(const FotosParcelaCompanion(arquivoAusente: Value(false)));
+    if (linhas == 0) return;
+
+    await _sincAtivosBrutos(
+      ativoUuid: 'legado-ativo-${foto.uuid}',
+      entidadeTipo: 'parcela',
+      entidadeUuid: foto.parcelaUuid,
+      caminhoOriginal: foto.filePath,
+      capturadoEm: foto.createdAt,
+      status: 'presente',
+    );
+  }
+
+  Future<void> restaurarFotoPlanta(String uuid) async {
+    final planta = await (select(plantas)
+          ..where((t) => t.uuid.equals(uuid)))
+        .getSingleOrNull();
+    if (planta == null || !planta.fotoAusente) return;
+
+    final linhas = await (update(plantas)
+          ..where((t) => t.uuid.equals(uuid) & t.fotoAusente.equals(true)))
+        .write(PlantasCompanion(
+            fotoAusente: const Value(false),
+            updatedAt: Value(DateTime.now())));
+    if (linhas == 0) return;
+
+    await _sincAtivosBrutos(
+      ativoUuid: 'legado-ativo-${planta.uuid}',
+      entidadeTipo: 'planta',
+      entidadeUuid: planta.uuid,
+      caminhoOriginal: planta.fotoEspeciePath,
+      capturadoEm: planta.createdAt,
+      status: 'presente',
+    );
+  }
+  // <<< t9 S2: fim
 
   /// Verifica e corrige referências órfãs de fotos no banco de dados.
   /// Retorna (orphanedCount, unreferencedFilesCount)
@@ -1378,6 +1561,14 @@ VGVG0069;UT04;0.0;1''';
           await cleanMissingFotoPlanta(entry.uuid);
         }
         markedCount++;
+      } else {
+        // >>> t9 S2: inicio — arquivo voltou (restore de backup etc.)
+        if (entry.source == 'foto') {
+          await restaurarFotoParcela(entry.uuid);
+        } else {
+          await restaurarFotoPlanta(entry.uuid);
+        }
+        // <<< t9 S2: fim
       }
     }
 

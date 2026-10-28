@@ -730,6 +730,17 @@ Semantics(
     await _db.logAudit('create', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'created');
   }
 
+  // >>> t9 S2 (H4): a foto desta planta nasce no catálogo de evidência
+  if (_fotoPath != null) {
+    await _db.registrarFotoCatalogo(
+      objetoUuid: _currentUuid!,
+      entidadeTipo: 'planta',
+      entidadeUuid: _currentUuid!,
+      caminhoOriginal: _fotoPath!,
+      capturadoEm: DateTime.now(),
+    );
+  }
+
 final planta = Planta(
   id: 0,
   uuid: _currentUuid!,
