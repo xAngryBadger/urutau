@@ -536,8 +536,18 @@ class SyncService extends ChangeNotifier {
     return SecureStorageService.read(SecureStorageService.keyCurrentPassword);
   }
 
+  /// Espera o sync anterior terminar.
+  ///
+  /// Q3 item 2: engole a falha do sync ANTERIOR. Antes, `completeError` no
+  /// catch do syncAll transferia a exceção para todo sync que chegasse depois
+  /// e ficasse na fila — o "envenenamento" — e o sync novo falhava sem nem ter
+  /// começado. Falha do sync anterior é problema dele; o próximo começa limpo.
   Future<void> _waitForSyncLock() async {
-    await _syncLock?.future;
+    try {
+      await _syncLock?.future;
+    } catch (_) {
+      // falha do sync anterior não invalida o próximo
+    }
   }
 
   /// Sincroniza todas as parcelas pendentes com o servidor.
@@ -690,9 +700,13 @@ class SyncService extends ChangeNotifier {
       _lastError =
           'Falha na sincronização. Verifique a conexão e tente novamente.';
       debugPrint('Erro na sincronização: $e');
-      _syncLock!.completeError(e);
-      _syncLock = null;
-      rethrow;
+      // Q3 item 2: completa o lock SEM erro — o waiter pega o estado limpo e
+      // o erro já está em _lastError para a UI mostrar. Sem rethrow: quem
+      // chama não precisa (e antes não tinha) try/catch em 4 telas.
+      if (_syncLock != null) {
+        _syncLock!.complete();
+        _syncLock = null;
+      }
     } finally {
       _isSyncing = false;
       _syncProgress = 0.0;
@@ -1340,9 +1354,12 @@ class SyncService extends ChangeNotifier {
         debugPrint('Clean compressed photos failed (non-critical): $e');
       }
     } catch (e) {
-      _syncLock!.completeError(e);
-      _syncLock = null;
-      rethrow;
+      // Q3 item 2: mesma semântica do syncAll — completa limpo e sem rethrow.
+      debugPrint('Erro na sincronização selecionada: $e');
+      if (_syncLock != null) {
+        _syncLock!.complete();
+        _syncLock = null;
+      }
     } finally {
       _isSyncing = false;
       if (_syncLock != null) {
@@ -1475,6 +1492,12 @@ class SyncService extends ChangeNotifier {
 
   /// Sincroniza uma parcela pelo UUID.
   /// Público para uso em operações em lote.
+  ///
+  /// Q3 item 3: antes este caminho NÃO tinha os guards do canônico — sem
+  /// lock (dois syncs podiam correr concorrentes na mesma parcela; com o
+  /// delete+recreate do motor de plantas, isso é corrupção de servidor) e sem
+  /// a checagem de modo offline forçado que syncAll/syncSelected têm. Continua
+  /// lançando exceção nas falhas — os callers em lote contam falha por parcela.
   Future<void> syncSingleParcela(String parcelaUuid) async {
     final parcela = await _db.getParcelaByUuid(parcelaUuid);
     if (parcela == null) {
@@ -1485,11 +1508,25 @@ class SyncService extends ChangeNotifier {
       throw Exception('Servidor não configurado');
     }
 
+    if (await isForcedOffline) {
+      throw Exception('Sync bloqueada: modo offline forçado ativo.');
+    }
+
     if (!await hasInternet()) {
       throw Exception('Sem conexão com a internet');
     }
 
-    await _syncParcela(parcela);
+    // Mesma serialização do syncAll: espera o sync em curso e ocupa o lock.
+    await _waitForSyncLock();
+    _syncLock = Completer<void>();
+    try {
+      await _syncParcela(parcela);
+    } finally {
+      if (_syncLock != null) {
+        _syncLock!.complete();
+        _syncLock = null;
+      }
+    }
   }
 
   /// Apaga uma parcela (soft delete local + tentativa no servidor).

@@ -650,19 +650,32 @@ ScaffoldMessenger.of(context).showSnackBar(
               ),
             ),
           );
-          final result = await syncService.syncSelected(
-            uuids: selected,
-            conflictKeys: conflictKeys,
-            userId: myId,
-          );
+          // >>> Q3 item 1: o sync NUNCA deixa o diálogo "A enviar..." preso.
+          // Antes: await sem try + pop só no sucesso; em exceção o diálogo
+          // (barrierDismissible: false) ficava para sempre na tela.
+          ({int sent, int conflictsBlocked})? result;
+          try {
+            result = await syncService.syncSelected(
+              uuids: selected,
+              conflictKeys: conflictKeys,
+              userId: myId,
+            );
+          } catch (e) {
+            debugPrint('sync_selected: falhou com exceção: $e');
+          } finally {
+            if (mounted) {
+              Navigator.of(context).pop();
+            }
+          }
           if (!mounted) return;
-          Navigator.of(context).pop();
           await _refreshNivel();
           if (!mounted) return;
-          String msg = '${result.sent} parcela(s) enviada(s).';
-          if (result.conflictsBlocked > 0) {
+          final r = result;
+          if (r == null) return; // falhou: diálogo fechado, erro já logado
+          String msg = '${r.sent} parcela(s) enviada(s).';
+          if (r.conflictsBlocked > 0) {
             msg +=
-                ' ${result.conflictsBlocked} em conflito no servidor (não enviadas).';
+                ' ${r.conflictsBlocked} em conflito no servidor (não enviadas).';
           }
           if (conflitoMessages.isNotEmpty && selected.length < pending.length) {
             msg += ' Parcelas em conflito ficam marcadas com aviso.';
@@ -670,7 +683,7 @@ ScaffoldMessenger.of(context).showSnackBar(
 ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(msg),
-            backgroundColor: result.sent > 0 ? Colors.green : Colors.orange,
+            backgroundColor: r.sent > 0 ? Colors.green : Colors.orange,
             duration: const Duration(seconds: 3),
           ),
         );

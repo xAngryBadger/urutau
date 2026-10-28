@@ -882,11 +882,19 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    await syncService.syncAll();
-
-    // Fecha diálogo
-    if (mounted) {
-      Navigator.of(context).pop();
+    // >>> Q3 item 1: o sync NUNCA deixa o diálogo de progresso preso.
+    // Antes: `await syncService.syncAll()` sem try — syncAll faz rethrow e o
+    // pop só acontecia no caminho de sucesso; em erro o app ficava na tela
+    // "Sincronizando..." para sempre (barrierDismissible: false).
+    try {
+      await syncService.syncAll();
+    } catch (e) {
+      debugPrint('sync_all: falhou com exceção: $e');
+    } finally {
+      // Fecha diálogo — sempre, com ou sem erro
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     }
 
     if (mounted) {
