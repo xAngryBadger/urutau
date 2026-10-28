@@ -1,5 +1,22 @@
 /// <reference path="../pb_data/types.d.ts" />
 // ============================================================
+// !!! NAO APLICAR — BLOQUEIO REAL (E2E 2026-10-28) !!!
+// A regra plantas usa parcela.userId, mas plantas.parcela é campo TEXT
+// (type=text, sem collectionId) nos DOIS bancos (dev e pacote).
+// Resultado medido no boot com --migrationsDir:
+//   'Invalid rule. invalid left operand "parcela.userId" - field "parcela"
+//    is not a valid relation' — e o servidor NAO SObe (automigrate aborta).
+//
+// Correções possíveis (decisão do capitão/Badger):
+//   a) migration convertendo plantas.parcela text -> relation (remove+add);
+//      preserva o desenho owner||livre||admin; risco: mudança de campo
+//   b) campo userId em plantas + regra espelhada de parcelas; exige o app
+//      popular plantas.userId no push (mexe no motor)
+//   c) plantas update/delete só-admin: QUEBRA o upsert do coletor
+//      (Fase 2 atualiza planta já sincronizada) — descartada
+//====================================================
+/// <reference path="../pb_data/types.d.ts" />
+// ============================================================
 // 1778300000_plantas_rules_owner_or_admin.js
 //
 // Q4 (t14, dev-mrv) — fechar as regras do PocketBase ANTES da trilha de auditoria.
