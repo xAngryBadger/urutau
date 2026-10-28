@@ -178,6 +178,9 @@ class AppDatabase extends _$AppDatabase {
       onCreate: (Migrator m) async {
         await m.createAll();
         await _createIndexes(m);
+        // >>> t9: base MRV também em banco NOVO (índices + scaffold + SOP-MRV).
+        // DEPOIS de _createIndexes: o SQL cria índice, a tabela já precisa existir.
+        await MrvMigration.aplicarBase((sql) => m.database.customStatement(sql));
       },
       onUpgrade: (Migrator m, int from, int to) async {
         if (from < 2) {
@@ -286,6 +289,10 @@ class AppDatabase extends _$AppDatabase {
         await customStatement('PRAGMA synchronous = NORMAL');
         await _garantirAdminSeNecessario();
         await _seedCatalogoEstatico();
+        // >>> t9: reparo idempotente — cobre as parcelas do seed (face 1).
+        // DEPOIS do seed: se viesse antes, as parcelas nasceriam depois do
+        // backfill e ficariam sem projeto_id/parcela_id_text.
+        await MrvMigration.aplicarBase(customStatement);
         await purgarAuditLog();
       },
     );
