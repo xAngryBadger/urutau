@@ -64,6 +64,14 @@ class Parcelas extends Table {
       boolean().withDefault(const Constant(false))();
 
   // >>> t9 patch: inicio — MRV (v20)
+  // >>> t16: inicio — estado do arquivo local (D-1)
+  /// Estado do arquivo local desta foto: capturado | enviado_verificado |
+  /// comprimido_local | limpo. Transição para 'limpo' NUNCA é automática.
+  TextColumn get arquivoEstado =>
+      text().nullable().withDefault(const Constant('capturado'))();
+  /// Quando o upload foi confirmado (hash conferido). Base do estado.
+  DateTimeColumn get enviadoVerificadoEm => dateTime().nullable()();
+  // <<< t16: fim
   // projeto/modalidade (D-02)
   TextColumn get projetoId => text().nullable()();
   // chave de negócio legível da parcela (RS-02). NAO é UNIQUE: o app permite
@@ -112,12 +120,19 @@ class Plantas extends Table {
 
   // >>> t14: inicio — v26 parcelaServerId
   /// (v26) id do registro parcela NO SERVIDOR (cópia local do campo texto do
-  /// PB, que passa a relation `parcela_rel` na migração 1778600000).
+  /// PB, que passa a relation `parcela_rel` na migração 1778250001).
   ///
   /// Derivado de parcelaUuid: 'pb-<serverId>' -> '<serverId>'.
   /// NULL = não sincronizado ainda ou não mapeável — NUNCA inventado.
   TextColumn get parcelaServerId => text().nullable()();
   // <<< t14: fim
+
+  // >>> t16: inicio — estado do arquivo local (D-1)
+  /// Mesma máquina de estados de FotosParcela.arquivoEstado.
+  TextColumn get arquivoEstado =>
+      text().nullable().withDefault(const Constant('capturado'))();
+  DateTimeColumn get enviadoVerificadoEm => dateTime().nullable()();
+  // <<< t16: fim
 }
 
 class FotosParcela extends Table {
@@ -133,6 +148,15 @@ class FotosParcela extends Table {
   /// evidência de que a foto existiu — nunca deletar (auditoria).
   BoolColumn get arquivoAusente =>
       boolean().withDefault(const Constant(false))();
+
+  // >>> t16: inicio — estado do arquivo local (D-1)
+  /// Estado do arquivo local desta foto: capturado | enviado_verificado |
+  /// comprimido_local | limpo. Transição para 'limpo' NUNCA é automática.
+  TextColumn get arquivoEstado =>
+      text().nullable().withDefault(const Constant('capturado'))();
+  /// Quando o upload foi confirmado (hash conferido). Base do estado.
+  DateTimeColumn get enviadoVerificadoEm => dateTime().nullable()();
+  // <<< t16: fim
 }
 
 /// Tabela de auditoria — registra operações críticas no sistema.
@@ -187,7 +211,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 26; // v25 + t14 v26 (parcelaServerId)
+  int get schemaVersion => 27; // v26 + t16 D-1 (arquivo_estado)
 
   @override
   MigrationStrategy get migration {
@@ -297,6 +321,22 @@ class AppDatabase extends _$AppDatabase {
           'WHERE parcela_server_id IS NULL');
       }
       // <<< t14: fim
+      // >>> t16: inicio — v27 (D-1: estado do arquivo local)
+      if (from < 27) {
+        await m.addColumn(plantas, plantas.arquivoEstado);
+        await m.addColumn(plantas, plantas.enviadoVerificadoEm);
+        await m.addColumn(fotosParcela, fotosParcela.arquivoEstado);
+        await m.addColumn(fotosParcela, fotosParcela.enviadoVerificadoEm);
+        // Só o que JÁ estava sincronizado nasce enviado_verificado; o resto
+        // fica 'capturado' (default). Nunca afirmar verificação sem hash.
+        await m.database.customStatement(
+          "UPDATE plantas SET arquivo_estado = 'enviado_verificado' "
+          'WHERE synced = 1 AND arquivo_estado = \'capturado\'');
+        await m.database.customStatement(
+          'UPDATE fotos_parcela SET arquivo_estado = \'enviado_verificado\' '
+          "WHERE synced = 1 AND arquivo_estado = 'capturado'");
+      }
+      // <<< t16: fim
       // >>> t9 patch: inicio — migracao MRV v20..v24
       if (from < 20) {
         await _mrvV20Ddl(m);
@@ -1167,6 +1207,38 @@ VGVG0069;UT04;0.0;1''';
   Future<int> atualizarServerPlantaId(String uuid, String serverId) =>
       (update(plantas)..where((t) => t.uuid.equals(uuid)))
           .write(PlantasCompanion(serverPlantaId: Value(serverId)));
+
+  // >>> t16 D-1: inicio — máquina de estados do arquivo local
+  /// (D-1 H3) Marca fotos/plantas como ENVIADO_VERIFICADO — o sync MARCA,
+  /// não apaga. Idempotente: quem já está marcado não volta atrás.
+  Future<void> marcarFotosEnviadasVerificadas(String parcelaUuid) async {
+    final agora = DateTime.now();
+    await (update(fotosParcela)
+          ..where((t) =>
+              t.parcelaUuid.equals(parcelaUuid) &
+              t.arquivoEstado.equals('capturado')))
+        .write(FotosParcelaCompanion(
+      arquivoEstado: const Value('enviado_verificado'),
+      enviadoVerificadoEm: Value(agora),
+    ));
+    await (update(plantas)
+          ..where((t) =>
+              t.parcelaUuid.equals(parcelaUuid) &
+              t.arquivoEstado.equals('capturado')))
+        .write(PlantasCompanion(
+      arquivoEstado: const Value('enviado_verificado'),
+      enviadoVerificadoEm: Value(agora),
+    ));
+  }
+
+  /// (D-1 H4) Estado do arquivo local de uma foto (para o guard da UI).
+  Future<String?> estadoArquivoFoto(String fotoUuid) async {
+    final f = await (select(fotosParcela)
+          ..where((t) => t.uuid.equals(fotoUuid)))
+        .getSingleOrNull();
+    return f?.arquivoEstado;
+  }
+  // <<< t16 D-1: fim
 
   // >>> t14 S3: inicio — catálogo de evidência (hash)
   /// UUID local para incidentes (mesmo formato das demais tabelas).

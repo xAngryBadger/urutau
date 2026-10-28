@@ -142,6 +142,38 @@ class ImageService {
     }
   }
 
+  /// (D-1 H4) Remove uma foto SÓ com confirmação de estado.
+  ///
+  /// Regra dura: só apaga se o estado for `enviado_verificado` ou
+  /// `comprimido_local`. Com `capturado`, RETORNA FALSE e não apaga — a UI
+  /// explica a recusa; o operador pode insistir por um segundo caminho
+  /// explícito, nunca por silêncio.
+  ///
+  /// [onLimpo] é chamado após a remoção para registrar o evento
+  /// `arquivo_local_limpo` (auditoria) — não apaga sem rasto.
+  static Future<bool> limparFotoConfirmada({
+    required String path,
+    required String arquivoEstado,
+    Future<void> Function()? onLimpo,
+  }) async {
+    if (kIsWeb) return false;
+    if (arquivoEstado != 'enviado_verificado' &&
+        arquivoEstado != 'comprimido_local') {
+      return false; // 'capturado' (ou desconhecido) nunca é apagado
+    }
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        await onLimpo?.call();
+      }
+      return true;
+    } catch (e) {
+      debugPrint('limparFotoConfirmada: falha ao remover $path: $e');
+      return false;
+    }
+  }
+
   /// Remove um arquivo de foto local.
   static Future<void> deletePhoto(String path) async {
     if (kIsWeb) return; // Web: nada a deletar

@@ -2038,11 +2038,31 @@ ScaffoldMessenger.of(context).showSnackBar(
     if (confirm != true) return;
     for (final planta in await _db.getPlantasByParcela(p.uuid)) {
       if (planta.fotoEspeciePath != null) {
-        await ImageService.deletePhoto(planta.fotoEspeciePath!);
+        // >>> t16 D-1 (H5): guard por estado + evento de trilha
+        await ImageService.limparFotoConfirmada(
+          path: planta.fotoEspeciePath!,
+          arquivoEstado: planta.arquivoEstado ?? 'capturado',
+          onLimpo: () => _db.logAudit(
+            'arquivo_local_limpo',
+            entityType: 'planta',
+            entityUuid: planta.uuid,
+          ),
+        );
+        // <<< t16 D-1: fim
       }
     }
     for (final foto in await _db.getFotosByParcela(p.uuid)) {
-      await ImageService.deletePhoto(foto.filePath);
+      // >>> t16 D-1 (H5): guard por estado + evento de trilha
+      await ImageService.limparFotoConfirmada(
+        path: foto.filePath,
+        arquivoEstado: foto.arquivoEstado ?? 'capturado',
+        onLimpo: () => _db.logAudit(
+          'arquivo_local_limpo',
+          entityType: 'foto',
+          entityUuid: foto.uuid,
+        ),
+      );
+      // <<< t16 D-1: fim
     }
     await _db.deleteAllPlantasByParcela(p.uuid);
     await _db.deleteAllFotosByParcela(p.uuid);
@@ -2116,11 +2136,27 @@ ScaffoldMessenger.of(context).showSnackBar(
     }
     for (final planta in await _db.getPlantasByParcela(p.uuid)) {
       if (planta.fotoEspeciePath != null) {
-        await ImageService.deletePhoto(planta.fotoEspeciePath!);
+        await ImageService.limparFotoConfirmada(
+          path: planta.fotoEspeciePath!,
+          arquivoEstado: planta.arquivoEstado ?? 'capturado',
+          onLimpo: () => _db.logAudit(
+            'arquivo_local_limpo',
+            entityType: 'planta',
+            entityUuid: planta.uuid,
+          ),
+        );
       }
     }
     for (final foto in await _db.getFotosByParcela(p.uuid)) {
-      await ImageService.deletePhoto(foto.filePath);
+      await ImageService.limparFotoConfirmada(
+        path: foto.filePath,
+        arquivoEstado: foto.arquivoEstado ?? 'capturado',
+        onLimpo: () => _db.logAudit(
+          'arquivo_local_limpo',
+          entityType: 'foto',
+          entityUuid: foto.uuid,
+        ),
+      );
     }
     await _db.deleteAllPlantasByParcela(p.uuid);
     await _db.deleteAllFotosByParcela(p.uuid);

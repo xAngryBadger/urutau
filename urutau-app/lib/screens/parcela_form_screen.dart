@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async'; // t16 D-1: unawaited
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' as drift;
@@ -366,7 +367,16 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             if (_isEditing && _currentUuid != null) {
               await _limparDadosParcela(_currentUuid!);
             }
-            await ImageService.deletePhotos(_novasFotosPaths);
+            // >>> t16 D-1 (H5): descarte da sessão — path ainda 'capturado',
+            // nunca subiu: limpar é seguro (não há evidência a perder), mas
+            // passa pelo guard por uniformidade.
+            for (final path in _novasFotosPaths) {
+              await ImageService.limparFotoConfirmada(
+                path: path,
+                arquivoEstado: 'capturado',
+              );
+            }
+            // <<< t16 D-1: fim
             if (mounted) {
               setState(() {
                 _propriedadeController.clear();
@@ -996,7 +1006,15 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
 
     if (confirm == true) {
       if (planta.fotoEspeciePath != null) {
-        await ImageService.deletePhoto(planta.fotoEspeciePath!);
+        await ImageService.limparFotoConfirmada(
+          path: planta.fotoEspeciePath!,
+          arquivoEstado: planta.arquivoEstado ?? 'capturado',
+          onLimpo: () => _db.logAudit(
+            'arquivo_local_limpo',
+            entityType: 'planta',
+            entityUuid: planta.uuid,
+          ),
+        );
       }
       await _db.deletePlanta(planta.uuid);
       // Audit log for planta deletion
@@ -1112,7 +1130,13 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     setState(() {
       final foto = _fotos.removeAt(index);
       _db.deleteFotoParcela(foto.uuid);
-      ImageService.deletePhoto(foto.filePath);
+      // >>> t16 D-1 (H5): guard — 'capturado' não sobe; remoção local de
+      // foto ainda não verificada é permitida (sem evidência no servidor).
+      unawaited(ImageService.limparFotoConfirmada(
+        path: foto.filePath,
+        arquivoEstado: 'capturado',
+      ));
+      // <<< t16 D-1: fim
     });
   }
 
@@ -1308,7 +1332,15 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           }
         }
         for (final foto in await _db.getFotosByParcela(uuid)) {
-          await ImageService.deletePhoto(foto.filePath);
+          await ImageService.limparFotoConfirmada(
+            path: foto.filePath,
+            arquivoEstado: foto.arquivoEstado ?? 'capturado',
+            onLimpo: () => _db.logAudit(
+              'arquivo_local_limpo',
+              entityType: 'foto',
+              entityUuid: foto.uuid,
+            ),
+          );
         }
         await _db.deleteAllPlantasByParcela(uuid);
         await _db.deleteAllFotosByParcela(uuid);

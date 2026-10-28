@@ -649,6 +649,9 @@ class SyncService extends ChangeNotifier {
           }
           try {
             await _syncParcela(parcela);
+            // >>> t16 D-1 (H3): sync MARCA, nunca apaga (RC-03)
+            await _db.marcarFotosEnviadasVerificadas(parcela.uuid);
+            // <<< t16 D-1: fim
             sincronizados++;
             _syncProgress = total > 0 ? sincronizados / total : 1.0;
             notifyListeners();
@@ -687,13 +690,6 @@ class SyncService extends ChangeNotifier {
       // Salvar timestamp do último sync bem-sucedido
       await prefs.setInt(
           'last_sync_timestamp', DateTime.now().millisecondsSinceEpoch);
-
-      // Limpar fotos comprimidas temporárias após sync bem-sucedido
-      try {
-        await ImageService.cleanCompressedPhotos();
-      } catch (e) {
-        debugPrint('Clean compressed photos failed (non-critical): $e');
-      }
 
       await _updatePendingCount();
     } catch (e) {
@@ -1373,6 +1369,9 @@ class SyncService extends ChangeNotifier {
         }
         try {
           await _syncParcela(p);
+          // >>> t16 D-1 (H3): sync MARCA, nunca apaga (RC-03)
+          await _db.marcarFotosEnviadasVerificadas(p.uuid);
+          // <<< t16 D-1: fim
           sent++;
           notifyListeners();
         } catch (e) {
@@ -1382,12 +1381,6 @@ class SyncService extends ChangeNotifier {
       }
       await _updatePendingCount();
 
-      // Limpar fotos comprimidas temporárias após sync bem-sucedido
-      try {
-        await ImageService.cleanCompressedPhotos();
-      } catch (e) {
-        debugPrint('Clean compressed photos failed (non-critical): $e');
-      }
     } catch (e) {
       // Q3 item 2: mesma semântica do syncAll — completa limpo e sem rethrow.
       debugPrint('Erro na sincronização selecionada: $e');
