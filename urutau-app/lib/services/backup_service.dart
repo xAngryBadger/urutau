@@ -139,6 +139,63 @@ class BackupService {
     debugPrint('BackupService: ficheiros pre-restore limpos.');
   }
 
+  /// Dump do banco que ENXERGA o WAL (fix P0 — impl-backup-wal.md §2/§4).
+  ///
+  /// O caminho antigo abria a conexão em `OpenMode.readOnly`, tentava
+  /// `PRAGMA wal_checkpoint(TRUNCATE)` (operação que o SQLite RECUSA em
+  /// read-only — "disk I/O error 10", medido), ENGOLIA o erro como "não
+  /// crítico" e copiava só o arquivo principal via readAsBytes: todo dado
+  /// ainda no `-wal` era perdido em silêncio, e o backup resultante passava
+  /// `integrity_check` "ok" mesmo incompleto (falso conforto medido).
+  ///
+  /// Agora: `VACUUM INTO` (conexão READ-WRITE, atômico, WAL-safe por
+  /// construção — cópia consistente de tudo que o banco tem) + validação
+  /// obrigatória pós-backup: integrity_check + contagem de objetos +
+  /// user_version. Integrity sozinho NÃO pega este bug (aprovou o backup
+  /// corrompido no teste do arquiteto) — por isso as três checagens.
+  ///
+  /// Exposto (público) para o teste de regressão `backup_wal_test.dart`.
+  static Future<List<int>> dumpWalsafe(String sourcePath) async {
+    final tmp = File('$sourcePath.tmp-backup');
+    if (await tmp.exists()) await tmp.delete();
+    final dest = tmp.path.replaceAll("'", "''");
+
+    final db = sqlite3.open(sourcePath); // READ-WRITE: VACUUM exige escrita
+    try {
+      db.execute("VACUUM INTO '$dest'");
+    } finally {
+      db.dispose();
+    }
+    if (!await tmp.exists()) {
+      throw Exception('dumpWalsafe: VACUUM INTO não gerou arquivo destino.');
+    }
+
+    // Validação obrigatória — as TRÊS checagens, não só integridade.
+    final check = sqlite3.open(tmp.path, mode: OpenMode.readOnly);
+    try {
+      final integrity =
+          check.select('PRAGMA integrity_check').first.values.first;
+      if ('$integrity'.toLowerCase() != 'ok') {
+        throw Exception('dumpWalsafe: backup inválido (integrity_check=$integrity).');
+      }
+      final objetos = check.select('SELECT COUNT(*) AS c FROM sqlite_master').first['c'] as int;
+      if (objetos <= 0) {
+        throw Exception('dumpWalsafe: backup inválido (nenhum objeto no schema).');
+      }
+      final versao = check.select('PRAGMA user_version').first.values.first;
+      if ('$versao' != '$_currentSchemaVersion') {
+        throw Exception('dumpWalsafe: backup inválido (user_version=$versao, '
+            'esperado $_currentSchemaVersion).');
+      }
+    } finally {
+      check.dispose();
+    }
+
+    final bytes = await tmp.readAsBytes();
+    await tmp.delete();
+    return bytes;
+  }
+
   static Future<String> exportBackup() async {
     if (kIsWeb) return 'Backup não disponível na versão web.';
     try {
@@ -148,17 +205,9 @@ class BackupService {
         return 'Base de dados não encontrada.';
       }
 
-      try {
-        final db = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
-        db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
-        db.dispose();
-      } catch (e) {
-        debugPrint('BackupService: WAL checkpoint falhou (não crítico): $e');
-      }
-
       final archive = Archive();
 
-      final dbBytes = await source.readAsBytes();
+      final dbBytes = await dumpWalsafe(sourcePath);
       final dbFile = ArchiveFile('urutau.sqlite', dbBytes.length, dbBytes);
       dbFile.compress = true;
       archive.addFile(dbFile);
@@ -242,17 +291,10 @@ class BackupService {
         return 'Base de dados não encontrada.';
       }
 
-      try {
-        final db = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
-        db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
-        db.dispose();
-      } catch (e) {
-        debugPrint('BackupService: WAL checkpoint falhou (não crítico): $e');
-      }
-
       final archive = Archive();
 
-      final dbBytes = await source.readAsBytes();
+      // WAL-safe (fix P0): VACUUM INTO + validação, ver dumpWalsafe.
+      final dbBytes = await dumpWalsafe(sourcePath);
       final dbFile = ArchiveFile('urutau.sqlite', dbBytes.length, dbBytes);
       dbFile.compress = true;
       archive.addFile(dbFile);
