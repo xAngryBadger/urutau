@@ -1054,8 +1054,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     if (source == 'gallery') {
       // Seleção múltipla da galeria
       final photos = await picker.pickMultiImage(
-        imageQuality: 85,
-        maxWidth: 2048,
+        // D-1 (decisão do Badger): o ORIGINAL sobe — sem re-encodar no
+        // picker. Comprimir é perda e não tem como descomprimir sem perder;
+        // o original é a evidência (RC-02/RC-04).
       );
       for (final photo in photos) {
         final savedPath = await _saveAndCompressPhoto(photo.path);
@@ -1067,8 +1068,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       // Câmera (uma foto por vez)
       final photo = await picker.pickImage(
         source: ImageSource.camera,
-        imageQuality: 85,
-        maxWidth: 2048,
+        // D-1 (decisão do Badger): o ORIGINAL sobe — sem re-encodar no
+        // picker. Comprimir é perda e não tem como descomprimir sem perder;
+        // o original é a evidência (RC-02/RC-04).
       );
       if (photo != null) {
         final savedPath = await _saveAndCompressPhoto(photo.path);

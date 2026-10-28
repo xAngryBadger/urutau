@@ -669,8 +669,7 @@ Semantics(
 
     final photo = await picker.pickImage(
       source: source,
-      imageQuality: 85,
-      maxWidth: 2048,
+      // D-1 (decisão do Badger): o ORIGINAL sobe — sem re-encodar no picker.
     );
 
     if (photo != null) {
