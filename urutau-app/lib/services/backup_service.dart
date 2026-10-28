@@ -12,7 +12,12 @@ import 'image_service.dart';
 
 class BackupService {
   static const String _dbName = 'urutau';
-  static const int _currentSchemaVersion = 16;
+  // t9: alinhado ao schemaVersion real de database.dart (24).
+  // ANTES estava 16 enquanto o banco real ja estava em 18: o manifesto do
+  // backup mentia sobre a versao. Consequencia real: restaurar um backup de
+  // app mais novo seria REJEITADO ("Backup requer schema v24 mas o app usa
+  // v16. Atualize o app.") — ver _validateManifest.
+  static const int _currentSchemaVersion = 24;
   static const String _pendingRestoreKey = 'pending_restore';
   static const String _pendingRestorePathKey = 'pending_restore_path';
   static const String _pendingRestoreFotosKey = 'pending_restore_fotos_path';
