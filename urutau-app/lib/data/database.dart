@@ -775,6 +775,19 @@ VGVG0069;UT04;0.0;1''';
                 t.deletedAt.isNull()))
           .getSingleOrNull();
 
+  /// (Q3 item 6) Parcela local SOFT-DELETADA com a mesma chave natural
+  /// (propriedade, propUt, idParcela). Usado no pull para NÃO ressuscitar:
+  /// se existir, o delete é propagado ao servidor em vez de reinserir.
+  Future<Parcela?> findParcelaDeletadaPorChave(
+          String propriedade, String propUt, int idParcela) =>
+      (select(parcelas)
+            ..where((t) =>
+                t.propriedade.equals(propriedade) &
+                t.propUt.equals(propUt) &
+                t.idParcela.equals(idParcela) &
+                t.deletedAt.isNotNull()))
+          .getSingleOrNull();
+
   /// Parcela disponível (userId vazio) com mesmo (propriedade, propUt, idParcela).
   /// Evita duplicação ao criar nova parcela após limpar.
   Future<Parcela?> findParcelaDisponivel(

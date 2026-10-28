@@ -68,4 +68,48 @@ void main() {
       expect(porUuid['pl2'], isNull);
     });
   });
+
+  group('Q3 item 6 (pull não ressuscita)', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      await db.customSelect('SELECT 1').get();
+    });
+
+    tearDown(() async => await db.close());
+
+    test('findParcelaDeletadaPorChave acha soft-deleted e ignora viva',
+        () async {
+      await db.into(db.parcelas).insert(ParcelasCompanion.insert(
+        uuid: 'viva',
+        propriedade: const Value('GHGH0064'),
+        propUt: 'UT01',
+        idParcela: 1,
+        userId: 'u1',
+      ));
+      await db.into(db.parcelas).insert(ParcelasCompanion.insert(
+        uuid: 'morta',
+        propriedade: const Value('GHGH0064'),
+        propUt: 'UT02',
+        idParcela: 2,
+        userId: 'u1',
+        deletedAt: Value(DateTime.now()),
+        deletedBy: const Value('u1'),
+      ));
+
+      final deletada =
+          await db.findParcelaDeletadaPorChave('GHGH0064', 'UT02', 2);
+      expect(deletada, isNotNull,
+          reason: 'soft-deleted tem de ser encontrada pelo pull');
+      expect(deletada!.uuid, 'morta');
+
+      final viva = await db.findParcelaDeletadaPorChave('GHGH0064', 'UT01', 1);
+      expect(viva, isNull, reason: 'parcela viva NÃO casa com a busca');
+
+      final inexistente =
+          await db.findParcelaDeletadaPorChave('GHGH0064', 'UT99', 9);
+      expect(inexistente, isNull);
+    });
+  });
 }

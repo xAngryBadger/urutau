@@ -1012,7 +1012,17 @@ class SyncService extends ChangeNotifier {
             );
           }
           if (existing.deletedAt != null) {
-            await _db.restaurarParcela(parcelaUuid);
+            // Q3 item 6: soft-delete LOCAL tem precedência sobre o servidor.
+            // Antes este ramo RESSUSCITAVA a parcela (restaurarParcela) em
+            // todo pull — a deleção offline nunca venciava. Agora: propaga o
+            // delete para o servidor e mantém a parcela morta localmente.
+            try {
+              await _pb!.collection('parcelas').delete(rec.id);
+              debugPrint('Parcela $parcelaUuid: deletada localmente — '
+                  'delete propagado ao servidor no pull');
+            } catch (e) {
+              debugPrint('Aviso: falha ao propagar delete no pull: $e');
+            }
           }
           continue;
         }
@@ -1049,6 +1059,22 @@ class SyncService extends ChangeNotifier {
               ));
             }
           }
+        }
+
+        // Q3 item 6 (parte 2): chave natural já existe LOCALMENTE como
+        // soft-delete — inserir criaria duplicata ressuscitada. Propaga o
+        // delete ao servidor e não reinsere.
+        final localDeletado =
+            await _db.findParcelaDeletadaPorChave(propriedade, propUt, idParcela);
+        if (localDeletado != null) {
+          try {
+            await _pb!.collection('parcelas').delete(rec.id);
+            debugPrint('Parcela ${localDeletado.uuid}: deletada localmente — '
+                'delete propagado ao servidor no pull (insert evitado)');
+          } catch (e) {
+            debugPrint('Aviso: falha ao propagar delete no pull: $e');
+          }
+          continue;
         }
 
         // D) Inserir nova parcela
@@ -1791,10 +1817,12 @@ class SyncService extends ChangeNotifier {
             newValue: 'synced');
       });
       } else {
+        // Q3 item 5: planta falhou → a parcela NÃO está completa. Antes este
+        // ramo marcava as FOTOS como synced mesmo com plantas pendentes —
+        // órfão: foto no servidor (subiu com a parcela) marcada localmente
+        // como feita enquanto a planta dona nem existe lá. Agora nada é
+        // marcado synced no caminho parcial: a retry trata tudo junto.
         await _db.marcarParcelaParcialmenteSincronizada(parcela.uuid);
-        for (final foto in fotos) {
-          await _db.marcarFotoSynced(foto.uuid);
-        }
         throw Exception(
             '${plantaErrors.length} planta(s) falharam ao sincronizar, tentará novamente na próxima vez');
       }
