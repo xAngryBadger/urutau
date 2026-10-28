@@ -172,6 +172,7 @@ class BackupService {
 
     // Validação obrigatória — as TRÊS checagens, não só integridade.
     final check = sqlite3.open(tmp.path, mode: OpenMode.readOnly);
+    final srcCheck = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
     try {
       final integrity =
           check.select('PRAGMA integrity_check').first.values.first;
@@ -182,13 +183,19 @@ class BackupService {
       if (objetos <= 0) {
         throw Exception('dumpWalsafe: backup inválido (nenhum objeto no schema).');
       }
+      // A versão do backup tem de bater com o schema do banco DE ORIGEM
+      // (não com a constante do app — banco de campo pode estar em
+      // versão anterior durante a transição de releases).
       final versao = check.select('PRAGMA user_version').first.values.first;
-      if ('$versao' != '$_currentSchemaVersion') {
+      final srcVersao =
+          srcCheck.select('PRAGMA user_version').first.values.first;
+      if ('$versao' != '$srcVersao') {
         throw Exception('dumpWalsafe: backup inválido (user_version=$versao, '
-            'esperado $_currentSchemaVersion).');
+            'banco de origem=$srcVersao).');
       }
     } finally {
       check.dispose();
+      srcCheck.dispose();
     }
 
     final bytes = await tmp.readAsBytes();

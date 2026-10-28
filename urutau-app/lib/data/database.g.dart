@@ -1787,6 +1787,12 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
   late final GeneratedColumn<String> serverPlantaId = GeneratedColumn<String>(
       'server_planta_id', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _parcelaServerIdMeta =
+      const VerificationMeta('parcelaServerId');
+  @override
+  late final GeneratedColumn<String> parcelaServerId = GeneratedColumn<String>(
+      'parcela_server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -1802,7 +1808,8 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
         updatedAt,
         deletedAt,
         fotoAusente,
-        serverPlantaId
+        serverPlantaId,
+        parcelaServerId
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1887,6 +1894,12 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
           serverPlantaId.isAcceptableOrUnknown(
               data['server_planta_id']!, _serverPlantaIdMeta));
     }
+    if (data.containsKey('parcela_server_id')) {
+      context.handle(
+          _parcelaServerIdMeta,
+          parcelaServerId.isAcceptableOrUnknown(
+              data['parcela_server_id']!, _parcelaServerIdMeta));
+    }
     return context;
   }
 
@@ -1924,6 +1937,8 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
           .read(DriftSqlType.bool, data['${effectivePrefix}foto_ausente'])!,
       serverPlantaId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}server_planta_id']),
+      parcelaServerId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}parcela_server_id']),
     );
   }
 
@@ -1955,6 +1970,13 @@ class Planta extends DataClass implements Insertable<Planta> {
   /// ponte local→servidor para o upsert versionado (fim do delete+recreate).
   /// NULL = ainda não sincronizada. Preenchido/atualizado no push.
   final String? serverPlantaId;
+
+  /// (v26) id do registro parcela NO SERVIDOR (cópia local do campo texto do
+  /// PB, que passa a relation `parcela_rel` na migração 1778600000).
+  ///
+  /// Derivado de parcelaUuid: 'pb-<serverId>' -> '<serverId>'.
+  /// NULL = não sincronizado ainda ou não mapeável — NUNCA inventado.
+  final String? parcelaServerId;
   const Planta(
       {required this.id,
       required this.uuid,
@@ -1969,7 +1991,8 @@ class Planta extends DataClass implements Insertable<Planta> {
       required this.updatedAt,
       this.deletedAt,
       required this.fotoAusente,
-      this.serverPlantaId});
+      this.serverPlantaId,
+      this.parcelaServerId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1994,6 +2017,9 @@ class Planta extends DataClass implements Insertable<Planta> {
     map['foto_ausente'] = Variable<bool>(fotoAusente);
     if (!nullToAbsent || serverPlantaId != null) {
       map['server_planta_id'] = Variable<String>(serverPlantaId);
+    }
+    if (!nullToAbsent || parcelaServerId != null) {
+      map['parcela_server_id'] = Variable<String>(parcelaServerId);
     }
     return map;
   }
@@ -2021,6 +2047,9 @@ class Planta extends DataClass implements Insertable<Planta> {
       serverPlantaId: serverPlantaId == null && nullToAbsent
           ? const Value.absent()
           : Value(serverPlantaId),
+      parcelaServerId: parcelaServerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parcelaServerId),
     );
   }
 
@@ -2042,6 +2071,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       fotoAusente: serializer.fromJson<bool>(json['fotoAusente']),
       serverPlantaId: serializer.fromJson<String?>(json['serverPlantaId']),
+      parcelaServerId: serializer.fromJson<String?>(json['parcelaServerId']),
     );
   }
   @override
@@ -2062,6 +2092,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'fotoAusente': serializer.toJson<bool>(fotoAusente),
       'serverPlantaId': serializer.toJson<String?>(serverPlantaId),
+      'parcelaServerId': serializer.toJson<String?>(parcelaServerId),
     };
   }
 
@@ -2079,7 +2110,8 @@ class Planta extends DataClass implements Insertable<Planta> {
           DateTime? updatedAt,
           Value<DateTime?> deletedAt = const Value.absent(),
           bool? fotoAusente,
-          Value<String?> serverPlantaId = const Value.absent()}) =>
+          Value<String?> serverPlantaId = const Value.absent(),
+          Value<String?> parcelaServerId = const Value.absent()}) =>
       Planta(
         id: id ?? this.id,
         uuid: uuid ?? this.uuid,
@@ -2098,6 +2130,9 @@ class Planta extends DataClass implements Insertable<Planta> {
         fotoAusente: fotoAusente ?? this.fotoAusente,
         serverPlantaId:
             serverPlantaId.present ? serverPlantaId.value : this.serverPlantaId,
+        parcelaServerId: parcelaServerId.present
+            ? parcelaServerId.value
+            : this.parcelaServerId,
       );
   Planta copyWithCompanion(PlantasCompanion data) {
     return Planta(
@@ -2121,6 +2156,9 @@ class Planta extends DataClass implements Insertable<Planta> {
       serverPlantaId: data.serverPlantaId.present
           ? data.serverPlantaId.value
           : this.serverPlantaId,
+      parcelaServerId: data.parcelaServerId.present
+          ? data.parcelaServerId.value
+          : this.parcelaServerId,
     );
   }
 
@@ -2140,7 +2178,8 @@ class Planta extends DataClass implements Insertable<Planta> {
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('fotoAusente: $fotoAusente, ')
-          ..write('serverPlantaId: $serverPlantaId')
+          ..write('serverPlantaId: $serverPlantaId, ')
+          ..write('parcelaServerId: $parcelaServerId')
           ..write(')'))
         .toString();
   }
@@ -2160,7 +2199,8 @@ class Planta extends DataClass implements Insertable<Planta> {
       updatedAt,
       deletedAt,
       fotoAusente,
-      serverPlantaId);
+      serverPlantaId,
+      parcelaServerId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2178,7 +2218,8 @@ class Planta extends DataClass implements Insertable<Planta> {
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt &&
           other.fotoAusente == this.fotoAusente &&
-          other.serverPlantaId == this.serverPlantaId);
+          other.serverPlantaId == this.serverPlantaId &&
+          other.parcelaServerId == this.parcelaServerId);
 }
 
 class PlantasCompanion extends UpdateCompanion<Planta> {
@@ -2196,6 +2237,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
   final Value<DateTime?> deletedAt;
   final Value<bool> fotoAusente;
   final Value<String?> serverPlantaId;
+  final Value<String?> parcelaServerId;
   const PlantasCompanion({
     this.id = const Value.absent(),
     this.uuid = const Value.absent(),
@@ -2211,6 +2253,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     this.deletedAt = const Value.absent(),
     this.fotoAusente = const Value.absent(),
     this.serverPlantaId = const Value.absent(),
+    this.parcelaServerId = const Value.absent(),
   });
   PlantasCompanion.insert({
     this.id = const Value.absent(),
@@ -2227,6 +2270,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     this.deletedAt = const Value.absent(),
     this.fotoAusente = const Value.absent(),
     this.serverPlantaId = const Value.absent(),
+    this.parcelaServerId = const Value.absent(),
   })  : uuid = Value(uuid),
         parcelaUuid = Value(parcelaUuid),
         especie = Value(especie),
@@ -2247,6 +2291,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     Expression<DateTime>? deletedAt,
     Expression<bool>? fotoAusente,
     Expression<String>? serverPlantaId,
+    Expression<String>? parcelaServerId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2263,6 +2308,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (fotoAusente != null) 'foto_ausente': fotoAusente,
       if (serverPlantaId != null) 'server_planta_id': serverPlantaId,
+      if (parcelaServerId != null) 'parcela_server_id': parcelaServerId,
     });
   }
 
@@ -2280,7 +2326,8 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       Value<DateTime>? updatedAt,
       Value<DateTime?>? deletedAt,
       Value<bool>? fotoAusente,
-      Value<String?>? serverPlantaId}) {
+      Value<String?>? serverPlantaId,
+      Value<String?>? parcelaServerId}) {
     return PlantasCompanion(
       id: id ?? this.id,
       uuid: uuid ?? this.uuid,
@@ -2296,6 +2343,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       deletedAt: deletedAt ?? this.deletedAt,
       fotoAusente: fotoAusente ?? this.fotoAusente,
       serverPlantaId: serverPlantaId ?? this.serverPlantaId,
+      parcelaServerId: parcelaServerId ?? this.parcelaServerId,
     );
   }
 
@@ -2344,6 +2392,9 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     if (serverPlantaId.present) {
       map['server_planta_id'] = Variable<String>(serverPlantaId.value);
     }
+    if (parcelaServerId.present) {
+      map['parcela_server_id'] = Variable<String>(parcelaServerId.value);
+    }
     return map;
   }
 
@@ -2363,7 +2414,8 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('fotoAusente: $fotoAusente, ')
-          ..write('serverPlantaId: $serverPlantaId')
+          ..write('serverPlantaId: $serverPlantaId, ')
+          ..write('parcelaServerId: $parcelaServerId')
           ..write(')'))
         .toString();
   }
@@ -22956,6 +23008,7 @@ typedef $$PlantasTableCreateCompanionBuilder = PlantasCompanion Function({
   Value<DateTime?> deletedAt,
   Value<bool> fotoAusente,
   Value<String?> serverPlantaId,
+  Value<String?> parcelaServerId,
 });
 typedef $$PlantasTableUpdateCompanionBuilder = PlantasCompanion Function({
   Value<int> id,
@@ -22972,6 +23025,7 @@ typedef $$PlantasTableUpdateCompanionBuilder = PlantasCompanion Function({
   Value<DateTime?> deletedAt,
   Value<bool> fotoAusente,
   Value<String?> serverPlantaId,
+  Value<String?> parcelaServerId,
 });
 
 final class $$PlantasTableReferences
@@ -23042,6 +23096,10 @@ class $$PlantasTableFilterComposer
 
   ColumnFilters<String> get serverPlantaId => $composableBuilder(
       column: $table.serverPlantaId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get parcelaServerId => $composableBuilder(
+      column: $table.parcelaServerId,
       builder: (column) => ColumnFilters(column));
 
   $$ParcelasTableFilterComposer get parcelaUuid {
@@ -23115,6 +23173,10 @@ class $$PlantasTableOrderingComposer
       column: $table.serverPlantaId,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get parcelaServerId => $composableBuilder(
+      column: $table.parcelaServerId,
+      builder: (column) => ColumnOrderings(column));
+
   $$ParcelasTableOrderingComposer get parcelaUuid {
     final $$ParcelasTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -23184,6 +23246,9 @@ class $$PlantasTableAnnotationComposer
   GeneratedColumn<String> get serverPlantaId => $composableBuilder(
       column: $table.serverPlantaId, builder: (column) => column);
 
+  GeneratedColumn<String> get parcelaServerId => $composableBuilder(
+      column: $table.parcelaServerId, builder: (column) => column);
+
   $$ParcelasTableAnnotationComposer get parcelaUuid {
     final $$ParcelasTableAnnotationComposer composer = $composerBuilder(
         composer: this,
@@ -23242,6 +23307,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             Value<DateTime?> deletedAt = const Value.absent(),
             Value<bool> fotoAusente = const Value.absent(),
             Value<String?> serverPlantaId = const Value.absent(),
+            Value<String?> parcelaServerId = const Value.absent(),
           }) =>
               PlantasCompanion(
             id: id,
@@ -23258,6 +23324,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             deletedAt: deletedAt,
             fotoAusente: fotoAusente,
             serverPlantaId: serverPlantaId,
+            parcelaServerId: parcelaServerId,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -23274,6 +23341,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             Value<DateTime?> deletedAt = const Value.absent(),
             Value<bool> fotoAusente = const Value.absent(),
             Value<String?> serverPlantaId = const Value.absent(),
+            Value<String?> parcelaServerId = const Value.absent(),
           }) =>
               PlantasCompanion.insert(
             id: id,
@@ -23290,6 +23358,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             deletedAt: deletedAt,
             fotoAusente: fotoAusente,
             serverPlantaId: serverPlantaId,
+            parcelaServerId: parcelaServerId,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>

@@ -151,7 +151,7 @@ Future<int> _count(NativeDatabase e, String sql) async {
 }
 
 void main() {
-  group('migracao MRV v19 -> v25 (v24 committed + motor Fase 1)', () {
+  group('migracao MRV v19 -> v26 (v24 committed + motor Fase 1 + t14 v26)', () {
     late NativeDatabase executor;
     late AppDatabase db;
 
@@ -163,11 +163,11 @@ void main() {
       await db.close();
     });
 
-    test('a migracao roda e o banco sai em v25', () async {
+    test('a migracao roda e o banco sai em v26', () async {
       db = AppDatabase.forTesting(executor);
       await db.customSelect('SELECT 1').get(); // forca abertura
       final v = await _count(executor, 'PRAGMA user_version');
-      expect(v, 25, reason: 'schemaVersion tem de ser 25 (v24 + motor Fase 1)');
+      expect(v, 26, reason: 'schemaVersion tem de ser 26 (v24 + motor Fase 1 + t14 v26)');
     });
 
     test('Q3 motor Fase 1: plantas.server_planta_id existe e nasce NULL',

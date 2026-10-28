@@ -1697,6 +1697,9 @@ class SyncService extends ChangeNotifier {
         final existente = existentes[planta.uuid];
         final plantaBody = <String, dynamic>{
           'parcela': record.id,
+          // t14: relation nova (1778600000) — MESMO valor do texto; o campo
+          // texto fica para o app antigo e para o filtro durante a transição.
+          'parcela_rel': record.id,
           'especie': planta.especie,
           'altura_cm': planta.alturaCm,
           'dap_cm': planta.dapCm,
@@ -1776,6 +1779,9 @@ class SyncService extends ChangeNotifier {
         if (planta.serverPlantaId != resultado.id) {
           await _db.atualizarServerPlantaId(planta.uuid, resultado.id);
         }
+        // t14 v26: guarda o server id da parcela para a relation (nunca
+        // sobrescreve — valor já preenchido fica como está)
+        await _db.registrarParcelaServerId(planta.uuid, record.id);
       } catch (e) {
         allPlantasOk = false;
         plantaErrors.add('Planta ${planta.especie}: $e');

@@ -106,6 +106,15 @@ class Plantas extends Table {
   /// ponte local→servidor para o upsert versionado (fim do delete+recreate).
   /// NULL = ainda não sincronizada. Preenchido/atualizado no push.
   TextColumn get serverPlantaId => text().nullable()();
+
+  // >>> t14: inicio — v26 parcelaServerId
+  /// (v26) id do registro parcela NO SERVIDOR (cópia local do campo texto do
+  /// PB, que passa a relation `parcela_rel` na migração 1778600000).
+  ///
+  /// Derivado de parcelaUuid: 'pb-<serverId>' -> '<serverId>'.
+  /// NULL = não sincronizado ainda ou não mapeável — NUNCA inventado.
+  TextColumn get parcelaServerId => text().nullable()();
+  // <<< t14: fim
 }
 
 class FotosParcela extends Table {
@@ -175,7 +184,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 25; // t9: MRV v20..v24 + Q3 motor Fase 1 (serverPlantaId)
+  int get schemaVersion => 26; // v25 + t14 v26 (parcelaServerId)
 
   @override
   MigrationStrategy get migration {
@@ -273,6 +282,18 @@ class AppDatabase extends _$AppDatabase {
         // Q3 motor Fase 1: ponte local→servidor para o upsert de plantas
         await m.addColumn(plantas, plantas.serverPlantaId);
       }
+      // >>> t14: inicio — v26
+      if (from < 26) {
+        await m.addColumn(plantas, plantas.parcelaServerId);
+        // Backfill a partir do que já existe localmente. 'pb-<id>' -> '<id>'.
+        // uuid local (planta não sincronizada) fica NULL de propósito.
+        await m.database.customStatement(
+          'UPDATE plantas SET parcela_server_id = '
+          "  CASE WHEN parcela_uuid LIKE 'pb-%' "
+          '    THEN substr(parcela_uuid, 4) ELSE NULL END '
+          'WHERE parcela_server_id IS NULL');
+      }
+      // <<< t14: fim
       // >>> t9 patch: inicio — migracao MRV v20..v24
       if (from < 20) {
         await _mrvV20Ddl(m);
@@ -1143,6 +1164,19 @@ VGVG0069;UT04;0.0;1''';
   Future<int> atualizarServerPlantaId(String uuid, String serverId) =>
       (update(plantas)..where((t) => t.uuid.equals(uuid)))
           .write(PlantasCompanion(serverPlantaId: Value(serverId)));
+
+  /// (t14 v26) Grava o id do servidor da parcela dona desta planta.
+  /// Só preenche se ainda estiver NULL — nunca sobrescreve (um id errado
+  /// ligaria a planta à parcela errada). O guard no WHERE é o que garante:
+  /// update sem casa = 0 linhas, sem dano.
+  Future<void> registrarParcelaServerId(
+      String plantaUuid, String parcelaServerId) async {
+    await (update(plantas)
+          ..where((t) =>
+              t.uuid.equals(plantaUuid) & t.parcelaServerId.isNull()))
+        .write(PlantasCompanion(
+            parcelaServerId: Value(parcelaServerId)));
+  }
 
   Future<int> deleteFotoParcela(String uuid) =>
       (delete(fotosParcela)..where((t) => t.uuid.equals(uuid))).go();
