@@ -1253,6 +1253,10 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       propriedade: drift.Value(prop),
       propUt: drift.Value(ut),
       idParcela: drift.Value(idParcela),
+      // Q3 item 7: chave de negócio nasce com a parcela (RS-02). Mesmo
+      // formato do backfill v19 ('<propUt>-P<idParcela>') para o catálogo
+      // MRV e a auditoria terem identidade legível desde o insert.
+      parcelaIdText: drift.Value('$ut-P$idParcela'),
       observacoes: drift.Value(_observacoesController.text.trim().isEmpty
           ? null
           : _observacoesController.text.trim()),

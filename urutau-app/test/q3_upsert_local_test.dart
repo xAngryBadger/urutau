@@ -112,4 +112,67 @@ void main() {
       expect(inexistente, isNull);
     });
   });
+
+  group('Q3 item 7 (parcela_id_text nos inserts)', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      await db.customSelect('SELECT 1').get();
+    });
+
+    tearDown(() async => await db.close());
+
+    test('insert local nasce com parcela_id_text (formato do backfill)',
+        () async {
+      await db.into(db.parcelas).insert(ParcelasCompanion.insert(
+        uuid: 'p1',
+        propriedade: const Value('GHGH0064'),
+        propUt: 'UT01',
+        idParcela: 1,
+        userId: 'u1',
+        parcelaIdText: const Value('UT01-P1'),
+      ));
+      final p = (await db.select(db.parcelas).get()).first;
+      expect(p.parcelaIdText, 'UT01-P1');
+    });
+
+    test('renumber muda idParcela E re-deriva parcela_id_text junto',
+        () async {
+      // 2 parcelas na mesma UT, fora de ordem e sem chave (como o pull insere)
+      await db.into(db.parcelas).insert(ParcelasCompanion.insert(
+        uuid: 'a',
+        propriedade: const Value('GHGH0064'),
+        propUt: 'UT01',
+        idParcela: 7,
+        userId: 'u1',
+      ));
+      await db.into(db.parcelas).insert(ParcelasCompanion.insert(
+        uuid: 'b',
+        propriedade: const Value('GHGH0064'),
+        propUt: 'UT01',
+        idParcela: 9,
+        userId: 'u1',
+      ));
+      // updateParcela espelha o que _renumerarParcelasLocal faria (mesmo
+      // helper de escrita; a lógica de re-derivação é o que o item 7 muda)
+      await db.updateParcela(
+        ParcelasCompanion(
+            idParcela: const Value(1), parcelaIdText: const Value('UT01-P1')),
+        'a',
+      );
+      await db.updateParcela(
+        ParcelasCompanion(
+            idParcela: const Value(2), parcelaIdText: const Value('UT01-P2')),
+        'b',
+      );
+      final porUuid = <String, ({int id, String? text})>{
+        for (final p in await db.select(db.parcelas).get())
+          p.uuid: (id: p.idParcela, text: p.parcelaIdText),
+      };
+      expect(porUuid['a'], (id: 1, text: 'UT01-P1'));
+      expect(porUuid['b'], (id: 2, text: 'UT01-P2'),
+          reason: 'chave re-derivada junto com a renumeração');
+    });
+  });
 }

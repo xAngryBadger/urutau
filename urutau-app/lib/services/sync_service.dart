@@ -1112,15 +1112,24 @@ class SyncService extends ChangeNotifier {
 
   /// Renumera parcelas dentro de cada UT para 1, 2, 3...
   /// Corrige numeração não-sequencial vinda do servidor.
+  ///
+  /// Q3 item 7: a renumeração também (re)deriva parcela_id_text — se a chave
+  /// fosse calculada só no insert, a renumeração a invalidaria. Aqui ela é
+  /// mantida consistente com o idParcela final.
   Future<void> _renumerarParcelasLocal() async {
     final talhoes = await _db.getAllTalhoes();
     for (final ut in talhoes) {
       final parcelas = await _db.getParcelasByHierarchy(propUt: ut);
       for (int i = 0; i < parcelas.length; i++) {
         final expected = i + 1;
-        if (parcelas[i].idParcela != expected) {
+        final expectedText = '$ut-P$expected';
+        if (parcelas[i].idParcela != expected ||
+            parcelas[i].parcelaIdText != expectedText) {
           await _db.updateParcela(
-            ParcelasCompanion(idParcela: Value(expected)),
+            ParcelasCompanion(
+              idParcela: Value(expected),
+              parcelaIdText: Value(expectedText),
+            ),
             parcelas[i].uuid,
           );
         }
