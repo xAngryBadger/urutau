@@ -1062,6 +1062,36 @@ VGVG0069;UT04;0.0;1''';
                 t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull()))
           .get();
 
+  // >>> t9 S1: inicio — leitura das marcacoes do Q2 (43a165e)
+  /// Plantas cuja foto de espécie tem arquivo ausente no disco.
+  /// A LINHA permanece (evidência do caminho original); esta query é o que
+  /// torna a marcação visível. Antes não havia nenhum leitor de fotoAusente.
+  Future<List<Planta>> getPlantasComFotoAusente() =>
+      (select(plantas)
+            ..where((t) => t.fotoAusente.equals(true) & t.deletedAt.isNull())
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
+
+  /// Fotos de parcela cujo arquivo não está mais no disco.
+  Future<List<FotosParcelaData>> getFotosComArquivoAusente() =>
+      (select(fotosParcela)
+            ..where((t) =>
+                t.arquivoAusente.equals(true) & t.deletedAt.isNull())
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
+
+  /// Contagem para badge/contador — não carrega as linhas.
+  Future<int> countFotosComArquivoAusente() async {
+    final c = fotosParcela.arquivoAusente.count();
+    final q = selectOnly(fotosParcela)
+      ..addColumns([c])
+      ..where(fotosParcela.arquivoAusente.equals(true) &
+          fotosParcela.deletedAt.isNull());
+    final r = await q.getSingle();
+    return r.read(c) ?? 0;
+  }
+  // <<< t9 S1: fim
+
   Stream<List<FotosParcelaData>> watchFotosByParcela(String parcelaUuid) =>
       (select(fotosParcela)
             ..where((t) =>

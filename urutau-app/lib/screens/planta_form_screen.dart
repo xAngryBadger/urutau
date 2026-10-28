@@ -10,6 +10,7 @@ import '../data/categoria_helper.dart';
 import '../data/especie_item.dart';
 import '../services/image_service.dart';
 import '../services/species_service.dart';
+import '../widgets/arquivo_ausente_badge.dart';
 
 class PlantaFormScreen extends StatefulWidget {
   final String parcelaUuid;
@@ -542,6 +543,10 @@ Semantics(
                         cacheWidth: kIsWeb ? null : 600,
                       ),
                     ),
+                    // >>> t9 S1: badge se a foto salva desta planta está ausente
+                    if (_fotoPath == widget.existingPlanta?.fotoEspeciePath &&
+                        (widget.existingPlanta?.fotoAusente ?? false))
+                      const ArquivoAusenteBadge(),
                     Positioned(
                       top: 8,
                       right: 8,

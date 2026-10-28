@@ -16,6 +16,7 @@ import '../services/image_service.dart';
 import '../services/sync_service.dart';
 import '../services/storage_service.dart';
 import 'planta_form_screen.dart';
+import '../widgets/arquivo_ausente_badge.dart';
 
 const String kPhotoQualityKey = 'photo_compression_quality';
 const int kPhotoQualityDefault = 70;
@@ -846,6 +847,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         if (index < _fotos.length) {
           return _buildFotoTile(
             imagePath: _fotos[index].filePath,
+            arquivoAusente: _fotos[index].arquivoAusente,
             onDelete: () => _removeFotoSalva(index),
           );
         }
@@ -868,6 +870,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   Widget _buildFotoTile({
     required String imagePath,
     required VoidCallback onDelete,
+    bool arquivoAusente = false,
   }) {
     return Stack(
       fit: StackFit.expand,
@@ -880,6 +883,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             cacheWidth: kIsWeb ? null : 400,
           ),
         ),
+        // >>> t9 S1: badge quando o arquivo não está mais no disco
+        if (arquivoAusente) const ArquivoAusenteBadge(),
         Positioned(
           top: 4,
           right: 4,

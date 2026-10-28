@@ -8,6 +8,7 @@ import '../data/database.dart';
 import '../services/sync_service.dart';
 import '../services/export_service.dart';
 import '../widgets/low_space_banner.dart';
+import '../widgets/arquivo_ausente_badge.dart';
 import 'audit_log_screen.dart';
 
 class AdminScreen extends StatefulWidget {
@@ -1614,24 +1615,30 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                 final foto = fotos[i];
                 return GestureDetector(
                   onTap: () => _showImageViewer(context, fotos, i),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: (!kIsWeb)
-                        ? Image.file(
-                            File(foto.filePath),
-                            width: 64,
-                            height: 64,
-                            fit: BoxFit.cover,
-                            cacheWidth: 128,
-                          )
-                        : Container(
-                            width: 64,
-                            height: 64,
-                            color: Colors.grey[200],
-                            child: Icon(Icons.image, color: Colors.grey[400]),
-                          ),
-                            ),
-                          );
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: (!kIsWeb)
+                            ? Image.file(
+                                File(foto.filePath),
+                                width: 64,
+                                height: 64,
+                                fit: BoxFit.cover,
+                                cacheWidth: 128,
+                              )
+                            : Container(
+                                width: 64,
+                                height: 64,
+                                color: Colors.grey[200],
+                                child: Icon(Icons.image, color: Colors.grey[400]),
+                              ),
+                      ),
+                      // >>> t9 S1: badge de arquivo ausente no thumbnail
+                      if (foto.arquivoAusente) const ArquivoAusenteBadge(),
+                    ],
+                  ),
+                );
                         },
                       ),
                     ),
