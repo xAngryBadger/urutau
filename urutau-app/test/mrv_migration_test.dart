@@ -151,7 +151,7 @@ Future<int> _count(NativeDatabase e, String sql) async {
 }
 
 void main() {
-  group('migracao MRV v19 -> v24 (por cima da v19 committed 43a165e)', () {
+  group('migracao MRV v19 -> v25 (v24 committed + motor Fase 1)', () {
     late NativeDatabase executor;
     late AppDatabase db;
 
@@ -163,11 +163,27 @@ void main() {
       await db.close();
     });
 
-    test('a migracao roda e o banco sai em v24', () async {
+    test('a migracao roda e o banco sai em v25', () async {
       db = AppDatabase.forTesting(executor);
       await db.customSelect('SELECT 1').get(); // forca abertura
       final v = await _count(executor, 'PRAGMA user_version');
-      expect(v, 24, reason: 'schemaVersion do patch tem de ser 24');
+      expect(v, 25, reason: 'schemaVersion tem de ser 25 (v24 + motor Fase 1)');
+    });
+
+    test('Q3 motor Fase 1: plantas.server_planta_id existe e nasce NULL',
+        () async {
+      db = AppDatabase.forTesting(executor);
+      await db.customSelect('SELECT 1').get();
+      final cols = await executor
+          .runSelect('PRAGMA table_info(plantas)', const []);
+      final nomes = cols.map((r) => r.values.elementAt(1) as String).toList();
+      expect(nomes, contains('server_planta_id'),
+          reason: 'ponte local→servidor tem de existir após a migração');
+      // plantas legadas ficam com NULL (ainda não sincronizadas) — o push
+      // upsert preenche; nada de backfill inventado.
+      final nulos = await _count(executor,
+          'SELECT COUNT(*) FROM plantas WHERE server_planta_id IS NULL');
+      expect(nulos, await _count(executor, 'SELECT COUNT(*) FROM plantas'));
     });
 
     test('nenhum drop: as 5 tabelas legadas preservam dados', () async {

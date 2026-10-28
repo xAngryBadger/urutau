@@ -1781,6 +1781,12 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("foto_ausente" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _serverPlantaIdMeta =
+      const VerificationMeta('serverPlantaId');
+  @override
+  late final GeneratedColumn<String> serverPlantaId = GeneratedColumn<String>(
+      'server_planta_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -1795,7 +1801,8 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
         createdAt,
         updatedAt,
         deletedAt,
-        fotoAusente
+        fotoAusente,
+        serverPlantaId
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1874,6 +1881,12 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
           fotoAusente.isAcceptableOrUnknown(
               data['foto_ausente']!, _fotoAusenteMeta));
     }
+    if (data.containsKey('server_planta_id')) {
+      context.handle(
+          _serverPlantaIdMeta,
+          serverPlantaId.isAcceptableOrUnknown(
+              data['server_planta_id']!, _serverPlantaIdMeta));
+    }
     return context;
   }
 
@@ -1909,6 +1922,8 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
           .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
       fotoAusente: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}foto_ausente'])!,
+      serverPlantaId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}server_planta_id']),
     );
   }
 
@@ -1935,6 +1950,11 @@ class Planta extends DataClass implements Insertable<Planta> {
   /// (Q2) true = fotoEspeciePath aponta para arquivo ausente no disco.
   /// O PATH permanece (evidência do original); a marcação informa a UI.
   final bool fotoAusente;
+
+  /// (Q3 motor Fase 1) id do registro desta planta no servidor PocketBase —
+  /// ponte local→servidor para o upsert versionado (fim do delete+recreate).
+  /// NULL = ainda não sincronizada. Preenchido/atualizado no push.
+  final String? serverPlantaId;
   const Planta(
       {required this.id,
       required this.uuid,
@@ -1948,7 +1968,8 @@ class Planta extends DataClass implements Insertable<Planta> {
       required this.createdAt,
       required this.updatedAt,
       this.deletedAt,
-      required this.fotoAusente});
+      required this.fotoAusente,
+      this.serverPlantaId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1971,6 +1992,9 @@ class Planta extends DataClass implements Insertable<Planta> {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
     map['foto_ausente'] = Variable<bool>(fotoAusente);
+    if (!nullToAbsent || serverPlantaId != null) {
+      map['server_planta_id'] = Variable<String>(serverPlantaId);
+    }
     return map;
   }
 
@@ -1994,6 +2018,9 @@ class Planta extends DataClass implements Insertable<Planta> {
           ? const Value.absent()
           : Value(deletedAt),
       fotoAusente: Value(fotoAusente),
+      serverPlantaId: serverPlantaId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverPlantaId),
     );
   }
 
@@ -2014,6 +2041,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       fotoAusente: serializer.fromJson<bool>(json['fotoAusente']),
+      serverPlantaId: serializer.fromJson<String?>(json['serverPlantaId']),
     );
   }
   @override
@@ -2033,6 +2061,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'fotoAusente': serializer.toJson<bool>(fotoAusente),
+      'serverPlantaId': serializer.toJson<String?>(serverPlantaId),
     };
   }
 
@@ -2049,7 +2078,8 @@ class Planta extends DataClass implements Insertable<Planta> {
           DateTime? createdAt,
           DateTime? updatedAt,
           Value<DateTime?> deletedAt = const Value.absent(),
-          bool? fotoAusente}) =>
+          bool? fotoAusente,
+          Value<String?> serverPlantaId = const Value.absent()}) =>
       Planta(
         id: id ?? this.id,
         uuid: uuid ?? this.uuid,
@@ -2066,6 +2096,8 @@ class Planta extends DataClass implements Insertable<Planta> {
         updatedAt: updatedAt ?? this.updatedAt,
         deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
         fotoAusente: fotoAusente ?? this.fotoAusente,
+        serverPlantaId:
+            serverPlantaId.present ? serverPlantaId.value : this.serverPlantaId,
       );
   Planta copyWithCompanion(PlantasCompanion data) {
     return Planta(
@@ -2086,6 +2118,9 @@ class Planta extends DataClass implements Insertable<Planta> {
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       fotoAusente:
           data.fotoAusente.present ? data.fotoAusente.value : this.fotoAusente,
+      serverPlantaId: data.serverPlantaId.present
+          ? data.serverPlantaId.value
+          : this.serverPlantaId,
     );
   }
 
@@ -2104,7 +2139,8 @@ class Planta extends DataClass implements Insertable<Planta> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
-          ..write('fotoAusente: $fotoAusente')
+          ..write('fotoAusente: $fotoAusente, ')
+          ..write('serverPlantaId: $serverPlantaId')
           ..write(')'))
         .toString();
   }
@@ -2123,7 +2159,8 @@ class Planta extends DataClass implements Insertable<Planta> {
       createdAt,
       updatedAt,
       deletedAt,
-      fotoAusente);
+      fotoAusente,
+      serverPlantaId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2140,7 +2177,8 @@ class Planta extends DataClass implements Insertable<Planta> {
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt &&
-          other.fotoAusente == this.fotoAusente);
+          other.fotoAusente == this.fotoAusente &&
+          other.serverPlantaId == this.serverPlantaId);
 }
 
 class PlantasCompanion extends UpdateCompanion<Planta> {
@@ -2157,6 +2195,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<bool> fotoAusente;
+  final Value<String?> serverPlantaId;
   const PlantasCompanion({
     this.id = const Value.absent(),
     this.uuid = const Value.absent(),
@@ -2171,6 +2210,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.fotoAusente = const Value.absent(),
+    this.serverPlantaId = const Value.absent(),
   });
   PlantasCompanion.insert({
     this.id = const Value.absent(),
@@ -2186,6 +2226,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.fotoAusente = const Value.absent(),
+    this.serverPlantaId = const Value.absent(),
   })  : uuid = Value(uuid),
         parcelaUuid = Value(parcelaUuid),
         especie = Value(especie),
@@ -2205,6 +2246,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<bool>? fotoAusente,
+    Expression<String>? serverPlantaId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2220,6 +2262,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (fotoAusente != null) 'foto_ausente': fotoAusente,
+      if (serverPlantaId != null) 'server_planta_id': serverPlantaId,
     });
   }
 
@@ -2236,7 +2279,8 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<DateTime?>? deletedAt,
-      Value<bool>? fotoAusente}) {
+      Value<bool>? fotoAusente,
+      Value<String?>? serverPlantaId}) {
     return PlantasCompanion(
       id: id ?? this.id,
       uuid: uuid ?? this.uuid,
@@ -2251,6 +2295,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       fotoAusente: fotoAusente ?? this.fotoAusente,
+      serverPlantaId: serverPlantaId ?? this.serverPlantaId,
     );
   }
 
@@ -2296,6 +2341,9 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     if (fotoAusente.present) {
       map['foto_ausente'] = Variable<bool>(fotoAusente.value);
     }
+    if (serverPlantaId.present) {
+      map['server_planta_id'] = Variable<String>(serverPlantaId.value);
+    }
     return map;
   }
 
@@ -2314,7 +2362,8 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
-          ..write('fotoAusente: $fotoAusente')
+          ..write('fotoAusente: $fotoAusente, ')
+          ..write('serverPlantaId: $serverPlantaId')
           ..write(')'))
         .toString();
   }
@@ -22906,6 +22955,7 @@ typedef $$PlantasTableCreateCompanionBuilder = PlantasCompanion Function({
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
   Value<bool> fotoAusente,
+  Value<String?> serverPlantaId,
 });
 typedef $$PlantasTableUpdateCompanionBuilder = PlantasCompanion Function({
   Value<int> id,
@@ -22921,6 +22971,7 @@ typedef $$PlantasTableUpdateCompanionBuilder = PlantasCompanion Function({
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
   Value<bool> fotoAusente,
+  Value<String?> serverPlantaId,
 });
 
 final class $$PlantasTableReferences
@@ -22989,6 +23040,10 @@ class $$PlantasTableFilterComposer
   ColumnFilters<bool> get fotoAusente => $composableBuilder(
       column: $table.fotoAusente, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<String> get serverPlantaId => $composableBuilder(
+      column: $table.serverPlantaId,
+      builder: (column) => ColumnFilters(column));
+
   $$ParcelasTableFilterComposer get parcelaUuid {
     final $$ParcelasTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -23056,6 +23111,10 @@ class $$PlantasTableOrderingComposer
   ColumnOrderings<bool> get fotoAusente => $composableBuilder(
       column: $table.fotoAusente, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get serverPlantaId => $composableBuilder(
+      column: $table.serverPlantaId,
+      builder: (column) => ColumnOrderings(column));
+
   $$ParcelasTableOrderingComposer get parcelaUuid {
     final $$ParcelasTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -23122,6 +23181,9 @@ class $$PlantasTableAnnotationComposer
   GeneratedColumn<bool> get fotoAusente => $composableBuilder(
       column: $table.fotoAusente, builder: (column) => column);
 
+  GeneratedColumn<String> get serverPlantaId => $composableBuilder(
+      column: $table.serverPlantaId, builder: (column) => column);
+
   $$ParcelasTableAnnotationComposer get parcelaUuid {
     final $$ParcelasTableAnnotationComposer composer = $composerBuilder(
         composer: this,
@@ -23179,6 +23241,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
             Value<bool> fotoAusente = const Value.absent(),
+            Value<String?> serverPlantaId = const Value.absent(),
           }) =>
               PlantasCompanion(
             id: id,
@@ -23194,6 +23257,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             updatedAt: updatedAt,
             deletedAt: deletedAt,
             fotoAusente: fotoAusente,
+            serverPlantaId: serverPlantaId,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -23209,6 +23273,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
             Value<bool> fotoAusente = const Value.absent(),
+            Value<String?> serverPlantaId = const Value.absent(),
           }) =>
               PlantasCompanion.insert(
             id: id,
@@ -23224,6 +23289,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             updatedAt: updatedAt,
             deletedAt: deletedAt,
             fotoAusente: fotoAusente,
+            serverPlantaId: serverPlantaId,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>

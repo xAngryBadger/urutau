@@ -17,7 +17,7 @@ class BackupService {
   // backup mentia sobre a versao. Consequencia real: restaurar um backup de
   // app mais novo seria REJEITADO ("Backup requer schema v24 mas o app usa
   // v16. Atualize o app.") — ver _validateManifest.
-  static const int _currentSchemaVersion = 24;
+  static const int _currentSchemaVersion = 25;
   static const String _pendingRestoreKey = 'pending_restore';
   static const String _pendingRestorePathKey = 'pending_restore_path';
   static const String _pendingRestoreFotosKey = 'pending_restore_fotos_path';

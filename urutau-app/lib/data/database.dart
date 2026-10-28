@@ -101,6 +101,11 @@ class Plantas extends Table {
   /// O PATH permanece (evidência do original); a marcação informa a UI.
   BoolColumn get fotoAusente =>
       boolean().withDefault(const Constant(false))();
+
+  /// (Q3 motor Fase 1) id do registro desta planta no servidor PocketBase —
+  /// ponte local→servidor para o upsert versionado (fim do delete+recreate).
+  /// NULL = ainda não sincronizada. Preenchido/atualizado no push.
+  TextColumn get serverPlantaId => text().nullable()();
 }
 
 class FotosParcela extends Table {
@@ -170,7 +175,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 24; // t9: MRV v20..v24, por cima da v19 (43a165e)
+  int get schemaVersion => 25; // t9: MRV v20..v24 + Q3 motor Fase 1 (serverPlantaId)
 
   @override
   MigrationStrategy get migration {
@@ -263,6 +268,10 @@ class AppDatabase extends _$AppDatabase {
         // Q2: marcar ausência de arquivo sem apagar evidência
         await m.addColumn(fotosParcela, fotosParcela.arquivoAusente);
         await m.addColumn(plantas, plantas.fotoAusente);
+      }
+      if (from < 25) {
+        // Q3 motor Fase 1: ponte local→servidor para o upsert de plantas
+        await m.addColumn(plantas, plantas.serverPlantaId);
       }
       // >>> t9 patch: inicio — migracao MRV v20..v24
       if (from < 20) {
