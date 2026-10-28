@@ -58,6 +58,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   List<Planta> _plantas = [];
   List<FotosParcelaData> _fotos = [];
   final List<String> _novasFotosPaths = []; // Fotos adicionadas nesta sessão
+  // S3: hash e bytes dos originais guardados (para o catálogo)
+  final Map<String, String?> _hashesNovasFotos = {};
+  final Map<String, int?> _bytesNovasFotos = {};
   bool _isLoading = false;
   bool _isEditing = false;
   String? _currentUuid;
@@ -1081,38 +1084,27 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     }
   }
 
-  /// Salva a foto localmente e aplica compressão com a qualidade configurada pelo usuário.
+  /// Salva a foto localmente.
+  ///
+  /// D-1 (decisão do Badger): o ORIGINAL é a evidência e sobe como original —
+  /// sem re-encodar. Comprime agora custaria perda sem retorno. Hash e bytes
+  /// ficam em _hashesNovasFotos/_bytesNovasFotos para o catálogo (S3).
   Future<String?> _saveAndCompressPhoto(String photoPath) async {
     try {
-      final quality = _prefs.getInt(kPhotoQualityKey) ?? kPhotoQualityDefault;
-      final photoFile = io.File(photoPath);
-      final compressed = await ImageService.compressImage(photoFile, quality: quality);
-      if (compressed != null) {
-        // Generate thumbnail with error handling
-        try {
-          await ImageService.generateThumbnail(compressed);
-        } catch (e) {
-          debugPrint('Thumbnail generation failed (non-critical): $e');
-        }
-        return compressed.path;
-      }
-      // Fallback: salva sem compressão se falhar
-      final fallback = await ImageService.savePhotoLocally(photoPath);
+      // >>> t14 S3: inicio
+      final salvo = await ImageService.salvarOriginalComMetadados(photoPath);
       try {
-        await ImageService.generateThumbnail(io.File(fallback));
+        await ImageService.generateThumbnail(io.File(salvo.caminho));
       } catch (e) {
         debugPrint('Thumbnail generation failed (non-critical): $e');
       }
-      return fallback;
+      _hashesNovasFotos[salvo.caminho] = salvo.sha256;
+      _bytesNovasFotos[salvo.caminho] = salvo.bytes;
+      return salvo.caminho;
+      // <<< t14 S3: fim
     } catch (e) {
-      debugPrint('Erro ao salvar/comprimir foto: $e');
-      final fallback = await ImageService.savePhotoLocally(photoPath);
-      try {
-        await ImageService.generateThumbnail(io.File(fallback));
-      } catch (e) {
-        debugPrint('Thumbnail generation failed (non-critical): $e');
-      }
-      return fallback;
+      debugPrint('Erro ao salvar foto: $e');
+      return null;
     }
   }
 
@@ -1276,11 +1268,23 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       await _db.insertParcela(parcela);
     }
     for (final path in _novasFotosPaths) {
+      final fotoUuid = _uuid.v4();
       await _db.insertFotoParcela(FotosParcelaCompanion(
-        uuid: drift.Value(_uuid.v4()),
+        uuid: drift.Value(fotoUuid),
         parcelaUuid: drift.Value(_currentUuid!),
         filePath: drift.Value(path),
       ));
+      // >>> t14 S3 (H5): inicio — completa a linha que o S2 criou
+      final hash = _hashesNovasFotos[path];
+      if (hash != null) {
+        await _db.registrarHashDoAtivo(
+          ativoUuid: 'legado-ativo-$fotoUuid',
+          sha256: hash,
+          bytes: _bytesNovasFotos[path],
+          papel: 'bruto', // D-1: o arquivo guardado É o original
+        );
+      }
+      // <<< t14 S3: fim
     }
   }
 

@@ -40,6 +40,8 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
   bool _mostrarDAP = false;
   bool _fotoObrigatoria = false;
   String? _fotoPath;
+  String? _fotoSha256; // S3: hash do original na origem (RC-04)
+  int? _fotoBytes; // S3: bytes do original
   bool _isEditing = false;
   String? _currentUuid;
   bool _isSaving = false;
@@ -673,8 +675,12 @@ Semantics(
     );
 
     if (photo != null) {
-      final savedPath = await ImageService.savePhotoLocally(photo.path);
-      setState(() => _fotoPath = savedPath);
+      // >>> t14 S3: inicio — original preservado (D-1) + hash na origem
+      final salvo = await ImageService.salvarOriginalComMetadados(photo.path);
+      setState(() => _fotoPath = salvo.caminho);
+      _fotoSha256 = salvo.sha256;
+      _fotoBytes = salvo.bytes;
+      // <<< t14 S3: fim
     }
   }
 
@@ -731,6 +737,7 @@ Semantics(
 
   // >>> t9 S2 (H4): a foto desta planta nasce no catálogo de evidência
   if (_fotoPath != null) {
+    final ativoUuid = 'legado-ativo-$_currentUuid';
     await _db.registrarFotoCatalogo(
       objetoUuid: _currentUuid!,
       entidadeTipo: 'planta',
@@ -738,6 +745,16 @@ Semantics(
       caminhoOriginal: _fotoPath!,
       capturadoEm: DateTime.now(),
     );
+    // >>> t14 S3 (H5): hash do ORIGINAL (D-1) fecha a linha pendente_hash
+    if (_fotoSha256 != null) {
+      await _db.registrarHashDoAtivo(
+        ativoUuid: ativoUuid,
+        sha256: _fotoSha256!,
+        bytes: _fotoBytes,
+        papel: 'bruto',
+      );
+    }
+    // <<< t14 S3: fim
   }
 
 final planta = Planta(

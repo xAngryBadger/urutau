@@ -8,8 +8,53 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import '../services/storage_service.dart';
 
+// >>> t14 S3: inicio
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
+// <<< t14 S3: fim
+
 class ImageService {
   static const _uuid = Uuid();
+
+  /// (S3 / RC-04) SHA-256 hex lowercase de um arquivo.
+  ///
+  /// NA ORIGEM: calculado no aparelho, antes de qualquer upload. Com a D-1
+  /// aplicada (picker sem re-encodar), o arquivo guardado É o original —
+  /// hash aqui é hash do bruto.
+  ///
+  /// Retorna null se o arquivo não existe — NÃO lança: o chamador decide.
+  static Future<String?> sha256De(String path) async {
+    if (kIsWeb) return null;
+    try {
+      final file = File(path);
+      if (!await file.exists()) return null;
+      final bytes = await file.readAsBytes();
+      return sha256.convert(bytes).toString();
+    } catch (e) {
+      debugPrint('Erro ao calcular SHA-256 de $path: $e');
+      return null;
+    }
+  }
+
+  /// (S3) bytes + mime + hash do arquivo — o que o catálogo precisa gravar.
+  static Future<({String? hash, int? bytes, String? mime})> metadadosDe(
+      String path) async {
+    if (kIsWeb) return (hash: null, bytes: null, mime: null);
+    try {
+      final file = File(path);
+      if (!await file.exists()) return (hash: null, bytes: null, mime: null);
+      final bytes = await file.readAsBytes();
+      return (
+        hash: sha256.convert(bytes).toString(),
+        bytes: bytes.length,
+        mime: 'image/jpeg',
+      );
+    } catch (e) {
+      debugPrint('Erro ao ler metadados de $path: $e');
+      return (hash: null, bytes: null, mime: null);
+    }
+  }
+  // <<< t14 S3: fim
 
   /// Comprime uma imagem para reduzir tamanho no upload.
   /// Foto original ~5MB → comprimida ~500KB-1MB.
@@ -55,10 +100,31 @@ class ImageService {
     }
   }
 
-  /// Salva uma foto no diretório do app e retorna o caminho local.
-  /// No web retorna o path original (blob URL).
-  static Future<String> savePhotoLocally(String photoPath) async {
-    if (kIsWeb) return photoPath; // Web: blob URL direto
+  /// (S3) Comprime E devolve os metadados do resultado. Não substitui
+  /// compressImage — os 2 chamadores de sync_service.dart continuam iguais.
+  static Future<({String caminho, String? sha256, int? bytes})?>
+      comprimirComMetadados(File file, {int quality = 70}) async {
+    final result = await compressImage(file, quality: quality);
+    if (result == null) return null;
+    final meta = await metadadosDe(result.path);
+    return (caminho: result.path, sha256: meta.hash, bytes: meta.bytes);
+  }
+
+  /// (S3 + D-1) Salva o ORIGINAL e devolve metadados dele — com a decisão do
+  /// Badger o app não re-encoda mais; o original é a evidência.
+  static Future<({String caminho, String? sha256, int? bytes})>
+      salvarOriginalComMetadados(String photoPath) async {
+    final salvo = await savePhotoLocally(photoPath);
+    final meta = await metadadosDe(salvo.caminho);
+    return (caminho: salvo.caminho, sha256: meta.hash, bytes: meta.bytes);
+  }
+
+  /// (S3) Salva a foto no diretório do app e devolve (caminho, sha256).
+  /// ANTES devolvia só String — 3 chamadores: parcela_form_screen.dart:1100
+  /// e :1109 (fallback) e planta_form_screen.dart (primário).
+  static Future<({String caminho, String? sha256})> savePhotoLocally(
+      String photoPath) async {
+    if (kIsWeb) return (caminho: photoPath, sha256: null);
     try {
       final photo = File(photoPath);
       final dir = await getApplicationDocumentsDirectory();
@@ -69,10 +135,10 @@ class ImageService {
 
       final fileName = '${_uuid.v4()}.jpg';
       final savedFile = await photo.copy(p.join(photosDir.path, fileName));
-      return savedFile.path;
+      return (caminho: savedFile.path, sha256: await sha256De(savedFile.path));
     } catch (e) {
       debugPrint('Erro ao salvar foto localmente: $e');
-      return photoPath;
+      return (caminho: photoPath, sha256: null);
     }
   }
 

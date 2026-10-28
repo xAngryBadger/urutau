@@ -6,6 +6,9 @@ import 'package:path/path.dart' as p;
 import '../services/backup_service.dart';
 import '../services/password_service.dart';
 import '../services/image_service.dart';
+// >>> t14 S3: inicio
+import 'package:crypto/crypto.dart';
+// <<< t14 S3: fim
 // >>> t9 patch: inicio (imports ANTES do part — Dart exige essa ordem)
 import 'migrations/mrv_tables.dart';
 import 'migrations/mrv_migration.dart';
@@ -1164,6 +1167,102 @@ VGVG0069;UT04;0.0;1''';
   Future<int> atualizarServerPlantaId(String uuid, String serverId) =>
       (update(plantas)..where((t) => t.uuid.equals(uuid)))
           .write(PlantasCompanion(serverPlantaId: Value(serverId)));
+
+  // >>> t14 S3: inicio — catálogo de evidência (hash)
+  /// UUID local para incidentes (mesmo formato das demais tabelas).
+  String _novoUuid() =>
+      DateTime.now().microsecondsSinceEpoch.toRadixString(16) +
+      '-local';
+
+  /// (S3 H5) Grava hash+bytes no catálogo. NUNCA sobrescreve sha256
+  /// existente: divergência abre incidente, o valor original permanece
+  /// como evidência (contrato do patch-s3-hash).
+  Future<void> registrarHashDoAtivo({
+    required String ativoUuid,
+    required String sha256,
+    int? bytes,
+    String? mime,
+    String papel = 'derivado',
+  }) async {
+    final existente = await (select(ativosBrutos)
+          ..where((t) => t.uuid.equals(ativoUuid)))
+        .getSingleOrNull();
+    if (existente == null) return; // sem linha não inventa
+
+    if (existente.sha256 != null && existente.sha256 != sha256) {
+      // divergência → incidente (nunca overwrite)
+      await into(incidentes).insert(IncidentesCompanion.insert(
+        uuid: _novoUuid(),
+        tipo: 'hash_divergente',
+        entidadeTipo: const Value('ativo'),
+        entidadeUuid: Value(ativoUuid),
+        severidade: 'alta',
+        descricao: Value(
+            'hash divergente: catalogo=${existente.sha256} novo=$sha256'),
+      ));
+      return;
+    }
+
+    await (update(ativosBrutos)..where((t) => t.uuid.equals(ativoUuid)))
+        .write(AtivosBrutosCompanion(
+      sha256: Value(sha256),
+      bytes: Value(bytes),
+      mime: Value(mime),
+      papel: Value(papel),
+      status: const Value('presente'),
+      updatedAt: Value(DateTime.now()),
+    ));
+  }
+
+  /// (S3 H4) hash do ativo de uma foto, para recheck no upload.
+  Future<String?> hashDoAtivoDaFoto(String fotoUuid) async {
+    final row = await (select(ativosBrutos)
+          ..where((t) =>
+              t.entidadeUuid.equals(fotoUuid) & t.papel.equals('derivado'))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.sha256;
+  }
+
+  /// (S3 H6 / RC-07) Recalcula o hash dos arquivos do catálogo e compara.
+  /// Rodar SOB DEMANDA (custa I/O). Divergência nunca sobrescreve —
+  /// abre incidente e o valor original permanece.
+  Future<({int verificados, int divergentes, int ilegiveis})>
+      verificarIntegridadeAtivos() async {
+    final ativos = await (select(ativosBrutos)
+          ..where((t) => t.caminhoOriginal.isNotNull() & t.sha256.isNotNull()))
+        .get();
+    int verificados = 0;
+    int divergentes = 0;
+    int ilegiveis = 0;
+
+    for (final a in ativos) {
+      final path = a.caminhoOriginal!;
+      final file = io.File(path);
+      if (!await file.exists()) {
+        ilegiveis++;
+        continue;
+      }
+      final bytes = await file.readAsBytes();
+      final hash = sha256.convert(bytes).toString();
+      verificados++;
+      if (hash != a.sha256) {
+        divergentes++;
+        await into(incidentes).insert(IncidentesCompanion.insert(
+          uuid: _novoUuid(),
+          tipo: 'integridade_divergente',
+          entidadeTipo: const Value('ativo'),
+          entidadeUuid: Value(a.uuid),
+          severidade: 'alta',
+          descricao: Value(
+              'recheck divergente: catalogo=${a.sha256} arquivo=$hash'),
+        ));
+      }
+    }
+    return (verificados: verificados, divergentes: divergentes, ilegiveis: ilegiveis);
+  }
+  // <<< t14 S3: fim
 
   /// (t14 v26) Grava o id do servidor da parcela dona desta planta.
   /// Só preenche se ainda estiver NULL — nunca sobrescreve (um id errado

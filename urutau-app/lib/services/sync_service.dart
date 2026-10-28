@@ -1642,7 +1642,21 @@ class SyncService extends ChangeNotifier {
     final foto = fotos[entry['index'] as int];
     final path = foto.filePath;
     final file = File(path);
-    final fileToSend = (await ImageService.compressImage(file)) ?? file;
+    // >>> t14 S3 (H4): inicio — recheck de hash antes de subir (RC-04)
+    // D-1: o ORIGINAL sobe; hash conferido contra o catálogo.
+    final hashDoUpload = await ImageService.sha256De(file.path);
+    final doCatalogo = await _db.hashDoAtivoDaFoto(foto.uuid);
+    if (doCatalogo != null && hashDoUpload != null && hashDoUpload != doCatalogo) {
+      await _db.logAudit('hash_divergente_upload',
+          entityType: 'foto',
+          entityUuid: foto.uuid,
+          oldValue: doCatalogo,
+          newValue: hashDoUpload);
+      throw Exception(
+          'Hash divergente no upload (RC-04): catalogo=$doCatalogo arquivo=$hashDoUpload');
+    }
+    final fileToSend = file;
+    // <<< t14 S3: fim
         freshFiles.add(await http.MultipartFile.fromPath(
           'fotos_parcela',
           fileToSend.path,
@@ -1717,9 +1731,23 @@ class SyncService extends ChangeNotifier {
         if (!kIsWeb && planta.fotoEspeciePath != null) {
           final fotoFile = File(planta.fotoEspeciePath!);
           if (await fotoFile.exists()) {
-            final compressed = await ImageService.compressImage(fotoFile);
-            final fileToSend = compressed ?? fotoFile;
-            plantaFotoPath = fileToSend.path;
+            // >>> t14 S3 (H4): inicio — recheck de hash antes de subir (RC-04)
+            // D-1: o ORIGINAL sobe, sem re-encodar.
+            final hashDoUpload = await ImageService.sha256De(fotoFile.path);
+            final doCatalogo = await _db.hashDoAtivoDaFoto(planta.uuid);
+            if (doCatalogo != null &&
+                hashDoUpload != null &&
+                hashDoUpload != doCatalogo) {
+              await _db.logAudit('hash_divergente_upload',
+                  entityType: 'foto',
+                  entityUuid: planta.uuid,
+                  oldValue: doCatalogo,
+                  newValue: hashDoUpload);
+              throw Exception(
+                  'Hash divergente no upload (RC-04): catalogo=$doCatalogo arquivo=$hashDoUpload');
+            }
+            // <<< t14 S3: fim
+            plantaFotoPath = fotoFile.path;
             plantaFotoName = _gerarNomeFotoPlanta(parcela, planta, i);
           }
         }
