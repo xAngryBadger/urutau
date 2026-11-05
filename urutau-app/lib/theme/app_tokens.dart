@@ -50,6 +50,14 @@ abstract final class AppTokens {
   static const Color mrvGreenBg = Color(0xFFE8F5E9);
   static const Color danger = Color(0xFFC62828);
 
+  // ── Semânticas usadas nos forms (mesmos valores de antes, só nomeadas) ──
+  static const Color accentTeal = Color(0xFF009688); // == Colors.teal
+  static const Color success = Color(0xFF4CAF50); // == Colors.green
+  static const Color successBg = Color(0xFFE8F5E9); // == Colors.green.shade50
+  static const Color successDark = Color(0xFF1B5E20); // == Colors.green.shade900
+  static const Color warning = Color(0xFFFF9800); // == Colors.orange
+  static const Color neutralBg = Color(0xFFF5F5F5); // == Colors.grey.shade100
+
   // ── Escala de espaçamento e formas ───────────────────────────────────
   static const double spaceXs = 4;
   static const double spaceS = 8;

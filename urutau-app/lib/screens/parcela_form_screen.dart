@@ -21,6 +21,7 @@ import 'planta_form_screen.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/arquivo_ausente_badge.dart';
 import '../widgets/status_badge.dart';
+import '../widgets/urutau_section_card.dart';
 
 const String kPhotoQualityKey = 'photo_compression_quality';
 const int kPhotoQualityDefault = 70;
@@ -569,82 +570,65 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                         // ==========================================
                         const SizedBox(height: 12),
                         // --- GPS da parcela (RC-10) ---
-                        Card(
-                          color: _latitude != null
-                              ? Colors.green.shade50
-                              : Colors.grey.shade100,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.location_on,
-                                        color: _latitude != null
-                                            ? Colors.green
-                                            : Colors.grey),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Localização GPS (obrigatória ao concluir)',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: _latitude != null
-                                            ? Colors.green.shade900
-                                            : null,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    if (_isGettingLocation)
-                                      const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    else
-                                      TextButton.icon(
-                                        onPressed:
-                                            widget.readOnly ? null : _getLocation,
-                                        icon: const Icon(Icons.my_location,
-                                            size: 18),
-                                        label: Text(_latitude != null
-                                            ? 'Atualizar'
-                                            : 'Capturar GPS'),
-                                      ),
-                                  ],
+                        UrutauSectionCard(
+                          icon: Icons.location_on,
+                          title: 'Localização GPS (obrigatória ao concluir)',
+                          accent: _latitude != null ? AppTokens.success : Colors.grey,
+                          background: _latitude != null
+                              ? AppTokens.successBg
+                              : AppTokens.neutralBg,
+                          headerTrailing: [
+                            if (_isGettingLocation)
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            else
+                              TextButton.icon(
+                                onPressed:
+                                    widget.readOnly ? null : _getLocation,
+                                icon: const Icon(Icons.my_location, size: 18),
+                                label: Text(_latitude != null
+                                    ? 'Atualizar'
+                                    : 'Capturar GPS'),
+                              ),
+                          ],
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (_latitude != null) ...[
+                                Text(
+                                  '${_latitude!.toStringAsFixed(6)}, '
+                                  '${_longitude!.toStringAsFixed(6)}'
+                                  '${_acuraciaM != null ? '  ·  ±${_acuraciaM!.toStringAsFixed(1)} m' : ''}'
+                                  '${_fixEm != null ? '  ·  ${_fixEm!.toLocal().toString().substring(0, 19)}' : ''}',
+                                  style: const TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: AppTokens.fontSmall),
                                 ),
-                                if (_latitude != null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${_latitude!.toStringAsFixed(6)}, '
-                                    '${_longitude!.toStringAsFixed(6)}'
-                                    '${_acuraciaM != null ? '  ·  ±${_acuraciaM!.toStringAsFixed(1)} m' : ''}'
-                                    '${_fixEm != null ? '  ·  ${_fixEm!.toLocal().toString().substring(0, 19)}' : ''}',
-                                    style: const TextStyle(
-                                        fontFamily: 'monospace', fontSize: 13),
-                                  ),
-                                  const Text(
-                                    'Datum WGS84 · fonte: GPS do aparelho',
-                                    style: TextStyle(
-                                        fontSize: 11, color: Colors.black54),
-                                  ),
-                                ] else ...[
-                                  const Text(
-                                    'Nenhum ponto capturado. Ao concluir a parcela, '
-                                    'o GPS é obrigatório (MRV exige geo auditável).',
-                                    style: TextStyle(
-                                        fontSize: 12, color: Colors.black54),
-                                  ),
-                                ],
-                                if (_gpsErro != null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(_gpsErro!,
-                                      style: const TextStyle(
-                                          fontSize: 12, color: Colors.red)),
-                                ],
+                                const Text(
+                                  'Datum WGS84 · fonte: GPS do aparelho',
+                                  style: TextStyle(
+                                      fontSize: AppTokens.fontCaption,
+                                      color: Colors.black54),
+                                ),
+                              ] else ...[
+                                const Text(
+                                  'Nenhum ponto capturado. Ao concluir a parcela, '
+                                  'o GPS é obrigatório (MRV exige geo auditável).',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black54),
+                                ),
                               ],
-                            ),
+                              if (_gpsErro != null) ...[
+                                const SizedBox(height: 4),
+                                Text(_gpsErro!,
+                                    style: const TextStyle(
+                                        fontSize: 12, color: Colors.red)),
+                              ],
+                            ],
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -780,26 +764,14 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                         // ==========================================
                         // SEÇÃO 1b: Unidade amostral (RS-01/RS-02)
                         // ==========================================
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.square_foot,
-                                        color: Colors.teal),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'Unidade amostral (obrigatória ao concluir)',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                DropdownButtonFormField<String>(
+                        UrutauSectionCard(
+                          icon: Icons.square_foot,
+                          title: 'Unidade amostral (obrigatória ao concluir)',
+                          accent: AppTokens.accentTeal,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              DropdownButtonFormField<String>(
                                   initialValue: _unidadeForma,
                                   decoration: InputDecoration(
                                     labelText: 'Forma da parcela',
@@ -899,8 +871,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                                   textCapitalization:
                                       TextCapitalization.sentences,
                                 ),
-                              ],
-                            ),
+                            ],
                           ),
                         ),
 
@@ -917,49 +888,40 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                                     .currentUser
                                     ?.isAdmin ??
                                 false;
-                            return Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(
-                                    AppTokens.cardPadding),
-                                child: Row(
-                                  children: [
-                                    StatusBadge(
-                                        status: _statusVerificacao,
-                                        compact: true),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: DropdownButtonFormField<String>(
-                                        initialValue: _statusVerificacao,
-                                        decoration: InputDecoration(
-                                          labelText:
-                                              'Verificação (só admin altera)',
-                                          border: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(12)),
-                                        ),
-                                        items: const [
-                                          DropdownMenuItem(
-                                              value: 'pendente',
-                                              child: Text('Pendente')),
-                                          DropdownMenuItem(
-                                              value: 'revisado',
-                                              child: Text('Revisado')),
-                                          DropdownMenuItem(
-                                              value: 'aprovado',
-                                              child: Text('Aprovado')),
-                                        ],
-                                        onChanged:
-                                            (admin && !widget.readOnly)
-                                                ? (v) => setState(() {
-                                                      if (v != null) {
-                                                        _statusVerificacao = v;
-                                                      }
-                                                    })
-                                                : null,
-                                      ),
-                                    ),
-                                  ],
+                            return UrutauSectionCard(
+                              icon: Icons.verified_user,
+                              title: 'Verificação (só admin altera)',
+                              accent: AppTokens.statusColor(_statusVerificacao),
+                              headerTrailing: [
+                                StatusBadge(
+                                    status: _statusVerificacao, compact: true),
+                              ],
+                              child: DropdownButtonFormField<String>(
+                                initialValue: _statusVerificacao,
+                                decoration: InputDecoration(
+                                  labelText: 'Status de verificação',
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(
+                                          AppTokens.radiusM)),
                                 ),
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'pendente',
+                                      child: Text('Pendente')),
+                                  DropdownMenuItem(
+                                      value: 'revisado',
+                                      child: Text('Revisado')),
+                                  DropdownMenuItem(
+                                      value: 'aprovado',
+                                      child: Text('Aprovado')),
+                                ],
+                                onChanged: (admin && !widget.readOnly)
+                                    ? (v) => setState(() {
+                                          if (v != null) {
+                                            _statusVerificacao = v;
+                                          }
+                                        })
+                                    : null,
                               ),
                             );
                           },
@@ -1048,43 +1010,28 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                         // RQ-01..03: estimativa de carbono ao vivo
                         if (_estimativaMrv != null) ...[
                           const SizedBox(height: 16),
-                          Card(
-                            color: AppTokens.mrvGreenBg,
-                            child: Padding(
-                              padding: const EdgeInsets.all(
-                                  AppTokens.cardPadding),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(Icons.co2,
-                                          color: AppTokens.mrvGreen),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Estimativa de carbono (MRV)',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green[900],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    '${(_estimativaMrv!['tco2e_ha'] as double).toStringAsFixed(1)} tCO₂e/ha'
-                                    '  ·  ${(_estimativaMrv!['tco2e_total'] as double).toStringAsFixed(2)} tCO₂e na parcela'
-                                    '  ·  ${_estimativaMrv!['n_com_dap']}/${_estimativaMrv!['n_individuos']} com DAP',
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                  const Text(
-                                    'Equação: Chave et al. 2014 (pantropical) · '
-                                    'FC 0,47 · 44/12 · AGB aérea apenas',
-                                    style: TextStyle(
-                                        fontSize: 11, color: Colors.black54),
-                                  ),
-                                ],
-                              ),
+                          UrutauSectionCard(
+                            icon: Icons.co2,
+                            title: 'Estimativa de carbono (MRV)',
+                            accent: AppTokens.mrvGreen,
+                            background: AppTokens.mrvGreenBg,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${(_estimativaMrv!['tco2e_ha'] as double).toStringAsFixed(1)} tCO₂e/ha'
+                                  '  ·  ${(_estimativaMrv!['tco2e_total'] as double).toStringAsFixed(2)} tCO₂e na parcela'
+                                  '  ·  ${_estimativaMrv!['n_com_dap']}/${_estimativaMrv!['n_individuos']} com DAP',
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                                const Text(
+                                  'Equação: Chave et al. 2014 (pantropical) · '
+                                  'FC 0,47 · 44/12 · AGB aérea apenas',
+                                  style: TextStyle(
+                                      fontSize: AppTokens.fontCaption,
+                                      color: Colors.black54),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -1199,24 +1146,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     );
   }
 
-  Widget _sectionTitle(String title, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, color: Theme.of(context).colorScheme.primary, size: 22),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _sectionTitle(String title, IconData icon) =>
+      SectionTitle(title: title, icon: icon);
 
   Widget _buildPlantaCard(int index, Planta planta) {
     final categoriaColors = {
