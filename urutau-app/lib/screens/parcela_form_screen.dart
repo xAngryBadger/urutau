@@ -14,6 +14,7 @@ import '../data/database.dart';
 import '../services/backup_service.dart';
 import '../services/export_service.dart';
 import '../services/image_service.dart';
+import '../services/mrv_calc_service.dart';
 import '../services/sync_service.dart';
 import '../services/storage_service.dart';
 import 'planta_form_screen.dart';
@@ -92,6 +93,13 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       return 3.141592653589793 * r * r;
     }
     return double.tryParse(_areaController.text.replaceAll(',', '.'));
+  }
+
+  /// RQ-01..03: estimativa de carbono ao vivo (só quando há plantas + área).
+  Map<String, dynamic>? get _estimativaMrv {
+    final area = _areaM2Calculada;
+    if (_plantas.isEmpty || area == null || area <= 0) return null;
+    return MrvCalcService.calcularParcela(plantas: _plantas, areaM2: area);
   }
 
   @override
@@ -962,6 +970,48 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                           ),
                         ),
 
+                        // RQ-01..03: estimativa de carbono ao vivo
+                        if (_estimativaMrv != null) ...[
+                          const SizedBox(height: 16),
+                          Card(
+                            color: Colors.green.shade50,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.co2, color: Colors.green[800]),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Estimativa de carbono (MRV)',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green[900],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '${(_estimativaMrv!['tco2e_ha'] as double).toStringAsFixed(1)} tCO₂e/ha'
+                                    '  ·  ${(_estimativaMrv!['tco2e_total'] as double).toStringAsFixed(2)} tCO₂e na parcela'
+                                    '  ·  ${_estimativaMrv!['n_com_dap']}/${_estimativaMrv!['n_individuos']} com DAP',
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                                  const Text(
+                                    'Equação: Chave et al. 2014 (pantropical) · '
+                                    'FC 0,47 · 44/12 · AGB aérea apenas',
+                                    style: TextStyle(
+                                        fontSize: 11, color: Colors.black54),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+
                         const SizedBox(height: 32),
 
                         // ==========================================
@@ -1655,6 +1705,22 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         );
       }
       // <<< t14 S3: fim
+    }
+
+    // RQ-01..03: ao concluir (prontaParaSync), calcula e persiste o carbono
+    // da parcela em calculos_mrv + resultados_amostra.
+    final area = _areaM2Calculada;
+    if (prontaParaSync && area != null && area > 0 && _plantas.isNotEmpty) {
+      final resultado = MrvCalcService.calcularParcela(
+        plantas: _plantas,
+        areaM2: area,
+      );
+      await MrvCalcService.persistirCalculo(
+        db: _db,
+        parcelaUuid: _currentUuid!,
+        resultado: resultado,
+        areaM2: area,
+      );
     }
   }
 
