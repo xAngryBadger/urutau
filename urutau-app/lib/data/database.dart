@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io' as io;
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
@@ -1465,7 +1466,8 @@ VGVG0069;UT04;0.0;1''';
 
   // ========== AUDIT LOG ==========
 
-  /// Registra uma ação no log de auditoria.
+  /// Registra uma ação no log de auditoria (tabela legada) E na trilha
+  /// encadeada por hash (RG-04 — imutável, append-only).
   Future<void> logAudit(
     String action, {
     String? entityType,
@@ -1484,6 +1486,109 @@ VGVG0069;UT04;0.0;1''';
       oldValue: Value(oldValue),
       newValue: Value(newValue),
     ));
+    await logTrilha(
+      acao: action,
+      entidadeTipo: entityType,
+      entidadeUuid: entityUuid,
+      usuarioUuid: userId,
+      antes: oldValue,
+      depois: newValue != null ? newValue : details,
+      origem: 'app',
+    );
+  }
+
+  /// RG-04: insere na trilha de auditoria encadeada por hash.
+  /// entryHash = sha256(prevHash | acao | entidade | antes | depois | ts | origem).
+  /// A cadeia quebra se qualquer entrada for alterada depois.
+  Future<int> logTrilha({
+    required String acao,
+    String? entidadeTipo,
+    String? entidadeUuid,
+    String? usuarioUuid,
+    String? antes,
+    String? depois,
+    required String origem,
+  }) async {
+    // Último hash da cadeia (maior idSeq)
+    final ultimo = await (select(trilhaAuditoria)
+          ..orderBy([(t) => OrderingTerm.desc(t.idSeq)])
+          ..limit(1))
+        .getSingleOrNull();
+    final prevHash = ultimo?.entryHash ?? 'GENESIS';
+
+    // Trunca pra SEGUNDOS UTC: o drift guarda DateTime no SQLite como
+    // epoch em segundos (descarta ms) — sem isso o hash calculado no insert
+    // não bate com o recalculado na verificação após o round-trip.
+    final ts = DateTime.fromMillisecondsSinceEpoch(
+        (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000) * 1000,
+        isUtc: true);
+    final payload = jsonEncode({
+      'prev': prevHash,
+      'acao': acao,
+      'entidade_tipo': entidadeTipo,
+      'entidade_uuid': entidadeUuid,
+      'usuario_uuid': usuarioUuid,
+      'antes': antes,
+      'depois': depois,
+      'ts_dispositivo': ts.toIso8601String(),
+      'origem': origem,
+    });
+    final entryHash =
+        sha256.convert(utf8.encode(payload)).toString();
+
+    return await into(trilhaAuditoria).insert(TrilhaAuditoriaCompanion.insert(
+      entidadeTipo: Value(entidadeTipo),
+      entidadeUuid: Value(entidadeUuid),
+      acao: acao,
+      antes: Value(antes),
+      depois: Value(depois),
+      usuarioUuid: Value(usuarioUuid),
+      tsServidor: Value(ts),
+      tsDispositivo: Value(ts),
+      origem: origem,
+      prevHash: Value(prevHash),
+      entryHash: Value(entryHash),
+    ));
+  }
+
+  /// RG-04: verifica a integridade da cadeia local.
+  /// Retorna null se íntegra, ou a descrição da quebra.
+  Future<String?> verificarCadeiaAuditoria() async {
+    final entradas = await (select(trilhaAuditoria)
+          ..orderBy([(t) => OrderingTerm.asc(t.idSeq)]))
+        .get();
+    String prev = 'GENESIS';
+    for (final e in entradas) {
+      if (e.prevHash != prev) {
+        return 'Cadeia quebrada em idSeq=${e.idSeq}: prevHash esperado '
+            '$prev, encontrado ${e.prevHash}';
+      }
+      final payload = jsonEncode({
+        'prev': e.prevHash,
+        'acao': e.acao,
+        'entidade_tipo': e.entidadeTipo,
+        'entidade_uuid': e.entidadeUuid,
+        'usuario_uuid': e.usuarioUuid,
+        'antes': e.antes,
+        'depois': e.depois,
+        // drift lê DateTime de volta em horário local; normaliza pro mesmo
+        // instante UTC (ms) usado no cálculo do hash no insert
+        'ts_dispositivo': e.tsDispositivo == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(
+                    e.tsDispositivo!.millisecondsSinceEpoch,
+                    isUtc: true)
+                .toIso8601String(),
+        'origem': e.origem,
+      });
+      final esperado = sha256.convert(utf8.encode(payload)).toString();
+      if (e.entryHash != esperado) {
+        return 'Hash divergente em idSeq=${e.idSeq}: esperado $esperado, '
+            'encontrado ${e.entryHash}';
+      }
+      prev = e.entryHash!;
+    }
+    return null; // íntegra
   }
 
   /// Retorna últimas entradas do audit log.
