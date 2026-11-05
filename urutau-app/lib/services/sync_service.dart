@@ -1027,6 +1027,9 @@ class SyncService extends ChangeNotifier {
               ),
               parcelaUuid,
             );
+            // v28 MRV: aplica metadados das fotos vindos do servidor
+            await _aplicarFotosMetaDoServidor(
+                parcelaUuid, rec.getStringValue('fotos_meta'));
           }
           if (existing.deletedAt != null) {
             // Q3 item 6: soft-delete LOCAL tem precedência sobre o servidor.
@@ -1480,6 +1483,55 @@ class SyncService extends ChangeNotifier {
     return '${propUt}_P${parcela.idParcela.toString().padLeft(2, '0')}_Planta${(index + 1).toString().padLeft(2, '0')}_C${planta.categoria}_${data}_$hora.jpg';
   }
 
+  /// v28 MRV: JSON com os metadados de cada foto da parcela
+  /// (uuid, nome, sha256, lat/long, autor, timestamp) — o pitch promete
+  /// "cada foto recebe hash SHA-256, GPS, timestamp e dono"; isso sobe
+  /// junto com a parcela pra o auditor refazer a conta.
+  Future<String> _fotosMetaJson(String parcelaUuid) async {
+    final fotos = await _db.getFotosByParcela(parcelaUuid);
+    final lista = <Map<String, dynamic>>[];
+    for (final f in fotos) {
+      final hash = await _db.hashDoAtivoDaFoto(f.uuid);
+      lista.add({
+        'uuid': f.uuid,
+        'arquivo': f.filePath.split(RegExp(r'[\\/]')).last,
+        'sha256': hash,
+        'latitude': f.latitude,
+        'longitude': f.longitude,
+        'autor': f.autorUuid,
+        'capturada_em': f.createdAt.toIso8601String(),
+      });
+    }
+    return jsonEncode(lista);
+  }
+
+  /// v28 MRV: aplica no banco local o fotos_meta vindo do servidor
+  /// (atualiza GPS/dono das fotos PELOS dados do servidor, sem apagar hash).
+  Future<void> _aplicarFotosMetaDoServidor(
+      String parcelaUuid, String fotosMetaJson) async {
+    if (fotosMetaJson.trim().isEmpty) return;
+    try {
+      final lista = jsonDecode(fotosMetaJson);
+      if (lista is! List) return;
+      for (final item in lista) {
+        if (item is! Map) continue;
+        final uuid = item['uuid']?.toString();
+        if (uuid == null || uuid.isEmpty) continue;
+        final lat = item['latitude'];
+        final lon = item['longitude'];
+        final autor = item['autor']?.toString();
+        await _db.updateFotoParcelaCampos(
+          uuid,
+          latitude: lat is num ? lat.toDouble() : null,
+          longitude: lon is num ? lon.toDouble() : null,
+          autorUuid: (autor != null && autor.isNotEmpty) ? autor : null,
+        );
+      }
+    } catch (e) {
+      debugPrint('fotos_meta inválido vindo do servidor: $e');
+    }
+  }
+
   /// Remove caracteres especiais de nomes de arquivo.
   String _sanitizeFileName(String name) {
     return name
@@ -1631,6 +1683,9 @@ class SyncService extends ChangeNotifier {
       'raio_m': parcela.raioM,
       'marcador': parcela.marcador,
       'status_verificacao': parcela.statusParcela,
+      // v28 MRV: metadados por foto (hash + GPS + timestamp + dono) —
+      // promessa do pitch: "cada foto recebe hash SHA-256, GPS, timestamp e dono"
+      'fotos_meta': await _fotosMetaJson(parcela.uuid),
     };
     if (utId != null) {
       parcelaBody = {
@@ -1769,6 +1824,8 @@ class SyncService extends ChangeNotifier {
           // Fase 1: identidade + versão para o upsert
           'uuid_local': planta.uuid,
           'updated_at': planta.updatedAt.toIso8601String(),
+          // v28 MRV: dono da medição (pitch: cada medição tem dono)
+          'autor': planta.autorUuid,
         };
 
         // Pré-calcula caminho da foto para criar MultipartFile fresco a cada retry

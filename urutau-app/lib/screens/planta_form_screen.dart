@@ -10,6 +10,7 @@ import '../data/categoria_helper.dart';
 import '../data/especie_item.dart';
 import '../services/image_service.dart';
 import '../services/species_service.dart';
+import '../services/sync_service.dart';
 import '../widgets/arquivo_ausente_badge.dart';
 
 class PlantaFormScreen extends StatefulWidget {
@@ -746,6 +747,8 @@ Semantics(
         cat = calcularCategoria(altura, dap);
       }
 
+      // v28 MRV: dono da medição (pitch: "cada medição tem ... dono")
+      final autor = context.read<SyncService>().currentUser?.uuid;
       final companion = PlantasCompanion(
         uuid: drift.Value(_currentUuid!),
         parcelaUuid: drift.Value(widget.parcelaUuid),
@@ -756,6 +759,9 @@ Semantics(
         fotoEspeciePath: drift.Value(_fotoPath),
         synced: const drift.Value(false),
         updatedAt: drift.Value(DateTime.now()),
+        autorUuid: _isEditing
+            ? const drift.Value.absent()
+            : drift.Value(autor),
       );
 
       if (_isEditing) {

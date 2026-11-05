@@ -119,6 +119,11 @@ class Plantas extends Table {
   /// NULL = ainda não sincronizada. Preenchido/atualizado no push.
   TextColumn get serverPlantaId => text().nullable()();
 
+  /// (v28, MRV — pitch: "cada medição tem GPS, timestamp e dono"):
+  /// quem registrou a medição. GPS da planta vem do fix da parcela (geoJson);
+  /// timestamp é createdAt. autorUuid fecha a tríade prometida ao cliente.
+  TextColumn get autorUuid => text().nullable()();
+
   // >>> t14: inicio — v26 parcelaServerId
   /// (v26) id do registro parcela NO SERVIDOR (cópia local do campo texto do
   /// PB, que passa a relation `parcela_rel` na migração 1778250001).
@@ -158,6 +163,15 @@ class FotosParcela extends Table {
   /// Quando o upload foi confirmado (hash conferido). Base do estado.
   DateTimeColumn get enviadoVerificadoEm => dateTime().nullable()();
   // <<< t16: fim
+
+  // >>> v28: inicio — MRV: cada foto tem GPS + dono (promessa do pitch)
+  /// Fix GPS no momento da captura (câmera). Galeria/EXIF: NULL e herda
+  /// o fix da parcela no sync (fonte registrada em fotos_meta).
+  RealColumn get latitude => real().nullable()();
+  RealColumn get longitude => real().nullable()();
+  /// Quem tirou/registrou a foto.
+  TextColumn get autorUuid => text().nullable()();
+  // <<< v28: fim
 }
 
 /// Tabela de auditoria — registra operações críticas no sistema.
@@ -212,7 +226,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 27; // v26 + t16 D-1 (arquivo_estado)
+  int get schemaVersion => 28; // v27 + MRV: foto/planta com GPS+dono (fotos_meta)
 
   @override
   MigrationStrategy get migration {
@@ -338,6 +352,24 @@ class AppDatabase extends _$AppDatabase {
           "WHERE synced = 1 AND arquivo_estado = 'capturado'");
       }
       // <<< t16: fim
+      // >>> v28: inicio — MRV: foto/planta com GPS + dono (promessa do pitch)
+      if (from < 28) {
+        await m.addColumn(fotosParcela, fotosParcela.latitude);
+        await m.addColumn(fotosParcela, fotosParcela.longitude);
+        await m.addColumn(fotosParcela, fotosParcela.autorUuid);
+        await m.addColumn(plantas, plantas.autorUuid);
+        // Backfill: fotos/planta já existentes ganham o dono da parcela
+        // (quem registrou a parcela é o dono das evidências dela).
+        await m.database.customStatement(
+          'UPDATE fotos_parcela SET autor_uuid = '
+          '  (SELECT user_id FROM parcelas WHERE parcelas.uuid = fotos_parcela.parcela_uuid) '
+          'WHERE autor_uuid IS NULL');
+        await m.database.customStatement(
+          'UPDATE plantas SET autor_uuid = '
+          '  (SELECT user_id FROM parcelas WHERE parcelas.uuid = plantas.parcela_uuid) '
+          'WHERE autor_uuid IS NULL');
+      }
+      // <<< v28: fim
       // >>> t9 patch: inicio — migracao MRV v20..v24
       if (from < 20) {
         await _mrvV20Ddl(m);
@@ -1184,6 +1216,23 @@ VGVG0069;UT04;0.0;1''';
             ..where((t) =>
                 t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull()))
           .watch();
+
+  /// v28 MRV: atualiza campos de rastreabilidade de uma foto vindos do
+  /// servidor (fotos_meta), sem tocar em hash/arquivo.
+  Future<void> updateFotoParcelaCampos(
+    String fotoUuid, {
+    double? latitude,
+    double? longitude,
+    String? autorUuid,
+  }) async {
+    await (update(fotosParcela)..where((t) => t.uuid.equals(fotoUuid))).write(
+      FotosParcelaCompanion(
+        latitude: latitude != null ? Value(latitude) : const Value.absent(),
+        longitude: longitude != null ? Value(longitude) : const Value.absent(),
+        autorUuid: autorUuid != null ? Value(autorUuid) : const Value.absent(),
+      ),
+    );
+  }
 
   Future<int> insertFotoParcela(FotosParcelaCompanion foto) async {
     final id = await into(fotosParcela).insert(foto);

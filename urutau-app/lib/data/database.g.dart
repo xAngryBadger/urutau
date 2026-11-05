@@ -1889,6 +1889,12 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
   late final GeneratedColumn<String> serverPlantaId = GeneratedColumn<String>(
       'server_planta_id', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _autorUuidMeta =
+      const VerificationMeta('autorUuid');
+  @override
+  late final GeneratedColumn<String> autorUuid = GeneratedColumn<String>(
+      'autor_uuid', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _parcelaServerIdMeta =
       const VerificationMeta('parcelaServerId');
   @override
@@ -1925,6 +1931,7 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
         deletedAt,
         fotoAusente,
         serverPlantaId,
+        autorUuid,
         parcelaServerId,
         arquivoEstado,
         enviadoVerificadoEm
@@ -2012,6 +2019,10 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
           serverPlantaId.isAcceptableOrUnknown(
               data['server_planta_id']!, _serverPlantaIdMeta));
     }
+    if (data.containsKey('autor_uuid')) {
+      context.handle(_autorUuidMeta,
+          autorUuid.isAcceptableOrUnknown(data['autor_uuid']!, _autorUuidMeta));
+    }
     if (data.containsKey('parcela_server_id')) {
       context.handle(
           _parcelaServerIdMeta,
@@ -2067,6 +2078,8 @@ class $PlantasTable extends Plantas with TableInfo<$PlantasTable, Planta> {
           .read(DriftSqlType.bool, data['${effectivePrefix}foto_ausente'])!,
       serverPlantaId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}server_planta_id']),
+      autorUuid: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}autor_uuid']),
       parcelaServerId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}parcela_server_id']),
       arquivoEstado: attachedDatabase.typeMapping
@@ -2106,6 +2119,11 @@ class Planta extends DataClass implements Insertable<Planta> {
   /// NULL = ainda não sincronizada. Preenchido/atualizado no push.
   final String? serverPlantaId;
 
+  /// (v28, MRV — pitch: "cada medição tem GPS, timestamp e dono"):
+  /// quem registrou a medição. GPS da planta vem do fix da parcela (geoJson);
+  /// timestamp é createdAt. autorUuid fecha a tríade prometida ao cliente.
+  final String? autorUuid;
+
   /// (v26) id do registro parcela NO SERVIDOR (cópia local do campo texto do
   /// PB, que passa a relation `parcela_rel` na migração 1778250001).
   ///
@@ -2131,6 +2149,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       this.deletedAt,
       required this.fotoAusente,
       this.serverPlantaId,
+      this.autorUuid,
       this.parcelaServerId,
       this.arquivoEstado,
       this.enviadoVerificadoEm});
@@ -2158,6 +2177,9 @@ class Planta extends DataClass implements Insertable<Planta> {
     map['foto_ausente'] = Variable<bool>(fotoAusente);
     if (!nullToAbsent || serverPlantaId != null) {
       map['server_planta_id'] = Variable<String>(serverPlantaId);
+    }
+    if (!nullToAbsent || autorUuid != null) {
+      map['autor_uuid'] = Variable<String>(autorUuid);
     }
     if (!nullToAbsent || parcelaServerId != null) {
       map['parcela_server_id'] = Variable<String>(parcelaServerId);
@@ -2194,6 +2216,9 @@ class Planta extends DataClass implements Insertable<Planta> {
       serverPlantaId: serverPlantaId == null && nullToAbsent
           ? const Value.absent()
           : Value(serverPlantaId),
+      autorUuid: autorUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(autorUuid),
       parcelaServerId: parcelaServerId == null && nullToAbsent
           ? const Value.absent()
           : Value(parcelaServerId),
@@ -2224,6 +2249,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       fotoAusente: serializer.fromJson<bool>(json['fotoAusente']),
       serverPlantaId: serializer.fromJson<String?>(json['serverPlantaId']),
+      autorUuid: serializer.fromJson<String?>(json['autorUuid']),
       parcelaServerId: serializer.fromJson<String?>(json['parcelaServerId']),
       arquivoEstado: serializer.fromJson<String?>(json['arquivoEstado']),
       enviadoVerificadoEm:
@@ -2248,6 +2274,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'fotoAusente': serializer.toJson<bool>(fotoAusente),
       'serverPlantaId': serializer.toJson<String?>(serverPlantaId),
+      'autorUuid': serializer.toJson<String?>(autorUuid),
       'parcelaServerId': serializer.toJson<String?>(parcelaServerId),
       'arquivoEstado': serializer.toJson<String?>(arquivoEstado),
       'enviadoVerificadoEm': serializer.toJson<DateTime?>(enviadoVerificadoEm),
@@ -2269,6 +2296,7 @@ class Planta extends DataClass implements Insertable<Planta> {
           Value<DateTime?> deletedAt = const Value.absent(),
           bool? fotoAusente,
           Value<String?> serverPlantaId = const Value.absent(),
+          Value<String?> autorUuid = const Value.absent(),
           Value<String?> parcelaServerId = const Value.absent(),
           Value<String?> arquivoEstado = const Value.absent(),
           Value<DateTime?> enviadoVerificadoEm = const Value.absent()}) =>
@@ -2290,6 +2318,7 @@ class Planta extends DataClass implements Insertable<Planta> {
         fotoAusente: fotoAusente ?? this.fotoAusente,
         serverPlantaId:
             serverPlantaId.present ? serverPlantaId.value : this.serverPlantaId,
+        autorUuid: autorUuid.present ? autorUuid.value : this.autorUuid,
         parcelaServerId: parcelaServerId.present
             ? parcelaServerId.value
             : this.parcelaServerId,
@@ -2321,6 +2350,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       serverPlantaId: data.serverPlantaId.present
           ? data.serverPlantaId.value
           : this.serverPlantaId,
+      autorUuid: data.autorUuid.present ? data.autorUuid.value : this.autorUuid,
       parcelaServerId: data.parcelaServerId.present
           ? data.parcelaServerId.value
           : this.parcelaServerId,
@@ -2350,6 +2380,7 @@ class Planta extends DataClass implements Insertable<Planta> {
           ..write('deletedAt: $deletedAt, ')
           ..write('fotoAusente: $fotoAusente, ')
           ..write('serverPlantaId: $serverPlantaId, ')
+          ..write('autorUuid: $autorUuid, ')
           ..write('parcelaServerId: $parcelaServerId, ')
           ..write('arquivoEstado: $arquivoEstado, ')
           ..write('enviadoVerificadoEm: $enviadoVerificadoEm')
@@ -2373,6 +2404,7 @@ class Planta extends DataClass implements Insertable<Planta> {
       deletedAt,
       fotoAusente,
       serverPlantaId,
+      autorUuid,
       parcelaServerId,
       arquivoEstado,
       enviadoVerificadoEm);
@@ -2394,6 +2426,7 @@ class Planta extends DataClass implements Insertable<Planta> {
           other.deletedAt == this.deletedAt &&
           other.fotoAusente == this.fotoAusente &&
           other.serverPlantaId == this.serverPlantaId &&
+          other.autorUuid == this.autorUuid &&
           other.parcelaServerId == this.parcelaServerId &&
           other.arquivoEstado == this.arquivoEstado &&
           other.enviadoVerificadoEm == this.enviadoVerificadoEm);
@@ -2414,6 +2447,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
   final Value<DateTime?> deletedAt;
   final Value<bool> fotoAusente;
   final Value<String?> serverPlantaId;
+  final Value<String?> autorUuid;
   final Value<String?> parcelaServerId;
   final Value<String?> arquivoEstado;
   final Value<DateTime?> enviadoVerificadoEm;
@@ -2432,6 +2466,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     this.deletedAt = const Value.absent(),
     this.fotoAusente = const Value.absent(),
     this.serverPlantaId = const Value.absent(),
+    this.autorUuid = const Value.absent(),
     this.parcelaServerId = const Value.absent(),
     this.arquivoEstado = const Value.absent(),
     this.enviadoVerificadoEm = const Value.absent(),
@@ -2451,6 +2486,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     this.deletedAt = const Value.absent(),
     this.fotoAusente = const Value.absent(),
     this.serverPlantaId = const Value.absent(),
+    this.autorUuid = const Value.absent(),
     this.parcelaServerId = const Value.absent(),
     this.arquivoEstado = const Value.absent(),
     this.enviadoVerificadoEm = const Value.absent(),
@@ -2474,6 +2510,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     Expression<DateTime>? deletedAt,
     Expression<bool>? fotoAusente,
     Expression<String>? serverPlantaId,
+    Expression<String>? autorUuid,
     Expression<String>? parcelaServerId,
     Expression<String>? arquivoEstado,
     Expression<DateTime>? enviadoVerificadoEm,
@@ -2493,6 +2530,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (fotoAusente != null) 'foto_ausente': fotoAusente,
       if (serverPlantaId != null) 'server_planta_id': serverPlantaId,
+      if (autorUuid != null) 'autor_uuid': autorUuid,
       if (parcelaServerId != null) 'parcela_server_id': parcelaServerId,
       if (arquivoEstado != null) 'arquivo_estado': arquivoEstado,
       if (enviadoVerificadoEm != null)
@@ -2515,6 +2553,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       Value<DateTime?>? deletedAt,
       Value<bool>? fotoAusente,
       Value<String?>? serverPlantaId,
+      Value<String?>? autorUuid,
       Value<String?>? parcelaServerId,
       Value<String?>? arquivoEstado,
       Value<DateTime?>? enviadoVerificadoEm}) {
@@ -2533,6 +2572,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
       deletedAt: deletedAt ?? this.deletedAt,
       fotoAusente: fotoAusente ?? this.fotoAusente,
       serverPlantaId: serverPlantaId ?? this.serverPlantaId,
+      autorUuid: autorUuid ?? this.autorUuid,
       parcelaServerId: parcelaServerId ?? this.parcelaServerId,
       arquivoEstado: arquivoEstado ?? this.arquivoEstado,
       enviadoVerificadoEm: enviadoVerificadoEm ?? this.enviadoVerificadoEm,
@@ -2584,6 +2624,9 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
     if (serverPlantaId.present) {
       map['server_planta_id'] = Variable<String>(serverPlantaId.value);
     }
+    if (autorUuid.present) {
+      map['autor_uuid'] = Variable<String>(autorUuid.value);
+    }
     if (parcelaServerId.present) {
       map['parcela_server_id'] = Variable<String>(parcelaServerId.value);
     }
@@ -2614,6 +2657,7 @@ class PlantasCompanion extends UpdateCompanion<Planta> {
           ..write('deletedAt: $deletedAt, ')
           ..write('fotoAusente: $fotoAusente, ')
           ..write('serverPlantaId: $serverPlantaId, ')
+          ..write('autorUuid: $autorUuid, ')
           ..write('parcelaServerId: $parcelaServerId, ')
           ..write('arquivoEstado: $arquivoEstado, ')
           ..write('enviadoVerificadoEm: $enviadoVerificadoEm')
@@ -2706,6 +2750,24 @@ class $FotosParcelaTable extends FotosParcela
   late final GeneratedColumn<DateTime> enviadoVerificadoEm =
       GeneratedColumn<DateTime>('enviado_verificado_em', aliasedName, true,
           type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _latitudeMeta =
+      const VerificationMeta('latitude');
+  @override
+  late final GeneratedColumn<double> latitude = GeneratedColumn<double>(
+      'latitude', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _longitudeMeta =
+      const VerificationMeta('longitude');
+  @override
+  late final GeneratedColumn<double> longitude = GeneratedColumn<double>(
+      'longitude', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _autorUuidMeta =
+      const VerificationMeta('autorUuid');
+  @override
+  late final GeneratedColumn<String> autorUuid = GeneratedColumn<String>(
+      'autor_uuid', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -2717,7 +2779,10 @@ class $FotosParcelaTable extends FotosParcela
         deletedAt,
         arquivoAusente,
         arquivoEstado,
-        enviadoVerificadoEm
+        enviadoVerificadoEm,
+        latitude,
+        longitude,
+        autorUuid
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2782,6 +2847,18 @@ class $FotosParcelaTable extends FotosParcela
           enviadoVerificadoEm.isAcceptableOrUnknown(
               data['enviado_verificado_em']!, _enviadoVerificadoEmMeta));
     }
+    if (data.containsKey('latitude')) {
+      context.handle(_latitudeMeta,
+          latitude.isAcceptableOrUnknown(data['latitude']!, _latitudeMeta));
+    }
+    if (data.containsKey('longitude')) {
+      context.handle(_longitudeMeta,
+          longitude.isAcceptableOrUnknown(data['longitude']!, _longitudeMeta));
+    }
+    if (data.containsKey('autor_uuid')) {
+      context.handle(_autorUuidMeta,
+          autorUuid.isAcceptableOrUnknown(data['autor_uuid']!, _autorUuidMeta));
+    }
     return context;
   }
 
@@ -2812,6 +2889,12 @@ class $FotosParcelaTable extends FotosParcela
       enviadoVerificadoEm: attachedDatabase.typeMapping.read(
           DriftSqlType.dateTime,
           data['${effectivePrefix}enviado_verificado_em']),
+      latitude: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}latitude']),
+      longitude: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}longitude']),
+      autorUuid: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}autor_uuid']),
     );
   }
 
@@ -2841,6 +2924,14 @@ class FotosParcelaData extends DataClass
 
   /// Quando o upload foi confirmado (hash conferido). Base do estado.
   final DateTime? enviadoVerificadoEm;
+
+  /// Fix GPS no momento da captura (câmera). Galeria/EXIF: NULL e herda
+  /// o fix da parcela no sync (fonte registrada em fotos_meta).
+  final double? latitude;
+  final double? longitude;
+
+  /// Quem tirou/registrou a foto.
+  final String? autorUuid;
   const FotosParcelaData(
       {required this.id,
       required this.uuid,
@@ -2851,7 +2942,10 @@ class FotosParcelaData extends DataClass
       this.deletedAt,
       required this.arquivoAusente,
       this.arquivoEstado,
-      this.enviadoVerificadoEm});
+      this.enviadoVerificadoEm,
+      this.latitude,
+      this.longitude,
+      this.autorUuid});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2870,6 +2964,15 @@ class FotosParcelaData extends DataClass
     }
     if (!nullToAbsent || enviadoVerificadoEm != null) {
       map['enviado_verificado_em'] = Variable<DateTime>(enviadoVerificadoEm);
+    }
+    if (!nullToAbsent || latitude != null) {
+      map['latitude'] = Variable<double>(latitude);
+    }
+    if (!nullToAbsent || longitude != null) {
+      map['longitude'] = Variable<double>(longitude);
+    }
+    if (!nullToAbsent || autorUuid != null) {
+      map['autor_uuid'] = Variable<String>(autorUuid);
     }
     return map;
   }
@@ -2892,6 +2995,15 @@ class FotosParcelaData extends DataClass
       enviadoVerificadoEm: enviadoVerificadoEm == null && nullToAbsent
           ? const Value.absent()
           : Value(enviadoVerificadoEm),
+      latitude: latitude == null && nullToAbsent
+          ? const Value.absent()
+          : Value(latitude),
+      longitude: longitude == null && nullToAbsent
+          ? const Value.absent()
+          : Value(longitude),
+      autorUuid: autorUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(autorUuid),
     );
   }
 
@@ -2910,6 +3022,9 @@ class FotosParcelaData extends DataClass
       arquivoEstado: serializer.fromJson<String?>(json['arquivoEstado']),
       enviadoVerificadoEm:
           serializer.fromJson<DateTime?>(json['enviadoVerificadoEm']),
+      latitude: serializer.fromJson<double?>(json['latitude']),
+      longitude: serializer.fromJson<double?>(json['longitude']),
+      autorUuid: serializer.fromJson<String?>(json['autorUuid']),
     );
   }
   @override
@@ -2926,6 +3041,9 @@ class FotosParcelaData extends DataClass
       'arquivoAusente': serializer.toJson<bool>(arquivoAusente),
       'arquivoEstado': serializer.toJson<String?>(arquivoEstado),
       'enviadoVerificadoEm': serializer.toJson<DateTime?>(enviadoVerificadoEm),
+      'latitude': serializer.toJson<double?>(latitude),
+      'longitude': serializer.toJson<double?>(longitude),
+      'autorUuid': serializer.toJson<String?>(autorUuid),
     };
   }
 
@@ -2939,7 +3057,10 @@ class FotosParcelaData extends DataClass
           Value<DateTime?> deletedAt = const Value.absent(),
           bool? arquivoAusente,
           Value<String?> arquivoEstado = const Value.absent(),
-          Value<DateTime?> enviadoVerificadoEm = const Value.absent()}) =>
+          Value<DateTime?> enviadoVerificadoEm = const Value.absent(),
+          Value<double?> latitude = const Value.absent(),
+          Value<double?> longitude = const Value.absent(),
+          Value<String?> autorUuid = const Value.absent()}) =>
       FotosParcelaData(
         id: id ?? this.id,
         uuid: uuid ?? this.uuid,
@@ -2954,6 +3075,9 @@ class FotosParcelaData extends DataClass
         enviadoVerificadoEm: enviadoVerificadoEm.present
             ? enviadoVerificadoEm.value
             : this.enviadoVerificadoEm,
+        latitude: latitude.present ? latitude.value : this.latitude,
+        longitude: longitude.present ? longitude.value : this.longitude,
+        autorUuid: autorUuid.present ? autorUuid.value : this.autorUuid,
       );
   FotosParcelaData copyWithCompanion(FotosParcelaCompanion data) {
     return FotosParcelaData(
@@ -2974,6 +3098,9 @@ class FotosParcelaData extends DataClass
       enviadoVerificadoEm: data.enviadoVerificadoEm.present
           ? data.enviadoVerificadoEm.value
           : this.enviadoVerificadoEm,
+      latitude: data.latitude.present ? data.latitude.value : this.latitude,
+      longitude: data.longitude.present ? data.longitude.value : this.longitude,
+      autorUuid: data.autorUuid.present ? data.autorUuid.value : this.autorUuid,
     );
   }
 
@@ -2989,14 +3116,29 @@ class FotosParcelaData extends DataClass
           ..write('deletedAt: $deletedAt, ')
           ..write('arquivoAusente: $arquivoAusente, ')
           ..write('arquivoEstado: $arquivoEstado, ')
-          ..write('enviadoVerificadoEm: $enviadoVerificadoEm')
+          ..write('enviadoVerificadoEm: $enviadoVerificadoEm, ')
+          ..write('latitude: $latitude, ')
+          ..write('longitude: $longitude, ')
+          ..write('autorUuid: $autorUuid')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, uuid, parcelaUuid, filePath, synced,
-      createdAt, deletedAt, arquivoAusente, arquivoEstado, enviadoVerificadoEm);
+  int get hashCode => Object.hash(
+      id,
+      uuid,
+      parcelaUuid,
+      filePath,
+      synced,
+      createdAt,
+      deletedAt,
+      arquivoAusente,
+      arquivoEstado,
+      enviadoVerificadoEm,
+      latitude,
+      longitude,
+      autorUuid);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3010,7 +3152,10 @@ class FotosParcelaData extends DataClass
           other.deletedAt == this.deletedAt &&
           other.arquivoAusente == this.arquivoAusente &&
           other.arquivoEstado == this.arquivoEstado &&
-          other.enviadoVerificadoEm == this.enviadoVerificadoEm);
+          other.enviadoVerificadoEm == this.enviadoVerificadoEm &&
+          other.latitude == this.latitude &&
+          other.longitude == this.longitude &&
+          other.autorUuid == this.autorUuid);
 }
 
 class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
@@ -3024,6 +3169,9 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
   final Value<bool> arquivoAusente;
   final Value<String?> arquivoEstado;
   final Value<DateTime?> enviadoVerificadoEm;
+  final Value<double?> latitude;
+  final Value<double?> longitude;
+  final Value<String?> autorUuid;
   const FotosParcelaCompanion({
     this.id = const Value.absent(),
     this.uuid = const Value.absent(),
@@ -3035,6 +3183,9 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
     this.arquivoAusente = const Value.absent(),
     this.arquivoEstado = const Value.absent(),
     this.enviadoVerificadoEm = const Value.absent(),
+    this.latitude = const Value.absent(),
+    this.longitude = const Value.absent(),
+    this.autorUuid = const Value.absent(),
   });
   FotosParcelaCompanion.insert({
     this.id = const Value.absent(),
@@ -3047,6 +3198,9 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
     this.arquivoAusente = const Value.absent(),
     this.arquivoEstado = const Value.absent(),
     this.enviadoVerificadoEm = const Value.absent(),
+    this.latitude = const Value.absent(),
+    this.longitude = const Value.absent(),
+    this.autorUuid = const Value.absent(),
   })  : uuid = Value(uuid),
         parcelaUuid = Value(parcelaUuid),
         filePath = Value(filePath);
@@ -3061,6 +3215,9 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
     Expression<bool>? arquivoAusente,
     Expression<String>? arquivoEstado,
     Expression<DateTime>? enviadoVerificadoEm,
+    Expression<double>? latitude,
+    Expression<double>? longitude,
+    Expression<String>? autorUuid,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3074,6 +3231,9 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
       if (arquivoEstado != null) 'arquivo_estado': arquivoEstado,
       if (enviadoVerificadoEm != null)
         'enviado_verificado_em': enviadoVerificadoEm,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (autorUuid != null) 'autor_uuid': autorUuid,
     });
   }
 
@@ -3087,7 +3247,10 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
       Value<DateTime?>? deletedAt,
       Value<bool>? arquivoAusente,
       Value<String?>? arquivoEstado,
-      Value<DateTime?>? enviadoVerificadoEm}) {
+      Value<DateTime?>? enviadoVerificadoEm,
+      Value<double?>? latitude,
+      Value<double?>? longitude,
+      Value<String?>? autorUuid}) {
     return FotosParcelaCompanion(
       id: id ?? this.id,
       uuid: uuid ?? this.uuid,
@@ -3099,6 +3262,9 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
       arquivoAusente: arquivoAusente ?? this.arquivoAusente,
       arquivoEstado: arquivoEstado ?? this.arquivoEstado,
       enviadoVerificadoEm: enviadoVerificadoEm ?? this.enviadoVerificadoEm,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      autorUuid: autorUuid ?? this.autorUuid,
     );
   }
 
@@ -3136,6 +3302,15 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
       map['enviado_verificado_em'] =
           Variable<DateTime>(enviadoVerificadoEm.value);
     }
+    if (latitude.present) {
+      map['latitude'] = Variable<double>(latitude.value);
+    }
+    if (longitude.present) {
+      map['longitude'] = Variable<double>(longitude.value);
+    }
+    if (autorUuid.present) {
+      map['autor_uuid'] = Variable<String>(autorUuid.value);
+    }
     return map;
   }
 
@@ -3151,7 +3326,10 @@ class FotosParcelaCompanion extends UpdateCompanion<FotosParcelaData> {
           ..write('deletedAt: $deletedAt, ')
           ..write('arquivoAusente: $arquivoAusente, ')
           ..write('arquivoEstado: $arquivoEstado, ')
-          ..write('enviadoVerificadoEm: $enviadoVerificadoEm')
+          ..write('enviadoVerificadoEm: $enviadoVerificadoEm, ')
+          ..write('latitude: $latitude, ')
+          ..write('longitude: $longitude, ')
+          ..write('autorUuid: $autorUuid')
           ..write(')'))
         .toString();
   }
@@ -23342,6 +23520,7 @@ typedef $$PlantasTableCreateCompanionBuilder = PlantasCompanion Function({
   Value<DateTime?> deletedAt,
   Value<bool> fotoAusente,
   Value<String?> serverPlantaId,
+  Value<String?> autorUuid,
   Value<String?> parcelaServerId,
   Value<String?> arquivoEstado,
   Value<DateTime?> enviadoVerificadoEm,
@@ -23361,6 +23540,7 @@ typedef $$PlantasTableUpdateCompanionBuilder = PlantasCompanion Function({
   Value<DateTime?> deletedAt,
   Value<bool> fotoAusente,
   Value<String?> serverPlantaId,
+  Value<String?> autorUuid,
   Value<String?> parcelaServerId,
   Value<String?> arquivoEstado,
   Value<DateTime?> enviadoVerificadoEm,
@@ -23435,6 +23615,9 @@ class $$PlantasTableFilterComposer
   ColumnFilters<String> get serverPlantaId => $composableBuilder(
       column: $table.serverPlantaId,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get autorUuid => $composableBuilder(
+      column: $table.autorUuid, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get parcelaServerId => $composableBuilder(
       column: $table.parcelaServerId,
@@ -23518,6 +23701,9 @@ class $$PlantasTableOrderingComposer
       column: $table.serverPlantaId,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get autorUuid => $composableBuilder(
+      column: $table.autorUuid, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get parcelaServerId => $composableBuilder(
       column: $table.parcelaServerId,
       builder: (column) => ColumnOrderings(column));
@@ -23599,6 +23785,9 @@ class $$PlantasTableAnnotationComposer
   GeneratedColumn<String> get serverPlantaId => $composableBuilder(
       column: $table.serverPlantaId, builder: (column) => column);
 
+  GeneratedColumn<String> get autorUuid =>
+      $composableBuilder(column: $table.autorUuid, builder: (column) => column);
+
   GeneratedColumn<String> get parcelaServerId => $composableBuilder(
       column: $table.parcelaServerId, builder: (column) => column);
 
@@ -23666,6 +23855,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             Value<DateTime?> deletedAt = const Value.absent(),
             Value<bool> fotoAusente = const Value.absent(),
             Value<String?> serverPlantaId = const Value.absent(),
+            Value<String?> autorUuid = const Value.absent(),
             Value<String?> parcelaServerId = const Value.absent(),
             Value<String?> arquivoEstado = const Value.absent(),
             Value<DateTime?> enviadoVerificadoEm = const Value.absent(),
@@ -23685,6 +23875,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             deletedAt: deletedAt,
             fotoAusente: fotoAusente,
             serverPlantaId: serverPlantaId,
+            autorUuid: autorUuid,
             parcelaServerId: parcelaServerId,
             arquivoEstado: arquivoEstado,
             enviadoVerificadoEm: enviadoVerificadoEm,
@@ -23704,6 +23895,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             Value<DateTime?> deletedAt = const Value.absent(),
             Value<bool> fotoAusente = const Value.absent(),
             Value<String?> serverPlantaId = const Value.absent(),
+            Value<String?> autorUuid = const Value.absent(),
             Value<String?> parcelaServerId = const Value.absent(),
             Value<String?> arquivoEstado = const Value.absent(),
             Value<DateTime?> enviadoVerificadoEm = const Value.absent(),
@@ -23723,6 +23915,7 @@ class $$PlantasTableTableManager extends RootTableManager<
             deletedAt: deletedAt,
             fotoAusente: fotoAusente,
             serverPlantaId: serverPlantaId,
+            autorUuid: autorUuid,
             parcelaServerId: parcelaServerId,
             arquivoEstado: arquivoEstado,
             enviadoVerificadoEm: enviadoVerificadoEm,
@@ -23793,6 +23986,9 @@ typedef $$FotosParcelaTableCreateCompanionBuilder = FotosParcelaCompanion
   Value<bool> arquivoAusente,
   Value<String?> arquivoEstado,
   Value<DateTime?> enviadoVerificadoEm,
+  Value<double?> latitude,
+  Value<double?> longitude,
+  Value<String?> autorUuid,
 });
 typedef $$FotosParcelaTableUpdateCompanionBuilder = FotosParcelaCompanion
     Function({
@@ -23806,6 +24002,9 @@ typedef $$FotosParcelaTableUpdateCompanionBuilder = FotosParcelaCompanion
   Value<bool> arquivoAusente,
   Value<String?> arquivoEstado,
   Value<DateTime?> enviadoVerificadoEm,
+  Value<double?> latitude,
+  Value<double?> longitude,
+  Value<String?> autorUuid,
 });
 
 final class $$FotosParcelaTableReferences extends BaseReferences<_$AppDatabase,
@@ -23865,6 +24064,15 @@ class $$FotosParcelaTableFilterComposer
   ColumnFilters<DateTime> get enviadoVerificadoEm => $composableBuilder(
       column: $table.enviadoVerificadoEm,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get latitude => $composableBuilder(
+      column: $table.latitude, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get longitude => $composableBuilder(
+      column: $table.longitude, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get autorUuid => $composableBuilder(
+      column: $table.autorUuid, builder: (column) => ColumnFilters(column));
 
   $$ParcelasTableFilterComposer get parcelaUuid {
     final $$ParcelasTableFilterComposer composer = $composerBuilder(
@@ -23926,6 +24134,15 @@ class $$FotosParcelaTableOrderingComposer
       column: $table.enviadoVerificadoEm,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<double> get latitude => $composableBuilder(
+      column: $table.latitude, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get longitude => $composableBuilder(
+      column: $table.longitude, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get autorUuid => $composableBuilder(
+      column: $table.autorUuid, builder: (column) => ColumnOrderings(column));
+
   $$ParcelasTableOrderingComposer get parcelaUuid {
     final $$ParcelasTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -23983,6 +24200,15 @@ class $$FotosParcelaTableAnnotationComposer
   GeneratedColumn<DateTime> get enviadoVerificadoEm => $composableBuilder(
       column: $table.enviadoVerificadoEm, builder: (column) => column);
 
+  GeneratedColumn<double> get latitude =>
+      $composableBuilder(column: $table.latitude, builder: (column) => column);
+
+  GeneratedColumn<double> get longitude =>
+      $composableBuilder(column: $table.longitude, builder: (column) => column);
+
+  GeneratedColumn<String> get autorUuid =>
+      $composableBuilder(column: $table.autorUuid, builder: (column) => column);
+
   $$ParcelasTableAnnotationComposer get parcelaUuid {
     final $$ParcelasTableAnnotationComposer composer = $composerBuilder(
         composer: this,
@@ -24037,6 +24263,9 @@ class $$FotosParcelaTableTableManager extends RootTableManager<
             Value<bool> arquivoAusente = const Value.absent(),
             Value<String?> arquivoEstado = const Value.absent(),
             Value<DateTime?> enviadoVerificadoEm = const Value.absent(),
+            Value<double?> latitude = const Value.absent(),
+            Value<double?> longitude = const Value.absent(),
+            Value<String?> autorUuid = const Value.absent(),
           }) =>
               FotosParcelaCompanion(
             id: id,
@@ -24049,6 +24278,9 @@ class $$FotosParcelaTableTableManager extends RootTableManager<
             arquivoAusente: arquivoAusente,
             arquivoEstado: arquivoEstado,
             enviadoVerificadoEm: enviadoVerificadoEm,
+            latitude: latitude,
+            longitude: longitude,
+            autorUuid: autorUuid,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -24061,6 +24293,9 @@ class $$FotosParcelaTableTableManager extends RootTableManager<
             Value<bool> arquivoAusente = const Value.absent(),
             Value<String?> arquivoEstado = const Value.absent(),
             Value<DateTime?> enviadoVerificadoEm = const Value.absent(),
+            Value<double?> latitude = const Value.absent(),
+            Value<double?> longitude = const Value.absent(),
+            Value<String?> autorUuid = const Value.absent(),
           }) =>
               FotosParcelaCompanion.insert(
             id: id,
@@ -24073,6 +24308,9 @@ class $$FotosParcelaTableTableManager extends RootTableManager<
             arquivoAusente: arquivoAusente,
             arquivoEstado: arquivoEstado,
             enviadoVerificadoEm: enviadoVerificadoEm,
+            latitude: latitude,
+            longitude: longitude,
+            autorUuid: autorUuid,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (

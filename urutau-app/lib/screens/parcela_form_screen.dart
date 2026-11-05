@@ -84,6 +84,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   final _raioController = TextEditingController();
   final _marcadorController = TextEditingController();
   String _unidadeForma = 'circular'; // circular | retangular | quadrada
+  // v28 MRV: fix GPS por foto tirada na câmera (path -> [lat, long]).
+  // Galeria não tem fix próprio: herda o fix da parcela no sync.
+  final Map<String, List<double>> _gpsFotos = {};
   // RG-02: fluxo de verificação — pendente -> revisado -> aprovado
   String _statusVerificacao = 'pendente';
 
@@ -1522,9 +1525,32 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       if (photo != null) {
         final savedPath = await _saveAndCompressPhoto(photo.path);
         if (savedPath != null) {
+          // v28 MRV: foto de câmera carrega o fix GPS próprio (best-effort)
+          final fix = await _fixRapido();
+          if (fix != null) _gpsFotos[savedPath] = fix;
           setState(() => _novasFotosPaths.add(savedPath));
         }
       }
+    }
+  }
+
+  /// Fix GPS rápido best-effort para foto de câmera (não trava o fluxo).
+  Future<List<double>?> _fixRapido() async {
+    try {
+      final perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        return null;
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      return [pos.latitude, pos.longitude];
+    } catch (_) {
+      return null;
     }
   }
 
@@ -1763,12 +1789,19 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     } else {
       await _db.insertParcela(parcela);
     }
+    final autorUuid = context.read<SyncService>().currentUser?.uuid;
     for (final path in _novasFotosPaths) {
       final fotoUuid = _uuid.v4();
+      // v28 MRV: foto nasce com GPS (próprio da câmera, senão o da parcela)
+      // e dono — pitch promete hash + GPS + timestamp + dono em cada foto.
+      final fixFoto = _gpsFotos[path];
       await _db.insertFotoParcela(FotosParcelaCompanion(
         uuid: drift.Value(fotoUuid),
         parcelaUuid: drift.Value(_currentUuid!),
         filePath: drift.Value(path),
+        latitude: drift.Value(fixFoto != null ? fixFoto[0] : _latitude),
+        longitude: drift.Value(fixFoto != null ? fixFoto[1] : _longitude),
+        autorUuid: drift.Value(autorUuid),
       ));
       // >>> t14 S3 (H5): inicio — completa a linha que o S2 criou
       final hash = _hashesNovasFotos[path];

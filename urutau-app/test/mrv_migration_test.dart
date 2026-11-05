@@ -151,7 +151,7 @@ Future<int> _count(NativeDatabase e, String sql) async {
 }
 
 void main() {
-  group('migracao MRV v19 -> v27 (v24 + motor Fase 1 + v26 + D-1 v27)', () {
+  group('migracao MRV v19 -> v28 (v24 + motor Fase 1 + v26 + D-1 v27 + foto/planta GPS/dono v28)', () {
     late NativeDatabase executor;
     late AppDatabase db;
 
@@ -163,12 +163,28 @@ void main() {
       await db.close();
     });
 
-    test('a migracao roda e o banco sai em v27', () async {
+    test('a migracao roda e o banco sai em v28', () async {
       db = AppDatabase.forTesting(executor);
       await db.customSelect('SELECT 1').get(); // forca abertura
       final v = await _count(executor, 'PRAGMA user_version');
-      expect(v, 27,
-          reason: 'schemaVersion tem de ser 27 (v24 + motor Fase 1 + v26 + D-1)');
+      expect(v, 28,
+          reason: 'schemaVersion tem de ser 28 (v27 + foto/planta GPS/dono)');
+    });
+
+    test('v28: fotos_parcela e plantas têm as colunas de rastreabilidade',
+        () async {
+      db = AppDatabase.forTesting(executor);
+      await db.customSelect('SELECT 1').get();
+      final colsFotos = await executor
+          .runSelect('PRAGMA table_info(fotos_parcela)', const []);
+      final nomesFotos =
+          colsFotos.map((r) => r.values.elementAt(1) as String).toList();
+      expect(nomesFotos, containsAll(['latitude', 'longitude', 'autor_uuid']));
+      final colsPlantas = await executor
+          .runSelect('PRAGMA table_info(plantas)', const []);
+      final nomesPlantas =
+          colsPlantas.map((r) => r.values.elementAt(1) as String).toList();
+      expect(nomesPlantas, contains('autor_uuid'));
     });
 
     test('Q3 motor Fase 1: plantas.server_planta_id existe e nasce NULL',

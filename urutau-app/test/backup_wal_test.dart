@@ -124,7 +124,8 @@ void main() {
       expect(integ, 'ok');
 
       final versao = r.select('PRAGMA user_version').first.values.first;
-      expect(versao, 27, reason: 'user_version tem de vir no backup');
+      expect(versao, db.schemaVersion,
+          reason: 'user_version tem de vir no backup (schema atual)');
 
       // A fixture deste teste insere p1/pl1; o banco também semeia o catálogo
       // (72 parcelas) no beforeOpen — por isso a assertação é por UUID.
