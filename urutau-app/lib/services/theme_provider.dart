@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../theme/app_tokens.dart';
+
 class ThemeProvider extends ChangeNotifier {
   static const _prefKey = 'high_contrast';
 
@@ -33,48 +35,49 @@ class ThemeProvider extends ChangeNotifier {
   // ──────────────────────────── TEMA CLARO (padrão) ────────────────────────── //
   static final ThemeData _lightTheme = ThemeData(
     colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF5A6B5C),
-      primary: const Color(0xFF5A6B5C),
-      secondary: const Color(0xFFC4A47C),
+      seedColor: AppTokens.brandPrimary,
+      primary: AppTokens.brandPrimary,
+      secondary: AppTokens.brandSecondary,
       brightness: Brightness.light,
     ),
     useMaterial3: true,
-    scaffoldBackgroundColor: const Color(0xFFF9F6F0),
-    appBarTheme: const AppBarTheme(
+    scaffoldBackgroundColor: AppTokens.brandBackground,
+    appBarTheme: AppBarTheme(
       centerTitle: true,
       elevation: 2,
-      backgroundColor: Color(0xFF5A6B5C),
+      backgroundColor: AppTokens.brandPrimary,
       foregroundColor: Colors.white,
-      titleTextStyle: TextStyle(
+      titleTextStyle: const TextStyle(
         color: Colors.white,
-        fontSize: 20,
+        fontSize: AppTokens.fontTitle,
         fontWeight: FontWeight.w600,
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 52),
-        textStyle: const TextStyle(fontSize: 16),
-        backgroundColor: const Color(0xFF5A6B5C),
+        minimumSize: const Size(0, AppTokens.buttonHeight),
+        textStyle: const TextStyle(fontSize: AppTokens.fontBody),
+        backgroundColor: AppTokens.brandPrimary,
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        minimumSize: const Size(0, 52),
-        textStyle: const TextStyle(fontSize: 16),
-        backgroundColor: const Color(0xFF5A6B5C),
+        minimumSize: const Size(0, AppTokens.buttonHeight),
+        textStyle: const TextStyle(fontSize: AppTokens.fontBody),
+        backgroundColor: AppTokens.brandPrimary,
         foregroundColor: Colors.white,
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.grey[50],
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppTokens.spaceL, vertical: AppTokens.spaceL),
     ),
     cardTheme: CardThemeData(
       elevation: 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTokens.radiusM),
       ),
     ),
   );
@@ -84,79 +87,82 @@ class ThemeProvider extends ChangeNotifier {
   static final ThemeData _highContrastTheme = ThemeData(
     colorScheme: const ColorScheme(
       brightness: Brightness.dark,
-      primary: Color(0xFFFFD600),       // Amarelo vibrante
-      onPrimary: Color(0xFF000000),
-      primaryContainer: Color(0xFF332B00),
-      onPrimaryContainer: Color(0xFFFFD600),
+      primary: AppTokens.hcPrimary,       // Amarelo vibrante
+      onPrimary: AppTokens.hcOnPrimary,
+      primaryContainer: AppTokens.hcOutline,
+      onPrimaryContainer: AppTokens.hcPrimary,
       secondary: Color(0xFFFFC107),     // Âmbar
-      onSecondary: Color(0xFF000000),
+      onSecondary: AppTokens.hcOnPrimary,
       secondaryContainer: Color(0xFF332800),
-      onSecondaryContainer: Color(0xFFFFC107),
+      onSecondaryContainer: AppTokens.hcPrimary,
       error: Color(0xFFFF4444),
-      onError: Color(0xFF000000),
+      onError: AppTokens.hcOnPrimary,
       surface: Color(0xFF0A0A0A),
-      onSurface: Color(0xFFFFFFFF),
+      onSurface: AppTokens.hcText,
       surfaceContainerHighest: Color(0xFF1A1A1A),
       onSurfaceVariant: Color(0xFFDDDDDD),
-      outline: Color(0xFFFFD600),
+      outline: AppTokens.hcPrimary,
     ),
     useMaterial3: true,
-    scaffoldBackgroundColor: const Color(0xFF000000),
+    scaffoldBackgroundColor: AppTokens.hcBackground,
     appBarTheme: const AppBarTheme(
       centerTitle: true,
       elevation: 0,
-      backgroundColor: Color(0xFF1A1500),
-      foregroundColor: Color(0xFFFFD600),
+      backgroundColor: AppTokens.hcSurface2,
+      foregroundColor: AppTokens.hcPrimary,
       titleTextStyle: TextStyle(
-        color: Color(0xFFFFD600),
-        fontSize: 20,
+        color: AppTokens.hcPrimary,
+        fontSize: AppTokens.fontTitle,
         fontWeight: FontWeight.bold,
       ),
-      iconTheme: IconThemeData(color: Color(0xFFFFD600)),
-      actionsIconTheme: IconThemeData(color: Color(0xFFFFD600)),
+      iconTheme: IconThemeData(color: AppTokens.hcPrimary),
+      actionsIconTheme: IconThemeData(color: AppTokens.hcPrimary),
     ),
     textTheme: const TextTheme(
-      bodyLarge: TextStyle(color: Color(0xFFFFFFFF), fontSize: 16),
+      bodyLarge: TextStyle(color: AppTokens.hcText, fontSize: AppTokens.fontBody),
       bodyMedium: TextStyle(color: Color(0xFFF0F0F0), fontSize: 15),
-      bodySmall: TextStyle(color: Color(0xFFDDDDDD), fontSize: 13),
+      bodySmall: TextStyle(color: Color(0xFFDDDDDD), fontSize: AppTokens.fontSmall),
       titleLarge: TextStyle(
-        color: Color(0xFFFFFFFF),
+        color: AppTokens.hcText,
         fontWeight: FontWeight.bold,
-        fontSize: 20,
+        fontSize: AppTokens.fontTitle,
       ),
       titleMedium: TextStyle(
-        color: Color(0xFFFFFFFF),
+        color: AppTokens.hcText,
         fontWeight: FontWeight.w600,
-        fontSize: 16,
+        fontSize: AppTokens.fontBody,
       ),
       labelLarge: TextStyle(
-        color: Color(0xFF000000),
+        color: AppTokens.hcOnPrimary,
         fontWeight: FontWeight.bold,
-        fontSize: 16,
+        fontSize: AppTokens.fontBody,
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 52),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        backgroundColor: const Color(0xFFFFD600),
-        foregroundColor: const Color(0xFF000000),
-        side: const BorderSide(color: Color(0xFFFFD600), width: 2),
+        minimumSize: const Size(0, AppTokens.buttonHeight),
+        textStyle: const TextStyle(
+            fontSize: AppTokens.fontBody, fontWeight: FontWeight.bold),
+        backgroundColor: AppTokens.hcPrimary,
+        foregroundColor: AppTokens.hcOnPrimary,
+        side: const BorderSide(color: AppTokens.hcPrimary, width: 2),
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        minimumSize: const Size(0, 52),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        backgroundColor: const Color(0xFFFFD600),
-        foregroundColor: const Color(0xFF000000),
-        side: const BorderSide(color: Color(0xFFFFD600), width: 2),
+        minimumSize: const Size(0, AppTokens.buttonHeight),
+        textStyle: const TextStyle(
+            fontSize: AppTokens.fontBody, fontWeight: FontWeight.bold),
+        backgroundColor: AppTokens.hcPrimary,
+        foregroundColor: AppTokens.hcOnPrimary,
+        side: const BorderSide(color: AppTokens.hcPrimary, width: 2),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: const Color(0xFFFFD600),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+        foregroundColor: AppTokens.hcPrimary,
+        textStyle: const TextStyle(
+            fontSize: 15, fontWeight: FontWeight.bold),
       ),
     ),
     inputDecorationTheme: const InputDecorationTheme(
@@ -169,41 +175,42 @@ class ThemeProvider extends ChangeNotifier {
         borderSide: BorderSide(color: Color(0xFF8B7200), width: 1.5),
       ),
       focusedBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Color(0xFFFFD600), width: 2),
+        borderSide: BorderSide(color: AppTokens.hcPrimary, width: 2),
       ),
-      labelStyle: TextStyle(color: Color(0xFFFFD600), fontSize: 15),
+      labelStyle: TextStyle(color: AppTokens.hcPrimary, fontSize: 15),
       hintStyle: TextStyle(color: Color(0xFF777777)),
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: EdgeInsets.symmetric(
+          horizontal: AppTokens.spaceL, vertical: AppTokens.spaceL),
     ),
     cardTheme: CardThemeData(
-      color: const Color(0xFF141200),
+      color: AppTokens.hcSurface,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFF332B00), width: 1),
+        borderRadius: BorderRadius.circular(AppTokens.radiusM),
+        side: const BorderSide(color: AppTokens.hcOutline, width: 1),
       ),
     ),
-    dividerTheme: const DividerThemeData(color: Color(0xFF332B00)),
-    iconTheme: const IconThemeData(color: Color(0xFFFFD600)),
+    dividerTheme: const DividerThemeData(color: AppTokens.hcOutline),
+    iconTheme: const IconThemeData(color: AppTokens.hcPrimary),
     snackBarTheme: const SnackBarThemeData(
-      backgroundColor: Color(0xFF1A1500),
-      contentTextStyle: TextStyle(color: Color(0xFFFFFFFF)),
+      backgroundColor: AppTokens.hcSurface2,
+      contentTextStyle: TextStyle(color: AppTokens.hcText),
     ),
     popupMenuTheme: const PopupMenuThemeData(
-      color: Color(0xFF1A1500),
-      textStyle: TextStyle(color: Color(0xFFFFFFFF), fontSize: 15),
+      color: AppTokens.hcSurface2,
+      textStyle: TextStyle(color: AppTokens.hcText, fontSize: 15),
     ),
     dialogTheme: const DialogThemeData(
-      backgroundColor: Color(0xFF141200),
+      backgroundColor: AppTokens.hcSurface,
       titleTextStyle: TextStyle(
-        color: Color(0xFFFFD600),
+        color: AppTokens.hcPrimary,
         fontSize: 18,
         fontWeight: FontWeight.bold,
       ),
     ),
     listTileTheme: const ListTileThemeData(
-      textColor: Color(0xFFFFFFFF),
-      iconColor: Color(0xFFFFD600),
+      textColor: AppTokens.hcText,
+      iconColor: AppTokens.hcPrimary,
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((states) {

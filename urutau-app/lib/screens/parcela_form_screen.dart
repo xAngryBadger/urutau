@@ -18,7 +18,9 @@ import '../services/mrv_calc_service.dart';
 import '../services/sync_service.dart';
 import '../services/storage_service.dart';
 import 'planta_form_screen.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/arquivo_ausente_badge.dart';
+import '../widgets/status_badge.dart';
 
 const String kPhotoQualityKey = 'photo_compression_quality';
 const int kPhotoQualityDefault = 70;
@@ -917,13 +919,13 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                                 false;
                             return Card(
                               child: Padding(
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(
+                                    AppTokens.cardPadding),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.verified_user,
-                                        color: _statusVerificacao == 'aprovado'
-                                            ? Colors.green
-                                            : Colors.orange),
+                                    StatusBadge(
+                                        status: _statusVerificacao,
+                                        compact: true),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: DropdownButtonFormField<String>(
@@ -1047,15 +1049,17 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                         if (_estimativaMrv != null) ...[
                           const SizedBox(height: 16),
                           Card(
-                            color: Colors.green.shade50,
+                            color: AppTokens.mrvGreenBg,
                             child: Padding(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(
+                                  AppTokens.cardPadding),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
-                                      Icon(Icons.co2, color: Colors.green[800]),
+                                      Icon(Icons.co2,
+                                          color: AppTokens.mrvGreen),
                                       const SizedBox(width: 8),
                                       Text(
                                         'Estimativa de carbono (MRV)',
