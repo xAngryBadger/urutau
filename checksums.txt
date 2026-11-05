@@ -1,0 +1,25 @@
+# Urutau/MRV MVP - Final Package Checksums
+# Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+
+## Production Package (Server)
+Package: urutau-production-package.zip
+Size: 30.24 MB
+SHA256: C78082636BC0A494C6AD5B42F98C704101F8CB48554FF1B5A1FE4861E146A834
+
+## Split APKs (arm64/armv7/x64) - All < 25 MB
+app-arm64-v8a-release.apk:    23.12 MB  SHA256: C3F79DB7C0150B2EB90147BF399383D9B6979737997CF3873AEA7CA0680F4CCE
+app-armeabi-v7a-release.apk:  20.92 MB  SHA256: 8CC20013885AC5DC1A618AB312325A9ED0931F6DF3FDF30D5B9EA6E2F8D3A804
+app-x86_64-release.apk:       24.65 MB  SHA256: FA06880AD3EFC713539BA3DE29DCAE37FCA0BB0414E5F70A7F3688897063CEC3
+
+## Legacy Release APKs (for reference)
+inventario_florestal_v1.apk:  61.09 MB  SHA256: BA9C7ED496BC5724F3AEBAB76C43E15D44282160347FCDC72107AF4CD0DF02B7
+inventario_florestal_v2.apk:  62.55 MB  SHA256: 994FA9BD9A5A218A341F2D1C2DFE84BEB72C3682EA5F4547915CE1F257DDB84A
+urutau11.apk:                 62.07 MB  SHA256: (not computed)
+app-release.apk:              65.24 MB  SHA256: (not computed)
+
+## Flutter Debug APKs (not for production)
+app-debug.apk:                234.05 MB SHA256: (not computed)
+
+## Production Package Internal Checksums (from SHA256SUMS)
+# All 51 files verified OK - see SHA256SUMS in package root
+# PocketBase binary: 8874FBBF3C73197C68C36B39A9E3E88DD0269EA32CDFFEFFA284B6D72893AEFE

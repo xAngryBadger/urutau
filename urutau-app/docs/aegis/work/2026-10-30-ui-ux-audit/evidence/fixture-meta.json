@@ -1,0 +1,8 @@
+{
+  "email": "audit@local.test",
+  "password": "AuditPass123",
+  "user_uuid": "audit-user-0001",
+  "parcelas": 6,
+  "plants": 5,
+  "photos": 2
+}
