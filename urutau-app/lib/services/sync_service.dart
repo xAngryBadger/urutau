@@ -996,6 +996,12 @@ class SyncService extends ChangeNotifier {
         final existing = await _db.getParcelaByUuid(parcelaUuid);
         if (existing != null) {
           if (existing.synced) {
+            // Campos MRV vindos do servidor (RC-10/RS-01/RS-02/RG-02)
+            final lat = rec.data['latitude'];
+            final lon = rec.data['longitude'];
+            final areaM2 = rec.data['area_m2'];
+            final raio = rec.data['raio_m'];
+            final statusVer = rec.getStringValue('status_verificacao');
             await _db.updateParcela(
               ParcelasCompanion(
                 propriedade: Value(propriedade),
@@ -1003,6 +1009,21 @@ class SyncService extends ChangeNotifier {
                 userId: Value(serverUser),
                 areaHa: Value(areaHa != 0 ? areaHa : null),
                 observacoes: Value(cleanObs.isNotEmpty ? cleanObs : null),
+                latitude: Value(lat is num ? lat.toDouble() : null),
+                longitude: Value(lon is num ? lon.toDouble() : null),
+                geoJson: Value(rec.getStringValue('geo_json').isNotEmpty
+                    ? rec.getStringValue('geo_json')
+                    : null),
+                areaM2: Value(areaM2 is num ? areaM2.toDouble() : null),
+                unidadeForma: Value(
+                    rec.getStringValue('unidade_forma').isNotEmpty
+                        ? rec.getStringValue('unidade_forma')
+                        : null),
+                raioM: Value(raio is num ? raio.toDouble() : null),
+                marcador: Value(rec.getStringValue('marcador').isNotEmpty
+                    ? rec.getStringValue('marcador')
+                    : null),
+                statusParcela: Value(statusVer.isNotEmpty ? statusVer : null),
               ),
               parcelaUuid,
             );
@@ -1081,6 +1102,11 @@ class SyncService extends ChangeNotifier {
           createdAt = DateTime.now();
         }
 
+        final lat = rec.data['latitude'];
+        final lon = rec.data['longitude'];
+        final areaM2 = rec.data['area_m2'];
+        final raio = rec.data['raio_m'];
+        final statusVer = rec.getStringValue('status_verificacao');
         await _db.insertParcela(ParcelasCompanion.insert(
           uuid: parcelaUuid,
           propriedade: Value(propriedade.isNotEmpty ? propriedade : ''),
@@ -1092,6 +1118,21 @@ class SyncService extends ChangeNotifier {
           synced: const Value(true),
           createdAt: Value(createdAt),
           updatedAt: Value(createdAt),
+          // campos MRV vindos do servidor
+          latitude: Value(lat is num ? lat.toDouble() : null),
+          longitude: Value(lon is num ? lon.toDouble() : null),
+          geoJson: Value(rec.getStringValue('geo_json').isNotEmpty
+              ? rec.getStringValue('geo_json')
+              : null),
+          areaM2: Value(areaM2 is num ? areaM2.toDouble() : null),
+          unidadeForma: Value(rec.getStringValue('unidade_forma').isNotEmpty
+              ? rec.getStringValue('unidade_forma')
+              : null),
+          raioM: Value(raio is num ? raio.toDouble() : null),
+          marcador: Value(rec.getStringValue('marcador').isNotEmpty
+              ? rec.getStringValue('marcador')
+              : null),
+          statusParcela: Value(statusVer.isNotEmpty ? statusVer : 'pendente'),
         ));
         importados++;
       }
@@ -1580,6 +1621,17 @@ class SyncService extends ChangeNotifier {
     final propId = await _getOrCreatePropriedadeId(propName);
     final utId =
         (propId != null) ? await _getOrCreateUtId(propId, propUtValido) : null;
+    // Campos MRV (RC-10/RS-01/RS-02/RG-02) — vão junto em qualquer schema.
+    final mrvBody = <String, dynamic>{
+      'latitude': parcela.latitude,
+      'longitude': parcela.longitude,
+      'geo_json': parcela.geoJson,
+      'area_m2': parcela.areaM2,
+      'unidade_forma': parcela.unidadeForma,
+      'raio_m': parcela.raioM,
+      'marcador': parcela.marcador,
+      'status_verificacao': parcela.statusParcela,
+    };
     if (utId != null) {
       parcelaBody = {
         'ut': utId,
@@ -1587,6 +1639,7 @@ class SyncService extends ChangeNotifier {
         'observacoes': parcela.observacoes ?? '',
         'area_ha': parcela.areaHa,
         'user': parcela.userId,
+        ...mrvBody,
       };
     } else {
       // Schema flat: coleção pode não ter campo area_ha; tudo vai em observacoes
@@ -1605,6 +1658,7 @@ class SyncService extends ChangeNotifier {
         'id_parcela': parcela.idParcela,
         'observacoes': observacoesVal,
         'user': parcela.userId,
+        ...mrvBody,
       };
     }
 

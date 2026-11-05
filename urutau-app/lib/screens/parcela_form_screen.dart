@@ -84,6 +84,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   final _raioController = TextEditingController();
   final _marcadorController = TextEditingController();
   String _unidadeForma = 'circular'; // circular | retangular | quadrada
+  // RG-02: fluxo de verificação — pendente -> revisado -> aprovado
+  String _statusVerificacao = 'pendente';
 
   /// Área da parcela em m²: se circular, deriva de π·raio²; senão, lê o campo.
   double? get _areaM2Calculada {
@@ -181,6 +183,13 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         _areaController.text = parcela.areaM2!.toStringAsFixed(1);
       }
       if (parcela.marcador != null) _marcadorController.text = parcela.marcador!;
+      // RG-02: 'ativa' (legado) vira 'pendente' no fluxo de verificação
+      final sv = parcela.statusParcela;
+      if (sv == 'revisado' || sv == 'aprovado' || sv == 'pendente') {
+        _statusVerificacao = sv!;
+      } else {
+        _statusVerificacao = 'pendente';
+      }
       // Metadados do fix vêm do geoJson (RC-10)
       if (parcela.geoJson != null) {
         try {
@@ -888,6 +897,67 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                               ],
                             ),
                           ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // ==========================================
+                        // RG-02: Status de verificação (pendente → revisado → aprovado)
+                        // Só admin altera; demais usuários veem o status atual.
+                        // ==========================================
+                        Builder(
+                          builder: (ctx) {
+                            final admin = ctx
+                                    .read<SyncService>()
+                                    .currentUser
+                                    ?.isAdmin ??
+                                false;
+                            return Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.verified_user,
+                                        color: _statusVerificacao == 'aprovado'
+                                            ? Colors.green
+                                            : Colors.orange),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        initialValue: _statusVerificacao,
+                                        decoration: InputDecoration(
+                                          labelText:
+                                              'Verificação (só admin altera)',
+                                          border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12)),
+                                        ),
+                                        items: const [
+                                          DropdownMenuItem(
+                                              value: 'pendente',
+                                              child: Text('Pendente')),
+                                          DropdownMenuItem(
+                                              value: 'revisado',
+                                              child: Text('Revisado')),
+                                          DropdownMenuItem(
+                                              value: 'aprovado',
+                                              child: Text('Aprovado')),
+                                        ],
+                                        onChanged:
+                                            (admin && !widget.readOnly)
+                                                ? (v) => setState(() {
+                                                      if (v != null) {
+                                                        _statusVerificacao = v;
+                                                      }
+                                                    })
+                                                : null,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
 
                         const SizedBox(height: 16),
@@ -1675,6 +1745,12 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       marcador: drift.Value(_marcadorController.text.trim().isEmpty
           ? null
           : _marcadorController.text.trim()),
+      // RG-02: ao concluir, parcela nasce 'pendente' de verificação;
+      // admin avança para revisado/aprovado depois.
+      statusParcela: drift.Value(prontaParaSync &&
+              !const ['revisado', 'aprovado'].contains(_statusVerificacao)
+          ? 'pendente'
+          : _statusVerificacao),
       prontaParaSync: drift.Value(prontaParaSync),
       synced: const drift.Value(false),
       updatedAt: drift.Value(DateTime.now()),
