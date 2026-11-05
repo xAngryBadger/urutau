@@ -363,6 +363,22 @@ Semantics(
         if (!RegExp(r"^[a-zA-ZÀ-ÿ0-9\s\-.()'-]+$").hasMatch(v)) {
           return 'Apenas letras, números, espaços, hífens, pontos e parênteses';
                     }
+                    // RC-12: entrada fechada no catálogo oficial — só aceita
+                    // item do catálogo (match normalizado) ou NI. Espécie
+                    // legada já existente continua válida sem alteração.
+                    final norm = SpeciesService.normalize(v.trim());
+                    if (norm == 'ni') return null;
+                    final legacy = widget.existingPlanta?.especie;
+                    if (legacy != null &&
+                        SpeciesService.normalize(legacy) == norm) {
+                      return null;
+                    }
+                    final noCatalogo = _allSpecies.any((e) =>
+                        SpeciesService.normalize(e.nomePopular) == norm ||
+                        SpeciesService.normalize(e.nomeCientifico) == norm);
+                    if (!noCatalogo) {
+                      return 'Espécie fora do catálogo oficial. Escolha na lista acima ou use NI.';
+                    }
                     return null;
                   },
                 ),
