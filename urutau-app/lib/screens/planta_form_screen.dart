@@ -685,6 +685,7 @@ Semantics(
   }
 
   Future<void> _salvarPlanta() async {
+    if (_isSaving) return;
     if (!_formKey.currentState!.validate()) return;
 
     if (_fotoObrigatoria && _fotoPath == null) {
@@ -700,82 +701,113 @@ Semantics(
       return;
     }
 
-    double altura = 0;
-    double? dap;
-    int cat = 0;
-    if (_categoriaManual) {
-      cat = _categoriaManualSelecionada ?? 0;
-    } else {
-      altura = double.parse(_alturaController.text.replaceAll(',', '.'));
-      dap = _mostrarDAP
-          ? double.tryParse(_dapController.text.replaceAll(',', '.'))
-          : null;
-      cat = calcularCategoria(altura, dap);
-    }
+    setState(() => _isSaving = true);
 
-  final companion = PlantasCompanion(
-  uuid: drift.Value(_currentUuid!),
-  parcelaUuid: drift.Value(widget.parcelaUuid),
-  especie: drift.Value(_especieController.text.trim()),
-  alturaCm: drift.Value(altura),
-  dapCm: drift.Value(dap),
-  categoria: drift.Value(cat),
-  fotoEspeciePath: drift.Value(_fotoPath),
-  synced: const drift.Value(false),
-  updatedAt: drift.Value(DateTime.now()),
-  );
+    try {
+      if (_fotoObrigatoria && _fotoPath == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Foto obrigatória para espécie NI (não identificada)',
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          ),
+        );
+        return;
+      }
 
-  if (_isEditing) {
-    await _db.updatePlanta(companion, _currentUuid!);
-    // Audit log for planta update
-    await _db.logAudit('update', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'updated');
-  } else {
-    await _db.insertPlanta(companion);
-    // Audit log for planta creation
-    await _db.logAudit('create', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'created');
-  }
+      double altura = 0;
+      double? dap;
+      int cat = 0;
+      if (_categoriaManual) {
+        cat = _categoriaManualSelecionada ?? 0;
+      } else {
+        altura = double.parse(_alturaController.text.replaceAll(',', '.'));
+        dap = _mostrarDAP
+            ? double.tryParse(_dapController.text.replaceAll(',', '.'))
+            : null;
+        cat = calcularCategoria(altura, dap);
+      }
 
-  // >>> t9 S2 (H4): a foto desta planta nasce no catálogo de evidência
-  if (_fotoPath != null) {
-    final ativoUuid = 'legado-ativo-$_currentUuid';
-    await _db.registrarFotoCatalogo(
-      objetoUuid: _currentUuid!,
-      entidadeTipo: 'planta',
-      entidadeUuid: _currentUuid!,
-      caminhoOriginal: _fotoPath!,
-      capturadoEm: DateTime.now(),
-    );
-    // >>> t14 S3 (H5): hash do ORIGINAL (D-1) fecha a linha pendente_hash
-    if (_fotoSha256 != null) {
-      await _db.registrarHashDoAtivo(
-        ativoUuid: ativoUuid,
-        sha256: _fotoSha256!,
-        bytes: _fotoBytes,
-        papel: 'bruto',
+      final companion = PlantasCompanion(
+        uuid: drift.Value(_currentUuid!),
+        parcelaUuid: drift.Value(widget.parcelaUuid),
+        especie: drift.Value(_especieController.text.trim()),
+        alturaCm: drift.Value(altura),
+        dapCm: drift.Value(dap),
+        categoria: drift.Value(cat),
+        fotoEspeciePath: drift.Value(_fotoPath),
+        synced: const drift.Value(false),
+        updatedAt: drift.Value(DateTime.now()),
       );
+
+      if (_isEditing) {
+        await _db.updatePlanta(companion, _currentUuid!);
+        await _db.logAudit('update', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'updated');
+      } else {
+        await _db.insertPlanta(companion);
+        await _db.logAudit('create', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'created');
+      }
+
+      if (_fotoPath != null) {
+        final ativoUuid = 'legado-ativo-$_currentUuid';
+        await _db.registrarFotoCatalogo(
+          objetoUuid: _currentUuid!,
+          entidadeTipo: 'planta',
+          entidadeUuid: _currentUuid!,
+          caminhoOriginal: _fotoPath!,
+          capturadoEm: DateTime.now(),
+        );
+        if (_fotoSha256 != null) {
+          await _db.registrarHashDoAtivo(
+            ativoUuid: ativoUuid,
+            sha256: _fotoSha256!,
+            bytes: _fotoBytes,
+            papel: 'bruto',
+          );
+        }
+      }
+
+      final planta = Planta(
+        id: 0,
+        uuid: _currentUuid!,
+        parcelaUuid: widget.parcelaUuid,
+        especie: _especieController.text.trim(),
+        alturaCm: altura,
+        dapCm: dap,
+        categoria: cat,
+        fotoEspeciePath: _fotoPath,
+        synced: false,
+        createdAt: _isEditing && widget.existingPlanta != null
+            ? widget.existingPlanta!.createdAt
+            : DateTime.now(),
+        updatedAt: DateTime.now(),
+        fotoAusente: false,
+      );
+
+      if (mounted) {
+        Navigator.of(context).pop(planta);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao salvar: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Tentar novamente',
+              textColor: Colors.white,
+              onPressed: () => _salvarPlanta(),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
-    // <<< t14 S3: fim
   }
-
-final planta = Planta(
-  id: 0,
-  uuid: _currentUuid!,
-  parcelaUuid: widget.parcelaUuid,
-  especie: _especieController.text.trim(),
-  alturaCm: altura,
-  dapCm: dap,
-  categoria: cat,
-  fotoEspeciePath: _fotoPath,
-  synced: false,
-  createdAt: _isEditing && widget.existingPlanta != null
-      ? widget.existingPlanta!.createdAt
-      : DateTime.now(),
-  updatedAt: DateTime.now(),
-  fotoAusente: false,
-  );
-
-  if (mounted) {
-    Navigator.of(context).pop(planta);
-  }
-}
 }

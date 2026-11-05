@@ -17,6 +17,8 @@ class AuditLogScreen extends StatefulWidget {
 class _AuditLogScreenState extends State<AuditLogScreen> {
   List<AuditLogData> _logs = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  String _error = '';
   String _filter = '';
   int _page = 0;
   static const _pageSize = 100;
@@ -28,7 +30,14 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
   }
 
   Future<void> _loadLogs({bool append = false}) async {
-    if (!append) setState(() => _isLoading = true);
+    if (!append) {
+      setState(() {
+        _isLoading = true;
+        _error = '';
+      });
+    } else {
+      setState(() => _isLoadingMore = true);
+    }
     try {
       final logs = await widget.database.getAuditLog(
         limit: _pageSize,
@@ -42,10 +51,21 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
             _logs = logs;
           }
           _isLoading = false;
+          _isLoadingMore = false;
         });
       }
+      // Only increment page on successful load
+      if (append && logs.isNotEmpty) {
+        _page++;
+      }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isLoadingMore = false;
+          _error = 'Erro ao carregar logs: $e';
+        });
+      }
     }
   }
 
@@ -96,6 +116,28 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
             onChanged: (v) => setState(() => _filter = v.toLowerCase()),
           ),
         ),
+        if (_error.isNotEmpty)
+          Container(
+            width: double.infinity,
+            color: Colors.red[50],
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red[700], size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _error,
+                    style: TextStyle(color: Colors.red[700], fontSize: 13),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _loadLogs(),
+                  child: const Text('Tentar novamente', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -115,13 +157,14 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
             return Padding(
               padding: const EdgeInsets.all(16),
               child: Center(
-                child: ElevatedButton(
-                  onPressed: () {
-                    _page++;
-                    _loadLogs(append: true);
-                  },
-                  child: const Text('Carregar mais'),
-                ),
+                child: _isLoadingMore
+                    ? const CircularProgressIndicator()
+                    : ElevatedButton(
+                        onPressed: () {
+                          _loadLogs(append: true);
+                        },
+                        child: const Text('Carregar mais'),
+                      ),
               ),
             );
           }

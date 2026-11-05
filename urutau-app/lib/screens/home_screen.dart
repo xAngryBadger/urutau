@@ -55,28 +55,44 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadTalhoes() async {
     final syncService = context.read<SyncService>();
-    final talhoes = await _db.getAllTalhoes(
-      userId: syncService.currentUser?.uuid,
-      isAdmin: syncService.isAdmin,
-    );
-    if (mounted) setState(() => _talhoes = talhoes);
+    try {
+      final talhoes = await _db.getAllTalhoes(
+        userId: syncService.currentUser?.uuid,
+        isAdmin: syncService.isAdmin,
+      );
+      if (mounted) setState(() => _talhoes = talhoes);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao carregar talhões: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   Future<void> _applyFilter() async {
     final syncService = context.read<SyncService>();
-    final results = await _db.searchParcelas(
-      userId: syncService.isAdmin ? null : syncService.currentUser?.uuid,
-      isAdmin: syncService.isAdmin,
-      propUt: _filterPropUt,
-      dataInicio: _filterDataInicio,
-      dataFim: _filterDataFim,
-    );
-    if (mounted) {
-      setState(() {
-        _filteredParcelas = results;
-        _filterActive = true;
-        _showFilterBar = false;
-      });
+    try {
+      final results = await _db.searchParcelas(
+        userId: syncService.isAdmin ? null : syncService.currentUser?.uuid,
+        isAdmin: syncService.isAdmin,
+        propUt: _filterPropUt,
+        dataInicio: _filterDataInicio,
+        dataFim: _filterDataFim,
+      );
+      if (mounted) {
+        setState(() {
+          _filteredParcelas = results;
+          _filterActive = true;
+          _showFilterBar = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao filtrar: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -252,6 +268,13 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return _buildErrorState(
+                    message: 'Erro ao carregar parcelas: ${snapshot.error}',
+                    onRetry: () => setState(() {}),
+                  );
                 }
 
                 // Se filtro ativo, usa lista filtrada; senão usa stream
@@ -521,6 +544,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return FutureBuilder<List<Parcela>>(
       future: _incompletasCache.putIfAbsent(myId, () => _db.getParcelasIncompletas(myId)),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox.shrink();
+        }
+        if (snapshot.hasError) {
+          return _buildErrorState(
+            message: 'Erro ao carregar rascunhos: ${snapshot.error}',
+            onRetry: () => setState(() => _incompletasCache.remove(myId)),
+          );
+        }
         final list = snapshot.data ?? [];
         if (list.isEmpty) return const SizedBox.shrink();
         return Container(
@@ -637,6 +669,41 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState({required String message, required VoidCallback onRetry}) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red[700]),
+            const SizedBox(height: 16),
+            Text(
+              'Erro ao carregar dados',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.red[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: const Text('Tentar novamente'),
+              onPressed: onRetry,
+            ),
+          ],
+        ),
       ),
     );
   }

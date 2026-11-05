@@ -812,17 +812,27 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
   }
 
   Future<void> _applyAdminFilter() async {
-    final results = await _db.searchParcelas(
-      isAdmin: true,
-      userId: _filterUsuarioUuid,
-      propUt: _filterPropUt,
-      dataInicio: _filterDataInicio,
-      dataFim: _filterDataFim,
-    );
-    setState(() {
-      _parcelasFiltradas = results;
-      _filterActive = true;
-    });
+    try {
+      final results = await _db.searchParcelas(
+        isAdmin: true,
+        userId: _filterUsuarioUuid,
+        propUt: _filterPropUt,
+        dataInicio: _filterDataInicio,
+        dataFim: _filterDataFim,
+      );
+      if (mounted) {
+        setState(() {
+          _parcelasFiltradas = results;
+          _filterActive = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao filtrar: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   void _clearAdminFilter() {
@@ -1102,17 +1112,64 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
       );
       return;
     }
-    await syncService.syncAll();
-    if (mounted && syncService.lastError == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('Sincronização concluída!'),
-      backgroundColor: Colors.green,
-      duration: Duration(seconds: 3),
-    ),
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  'Sincronizando com ${syncService.serverUrl}...',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
-    _carregarDados();
+
+    try {
+      await syncService.syncAll();
+    } catch (e) {
+      debugPrint('sync_all: falhou com exceção: $e');
+    } finally {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+
+    if (mounted) {
+      if (syncService.lastError == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sincronização concluída!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              syncService.lastError!.length > 80
+                  ? '${syncService.lastError!.substring(0, 80)}...'
+                  : syncService.lastError!,
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+      _carregarDados();
+    }
   }
 
   void _onMenuSelected(String value) {
