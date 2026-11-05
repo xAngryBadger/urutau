@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async'; // t16 D-1: unawaited
+import 'dart:convert';
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
-// [GPS DESATIVADO - MANUTENÇÃO] Reativar quando integrar com app de mapas
-// import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -69,10 +69,14 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       false; // carregado ao editar; rascunho até marcar concluída
   bool _popGuard = false;
 
-  // [GPS DESATIVADO - MANUTENÇÃO] Reativar quando integrar com app de mapas
-  // double? _latitude;
-  // double? _longitude;
-  // bool _isGettingLocation = false;
+  // RC-10: GPS da parcela (obrigatório ao concluir — MRV exige geo auditável)
+  double? _latitude;
+  double? _longitude;
+  double? _acuraciaM;
+  int? _satelites;
+  DateTime? _fixEm;
+  bool _isGettingLocation = false;
+  String? _gpsErro;
 
   @override
   void initState() {
@@ -142,8 +146,20 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       _idParcelaController.text = parcela.idParcela.toString();
       _observacoesController.text = parcela.observacoes ?? '';
       _prontaParaSync = parcela.prontaParaSync;
-      // [GPS DESATIVADO] _latitude = parcela.latitude;
-      // [GPS DESATIVADO] _longitude = parcela.longitude;
+      _latitude = parcela.latitude;
+      _longitude = parcela.longitude;
+      // Metadados do fix vêm do geoJson (RC-10)
+      if (parcela.geoJson != null) {
+        try {
+          final g = jsonDecode(parcela.geoJson!) as Map<String, dynamic>;
+          _acuraciaM = (g['acuracia_m'] as num?)?.toDouble();
+          _satelites = (g['n_satelites'] as num?)?.toInt();
+          final fix = g['fix_em'] as String?;
+          if (fix != null) _fixEm = DateTime.tryParse(fix);
+        } catch (_) {
+          // geoJson malformado: mantém lat/long plano
+        }
+      }
     }
     _plantas = await _db.getPlantasByParcela(_currentUuid!);
     _fotos = await _db.getFotosByParcela(_currentUuid!);
@@ -296,9 +312,64 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     }
   }
 
-  // [GPS DESATIVADO - MANUTENÇÃO]
-  // Reativar _getLocation() quando integrar com app de mapas /
-  // arquivo georreferenciado. Colunas latitude/longitude permanecem no DB.
+  /// RC-10: captura o fix GPS atual com metadados (acurácia, satélites,
+  /// instante do fix, datum WGS84). Usado ao concluir a parcela.
+  Future<void> _getLocation() async {
+    setState(() {
+      _isGettingLocation = true;
+      _gpsErro = null;
+    });
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        throw Exception('GPS desligado. Ligue o GPS do aparelho e tente de novo.');
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw Exception('Permissão de localização negada. Libere nas configurações do app.');
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 20),
+      );
+      if (!mounted) return;
+      setState(() {
+        _latitude = pos.latitude;
+        _longitude = pos.longitude;
+        _acuraciaM = pos.accuracy;
+        _satelites = null; // geolocator não expõe nº de satélites; fica null
+        _fixEm = pos.timestamp;
+        _isGettingLocation = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _gpsErro = e.toString();
+          _isGettingLocation = false;
+        });
+      }
+    }
+  }
+
+  /// geoJson no formato exigido pelo catálogo MRV (RC-10):
+  /// {"tipo":"Point","coordenadas":[long,lat],"crs":"WGS84",
+  ///  "acuracia_m":…,"n_satelites":…,"fix_em":"ISO","fonte":"geolocator"}
+  String? get _geoJson {
+    if (_latitude == null || _longitude == null) return null;
+    return jsonEncode({
+      'tipo': 'Point',
+      'coordenadas': [_longitude, _latitude],
+      'crs': 'WGS84',
+      'acuracia_m': _acuraciaM,
+      'n_satelites': _satelites,
+      'fix_em': _fixEm?.toIso8601String(),
+      'fonte': 'geolocator',
+    });
+  }
 
   @override
   void dispose() {
@@ -447,8 +518,86 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                         // SEÇÃO 1: Identificação (Hierarquia)
                         // ==========================================
                         const SizedBox(height: 12),
-                        // [GPS DESATIVADO - MANUTENÇÃO] Botão de GPS comentado
-                        // Reativar quando integrar com app de mapas
+                        // --- GPS da parcela (RC-10) ---
+                        Card(
+                          color: _latitude != null
+                              ? Colors.green.shade50
+                              : Colors.grey.shade100,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.location_on,
+                                        color: _latitude != null
+                                            ? Colors.green
+                                            : Colors.grey),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Localização GPS (obrigatória ao concluir)',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: _latitude != null
+                                            ? Colors.green.shade900
+                                            : null,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    if (_isGettingLocation)
+                                      const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      )
+                                    else
+                                      TextButton.icon(
+                                        onPressed:
+                                            widget.readOnly ? null : _getLocation,
+                                        icon: const Icon(Icons.my_location,
+                                            size: 18),
+                                        label: Text(_latitude != null
+                                            ? 'Atualizar'
+                                            : 'Capturar GPS'),
+                                      ),
+                                  ],
+                                ),
+                                if (_latitude != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${_latitude!.toStringAsFixed(6)}, '
+                                    '${_longitude!.toStringAsFixed(6)}'
+                                    '${_acuraciaM != null ? '  ·  ±${_acuraciaM!.toStringAsFixed(1)} m' : ''}'
+                                    '${_fixEm != null ? '  ·  ${_fixEm!.toLocal().toString().substring(0, 19)}' : ''}',
+                                    style: const TextStyle(
+                                        fontFamily: 'monospace', fontSize: 13),
+                                  ),
+                                  const Text(
+                                    'Datum WGS84 · fonte: GPS do aparelho',
+                                    style: TextStyle(
+                                        fontSize: 11, color: Colors.black54),
+                                  ),
+                                ] else ...[
+                                  const Text(
+                                    'Nenhum ponto capturado. Ao concluir a parcela, '
+                                    'o GPS é obrigatório (MRV exige geo auditável).',
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.black54),
+                                  ),
+                                ],
+                                if (_gpsErro != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(_gpsErro!,
+                                      style: const TextStyle(
+                                          fontSize: 12, color: Colors.red)),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
 
                         // --- Propriedade (com autocomplete) ---
                         Autocomplete<String>(
@@ -1199,6 +1348,19 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       );
       return;
     }
+    // RC-10: geo obrigatória ao concluir (MRV — parcela sem GPS não é auditável)
+    if (_latitude == null || _longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Capture o GPS da parcela antes de concluir. Sem localização, '
+              'a parcela não é auditável (MRV).'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 6),
+        ),
+      );
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       final syncService = context.read<SyncService>();
@@ -1279,6 +1441,10 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           ? null
           : _observacoesController.text.trim()),
       userId: drift.Value(currentUser.uuid),
+      // RC-10: grava lat/long + geoJson completo (acurácia, fix, datum)
+      latitude: drift.Value(_latitude),
+      longitude: drift.Value(_longitude),
+      geoJson: drift.Value(_geoJson),
       prontaParaSync: drift.Value(prontaParaSync),
       synced: const drift.Value(false),
       updatedAt: drift.Value(DateTime.now()),

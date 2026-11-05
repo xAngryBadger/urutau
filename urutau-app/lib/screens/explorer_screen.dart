@@ -2072,6 +2072,7 @@ ScaffoldMessenger.of(context).showSnackBar(
         observacoes: const drift.Value(null),
         latitude: const drift.Value(null),
         longitude: const drift.Value(null),
+        geoJson: const drift.Value(null),
         synced: const drift.Value(true),
         prontaParaSync: const drift.Value(false),
         updatedAt: drift.Value(DateTime.now()),

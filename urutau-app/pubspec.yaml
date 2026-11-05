@@ -31,6 +31,9 @@ dependencies:
   # Conectividade
   connectivity_plus: ^6.1.1
 
+  # GPS da parcela (RC-10 — geo obrigatória para MRV)
+  geolocator: ^14.0.2
+
   # Estado
   provider: ^6.1.2
 
