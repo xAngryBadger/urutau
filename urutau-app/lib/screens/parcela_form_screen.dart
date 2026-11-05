@@ -78,6 +78,22 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   bool _isGettingLocation = false;
   String? _gpsErro;
 
+  // RS-01/RS-02: unidade amostral (área em m², forma, raio, marcador físico)
+  final _areaController = TextEditingController();
+  final _raioController = TextEditingController();
+  final _marcadorController = TextEditingController();
+  String _unidadeForma = 'circular'; // circular | retangular | quadrada
+
+  /// Área da parcela em m²: se circular, deriva de π·raio²; senão, lê o campo.
+  double? get _areaM2Calculada {
+    if (_unidadeForma == 'circular') {
+      final r = double.tryParse(_raioController.text.replaceAll(',', '.'));
+      if (r == null || r <= 0) return null;
+      return 3.141592653589793 * r * r;
+    }
+    return double.tryParse(_areaController.text.replaceAll(',', '.'));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -148,6 +164,15 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       _prontaParaSync = parcela.prontaParaSync;
       _latitude = parcela.latitude;
       _longitude = parcela.longitude;
+      // RS-01/RS-02
+      if (parcela.unidadeForma != null) _unidadeForma = parcela.unidadeForma!;
+      if (parcela.raioM != null) {
+        _raioController.text = parcela.raioM!.toStringAsFixed(2);
+      }
+      if (parcela.areaM2 != null && _unidadeForma != 'circular') {
+        _areaController.text = parcela.areaM2!.toStringAsFixed(1);
+      }
+      if (parcela.marcador != null) _marcadorController.text = parcela.marcador!;
       // Metadados do fix vêm do geoJson (RC-10)
       if (parcela.geoJson != null) {
         try {
@@ -377,6 +402,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     _propUtController.dispose();
     _idParcelaController.dispose();
     _observacoesController.dispose();
+    _areaController.dispose();
+    _raioController.dispose();
+    _marcadorController.dispose();
     super.dispose();
   }
 
@@ -722,6 +750,135 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                                 return 'Número inválido';
                               return null;
                             },
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // ==========================================
+                        // SEÇÃO 1b: Unidade amostral (RS-01/RS-02)
+                        // ==========================================
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.square_foot,
+                                        color: Colors.teal),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Unidade amostral (obrigatória ao concluir)',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<String>(
+                                  initialValue: _unidadeForma,
+                                  decoration: InputDecoration(
+                                    labelText: 'Forma da parcela',
+                                    border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: 'circular',
+                                        child: Text('Circular (raio)')),
+                                    DropdownMenuItem(
+                                        value: 'quadrada',
+                                        child: Text('Quadrada (área direta)')),
+                                    DropdownMenuItem(
+                                        value: 'retangular',
+                                        child: Text('Retangular (área direta)')),
+                                  ],
+                                  onChanged: widget.readOnly
+                                      ? null
+                                      : (v) => setState(() {
+                                            if (v != null) _unidadeForma = v;
+                                          }),
+                                ),
+                                const SizedBox(height: 8),
+                                if (_unidadeForma == 'circular')
+                                  TextFormField(
+                                    controller: _raioController,
+                                    enabled: !widget.readOnly,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
+                                    decoration: InputDecoration(
+                                      labelText: 'Raio (m) *',
+                                      hintText: 'ex: 10',
+                                      prefixIcon:
+                                          const Icon(Icons.radio_button_checked),
+                                      border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12)),
+                                      helperText: _raioController.text.isEmpty
+                                          ? null
+                                          : 'Área = π·r² = ${_areaM2Calculada?.toStringAsFixed(1) ?? '?'} m²',
+                                    ),
+                                    onChanged: (_) => setState(() {}),
+                                    validator: (v) {
+                                      if (_unidadeForma != 'circular') {
+                                        return null;
+                                      }
+                                      final r = double.tryParse(
+                                          (v ?? '').replaceAll(',', '.'));
+                                      if (r == null || r <= 0) {
+                                        return 'Informe o raio em metros';
+                                      }
+                                      return null;
+                                    },
+                                  )
+                                else
+                                  TextFormField(
+                                    controller: _areaController,
+                                    enabled: !widget.readOnly,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
+                                    decoration: InputDecoration(
+                                      labelText: 'Área da parcela (m²) *',
+                                      hintText: 'ex: 400 (20×20 m)',
+                                      prefixIcon: const Icon(Icons.crop_free),
+                                      border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12)),
+                                    ),
+                                    validator: (v) {
+                                      if (_unidadeForma == 'circular') {
+                                        return null;
+                                      }
+                                      final a = double.tryParse(
+                                          (v ?? '').replaceAll(',', '.'));
+                                      if (a == null || a <= 0) {
+                                        return 'Informe a área em m²';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _marcadorController,
+                                  enabled: !widget.readOnly,
+                                  decoration: InputDecoration(
+                                    labelText: 'Marcador físico (opcional)',
+                                    hintText: 'ex: estaca PVC nº 7, plaqueta A-12',
+                                    prefixIcon: const Icon(Icons.push_pin),
+                                    border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
+                                  ),
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
 
@@ -1361,6 +1518,19 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       );
       return;
     }
+    // RS-01: área da unidade amostral obrigatória ao concluir
+    if ((_areaM2Calculada ?? 0) <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Informe a área da parcela (m²) antes de concluir. '
+              'Sem área não dá pra calcular carbono por hectare (MRV).'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 6),
+        ),
+      );
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       final syncService = context.read<SyncService>();
@@ -1445,6 +1615,16 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       latitude: drift.Value(_latitude),
       longitude: drift.Value(_longitude),
       geoJson: drift.Value(_geoJson),
+      // RS-01/RS-02: unidade amostral
+      areaM2: drift.Value(_areaM2Calculada),
+      unidadeForma: drift.Value(_unidadeForma),
+      raioM: _unidadeForma == 'circular'
+          ? drift.Value(
+              double.tryParse(_raioController.text.replaceAll(',', '.')))
+          : const drift.Value(null),
+      marcador: drift.Value(_marcadorController.text.trim().isEmpty
+          ? null
+          : _marcadorController.text.trim()),
       prontaParaSync: drift.Value(prontaParaSync),
       synced: const drift.Value(false),
       updatedAt: drift.Value(DateTime.now()),
