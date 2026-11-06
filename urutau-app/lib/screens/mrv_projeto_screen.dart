@@ -56,6 +56,15 @@ class _MrvProjetoScreenState extends State<MrvProjetoScreen> {
   final _divergenciasController = TextEditingController();
   String _conclusao = 'conforme';
 
+  // RT-03
+  String _riscoReversao = 'baixo';
+  final _fonteFogoController = TextEditingController();
+
+  // RG-05
+  final _treinamentoTipoController = TextEditingController();
+  final _treinamentoValidadeController = TextEditingController();
+  List<Competencia> _competencias = [];
+
   bool _carregando = true;
   String? _mensagem;
 
@@ -74,7 +83,8 @@ class _MrvProjetoScreenState extends State<MrvProjetoScreen> {
       _densidadeController, _pctAmostradoController, _nPrevistasController,
       _estratosController, _incertezaController, _campanhaNomeController,
       _amostraOriginalController, _amostraVerifController,
-      _divergenciasController,
+      _divergenciasController, _fonteFogoController,
+      _treinamentoTipoController, _treinamentoValidadeController,
     ]) {
       c.dispose();
     }
@@ -124,6 +134,11 @@ class _MrvProjetoScreenState extends State<MrvProjetoScreen> {
     _incidentesAbertos = await (_db.select(_db.incidentes)
           ..where((t) => t.resolvidoEm.isNull()))
         .get();
+    // RT-03
+    _riscoReversao = proj?.riscoReversao ?? 'baixo';
+    _fonteFogoController.text = proj?.fonteFogoHistorico ?? '';
+    // RG-05
+    _competencias = await MrvProjetoService.todasCompetencias(_db);
   }
 
   Future<ProjetosMrvData?> db_selectProjeto(String uuid) {
@@ -230,6 +245,41 @@ class _MrvProjetoScreenState extends State<MrvProjetoScreen> {
     await _carregarProjeto();
     setState(() => _mensagem =
         'Incidente resolvido — crédito liberado (trilha registrada).');
+  }
+
+  Future<void> _salvarRisco() async {
+    final p = _projetoUuid;
+    if (p == null) return;
+    await MrvProjetoService.salvarRiscoReversao(
+      _db,
+      p,
+      risco: _riscoReversao,
+      fonteFogoHistorico: _fonteFogoController.text.trim().isEmpty
+          ? null
+          : _fonteFogoController.text.trim(),
+    );
+    setState(() => _mensagem = 'Risco de reversão salvo (trilha registrada).');
+  }
+
+  Future<void> _registrarCompetencia() async {
+    final tipo = _treinamentoTipoController.text.trim();
+    if (tipo.isEmpty) {
+      setState(() => _mensagem = 'Informe o tipo de treinamento.');
+      return;
+    }
+    final user = context.read<SyncService>().currentUser;
+    await MrvProjetoService.registrarCompetencia(
+      _db,
+      usuarioUuid: user?.uuid ?? 'desconhecido',
+      tipoTreinamento: tipo,
+      validoAte: _treinamentoValidadeController.text.trim().isEmpty
+          ? null
+          : _treinamentoValidadeController.text.trim(),
+    );
+    _treinamentoTipoController.clear();
+    _treinamentoValidadeController.clear();
+    await _carregarProjeto();
+    setState(() => _mensagem = 'Competência registrada (trilha registrada).');
   }
 
   Future<void> _registrarVerificacao() async {
@@ -489,6 +539,85 @@ class _MrvProjetoScreenState extends State<MrvProjetoScreen> {
                                     ))
                                 .toList(),
                           ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── RT-03 (P2) ──
+                  UrutauSectionCard(
+                    icon: Icons.local_fire_department,
+                    title: 'Risco de reversão (RT-03) — fonte: ULTRA/satélite',
+                    child: Column(
+                      children: [
+                        DropdownButtonFormField<String>(
+                          value: _riscoReversao,
+                          decoration: _dec('Risco de reversão', ''),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'baixo', child: Text('baixo')),
+                            DropdownMenuItem(
+                                value: 'medio', child: Text('médio')),
+                            DropdownMenuItem(
+                                value: 'alto', child: Text('alto')),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _riscoReversao = v ?? 'baixo'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _fonteFogoController,
+                          decoration: _dec('Fonte histórico de fogo',
+                              'ex: alerta satelite 2026-08, ULTRA run #12'),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _salvarRisco,
+                            icon: const Icon(Icons.save),
+                            label: const Text('Salvar risco de reversão'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── RG-05 (P2) ──
+                  UrutauSectionCard(
+                    icon: Icons.school,
+                    title: 'Competências / treinamento (RG-05)',
+                    child: Column(
+                      children: [
+                        ..._competencias.map((c) => ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.badge),
+                              title: Text(c.tipoTreinamento),
+                              subtitle: Text(
+                                  'validade: ${c.validoAte ?? 'sem limite'} · usuário ${c.usuarioUuid.substring(0, 8)}…'),
+                            )),
+                        Row(children: [
+                          Expanded(
+                            child: TextField(
+                                controller: _treinamentoTipoController,
+                                decoration: _dec(
+                                    'Tipo', 'ex: SOP-MRV-V1 campo')),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                                controller: _treinamentoValidadeController,
+                                decoration: _dec(
+                                    'Válido até', 'AAAA-MM-DD')),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: _registrarCompetencia,
+                            icon: const Icon(Icons.add_circle),
+                            tooltip: 'Registrar compétence',
+                          ),
+                        ]),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
 

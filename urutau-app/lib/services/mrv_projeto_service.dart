@@ -211,6 +211,84 @@ class MrvProjetoService {
     );
   }
 
+  // ── RT-03: risco de reversão registrado com fonte (P2) ─────────────
+  /// O alerta em si (fogo/desmatamento) é gerado na workstation ULTRA/satélite
+  /// (fora do app de campo); aqui fica o registro auditável no projeto.
+  static Future<void> salvarRiscoReversao(
+    AppDatabase db,
+    String projetoUuid, {
+    required String risco, // baixo | medio | alto
+    String? fonteFogoHistorico,
+  }) async {
+    await (db.update(db.projetosMrv)..where((t) => t.uuid.equals(projetoUuid)))
+        .write(ProjetosMrvCompanion(
+      riscoReversao: drift.Value(risco),
+      fonteFogoHistorico: drift.Value(fonteFogoHistorico),
+      updatedAt: drift.Value(DateTime.now()),
+    ));
+    await db.logTrilha(
+      acao: 'update_risco_reversao',
+      entidadeTipo: 'projeto_mrv',
+      entidadeUuid: projetoUuid,
+      depois: jsonEncode({
+        'risco': risco,
+        if (fonteFogoHistorico != null) 'fonte_fogo': fonteFogoHistorico,
+      }),
+      origem: 'app',
+    );
+  }
+
+  // ── RG-05: treinamento/competência com evidência e validade ─────────
+  static Future<String> registrarCompetencia(
+    AppDatabase db, {
+    required String usuarioUuid,
+    required String tipoTreinamento,
+    String? evidenciaUuid, // ativo_brutos (foto/PDF do certificado)
+    String? validoAte, // ISO date
+  }) async {
+    final uuid = const Uuid().v4();
+    await db.into(db.competencias).insert(CompetenciasCompanion.insert(
+          uuid: uuid,
+          usuarioUuid: usuarioUuid,
+          tipoTreinamento: tipoTreinamento,
+          concluidoEm: drift.Value(DateTime.now()),
+          validoAte: drift.Value(validoAte),
+          evidenciaUuid: drift.Value(evidenciaUuid),
+        ));
+    await db.logTrilha(
+      acao: 'create_competencia',
+      entidadeTipo: 'competencia',
+      entidadeUuid: uuid,
+      depois: jsonEncode({'tipo': tipoTreinamento, 'usuario': usuarioUuid}),
+      origem: 'app',
+    );
+    return uuid;
+  }
+
+  static Future<List<Competencia>> listarCompetencias(
+      AppDatabase db, String usuarioUuid) async {
+    return (db.select(db.competencias)
+          ..where((t) => t.usuarioUuid.equals(usuarioUuid))
+          ..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)]))
+        .get();
+  }
+
+  static Future<List<Competencia>> competenciasExpiradas(
+      AppDatabase db, String usuarioUuid) async {
+    final todas = await listarCompetencias(db, usuarioUuid);
+    final hoje = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+    return todas
+        .where((c) =>
+            c.validoAte != null && (c.validoAte as String).compareTo(hoje) < 0)
+        .toList();
+  }
+
+  static Future<List<Competencia>> todasCompetencias(AppDatabase db) {
+    return (db.select(db.competencias)
+          ..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)]))
+        .get();
+  }
+
   // ── RG-03: verificação interna (re-amostragem por supervisor) ───────
   static Future<String> registrarVerificacaoInterna(
     AppDatabase db, {

@@ -231,7 +231,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 31; // v30 + fix v31: seeds gravavam datas como texto
+  int get schemaVersion => 32; // v31 + RT-03: projetos_mrv.risco_reversao/fonte_fogo_historico
 
   @override
   MigrationStrategy get migration {
@@ -456,6 +456,19 @@ class AppDatabase extends _$AppDatabase {
               "WHERE typeof($col) = 'text'",
             );
           }
+        }
+      }
+      // v32 — RT-03: risco de reversão + fonte do histórico de fogo no projeto
+      if (from < 32) {
+        final colsP = await m.database
+            .customSelect('PRAGMA table_info(projetos_mrv)')
+            .get();
+        final nomes = colsP.map((r) => r.data['name'] as String).toSet();
+        if (!nomes.contains('risco_reversao')) {
+          await m.addColumn(projetosMrv, projetosMrv.riscoReversao);
+        }
+        if (!nomes.contains('fonte_fogo_historico')) {
+          await m.addColumn(projetosMrv, projetosMrv.fonteFogoHistorico);
         }
       }
       // <<< t9 patch: fim

@@ -76,6 +76,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   List<PeriodosMonitoramentoData> _periodos = [];
   String? _projetoUuid;
   String? _periodoUuid;
+  // RS-06: parcela substituída por sensoriamento remoto (drone/satélite)
+  bool _substituidaPorSensoriamento = false;
+  final _fonteSensoriamentoController = TextEditingController();
   bool _prontaParaSync =
       false; // carregado ao editar; rascunho até marcar concluída
   bool _popGuard = false;
@@ -204,6 +207,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       // RT-01: projeto/período gravados na parcela
       _projetoUuid = parcela.projetoUuid;
       _periodoUuid = parcela.periodoUuid;
+      // RS-06: substituição por sensoriamento
+      if (parcela.substitutaDe != null) {
+        _substituidaPorSensoriamento = true;
+        _fonteSensoriamentoController.text = parcela.substitutaDe!;
+      }
       // RG-02: 'ativa' (legado) vira 'pendente' no fluxo de verificação
       final sv = parcela.statusParcela;
       if (sv == 'revisado' || sv == 'aprovado' || sv == 'pendente') {
@@ -902,6 +910,36 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                                   textCapitalization:
                                       TextCapitalization.sentences,
                                 ),
+                                // RS-06: substituição por sensoriamento remoto
+                                CheckboxListTile(
+                                  value: _substituidaPorSensoriamento,
+                                  onChanged: widget.readOnly
+                                      ? null
+                                      : (v) => setState(
+                                          () => _substituidaPorSensoriamento =
+                                              v ?? false),
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  title: const Text(
+                                      'Substituída por sensoriamento remoto (drone/satélite)'),
+                                ),
+                                if (_substituidaPorSensoriamento)
+                                  TextFormField(
+                                    controller: _fonteSensoriamentoController,
+                                    enabled: !widget.readOnly,
+                                    decoration: InputDecoration(
+                                      labelText: 'Fonte do sensoriamento',
+                                      hintText:
+                                          'ex: voo drone 2026-09-12, cena Sentinel-2 2026-08-30',
+                                      prefixIcon:
+                                          const Icon(Icons.satellite_alt),
+                                      border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12)),
+                                    ),
+                                  ),
                                 // RT-01: projeto MRV + período de monitoramento
                                 if (_projetos.isNotEmpty || _periodos.isNotEmpty) ...[
                                   const SizedBox(height: 8),
@@ -1869,6 +1907,12 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       // RT-01: projeto + período de monitoramento
       projetoUuid: drift.Value(_projetoUuid),
       periodoUuid: drift.Value(_periodoUuid),
+      // RS-06: rastreio de substituição por sensoriamento remoto
+      substitutaDe: drift.Value(_substituidaPorSensoriamento
+          ? (_fonteSensoriamentoController.text.trim().isEmpty
+              ? 'sensoriamento remoto (fonte não informada)'
+              : _fonteSensoriamentoController.text.trim())
+          : null),
       // RG-02: ao concluir, parcela nasce 'pendente' de verificação;
       // admin avança para revisado/aprovado depois.
       statusParcela: drift.Value(prontaParaSync &&

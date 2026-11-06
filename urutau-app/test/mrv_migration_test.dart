@@ -151,7 +151,7 @@ Future<int> _count(NativeDatabase e, String sql) async {
 }
 
 void main() {
-  group('migracao MRV v19 -> v31 (v24 + motor Fase 1 + v26 + D-1 v27 + foto/planta GPS/dono v28 + offset relogio v29 + projeto/periodo v30 + datas seed v31)', () {
+  group('migracao MRV v19 -> v32 (v24 + motor Fase 1 + v26 + D-1 v27 + foto/planta GPS/dono v28 + offset relogio v29 + projeto/periodo v30 + datas seed v31 + risco reversao v32)', () {
     late NativeDatabase executor;
     late AppDatabase db;
 
@@ -163,12 +163,22 @@ void main() {
       await db.close();
     });
 
-    test('a migracao roda e o banco sai em v31', () async {
+    test('a migracao roda e o banco sai em v32', () async {
       db = AppDatabase.forTesting(executor);
       await db.customSelect('SELECT 1').get(); // forca abertura
       final v = await _count(executor, 'PRAGMA user_version');
-      expect(v, 31,
-          reason: 'schemaVersion tem de ser 31 (v30 + normalizacao de datas-texto das seeds)');
+      expect(v, 32,
+          reason: 'schemaVersion tem de ser 32 (v31 + risco_reversao/fonte_fogo em projetos_mrv)');
+    });
+
+    test('v32: projetos_mrv ganha risco_reversao e fonte_fogo_historico (RT-03)',
+        () async {
+      db = AppDatabase.forTesting(executor);
+      await db.customSelect('SELECT 1').get();
+      final cols = await executor
+          .runSelect('PRAGMA table_info(projetos_mrv)', const []);
+      final nomes = cols.map((r) => r.values.elementAt(1) as String).toList();
+      expect(nomes, containsAll(['risco_reversao', 'fonte_fogo_historico']));
     });
 
     test('v31: seeds LEGADO nascem com created_at em epoch (drift le como DateTime)',

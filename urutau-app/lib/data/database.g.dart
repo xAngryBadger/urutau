@@ -4019,6 +4019,18 @@ class $ProjetosMrvTable extends ProjetosMrv
   late final GeneratedColumn<String> deletedBy = GeneratedColumn<String>(
       'deleted_by', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _riscoReversaoMeta =
+      const VerificationMeta('riscoReversao');
+  @override
+  late final GeneratedColumn<String> riscoReversao = GeneratedColumn<String>(
+      'risco_reversao', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _fonteFogoHistoricoMeta =
+      const VerificationMeta('fonteFogoHistorico');
+  @override
+  late final GeneratedColumn<String> fonteFogoHistorico =
+      GeneratedColumn<String>('fonte_fogo_historico', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         uuid,
@@ -4041,7 +4053,9 @@ class $ProjetosMrvTable extends ProjetosMrv
         createdAt,
         updatedAt,
         deletedAt,
-        deletedBy
+        deletedBy,
+        riscoReversao,
+        fonteFogoHistorico
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4163,6 +4177,18 @@ class $ProjetosMrvTable extends ProjetosMrv
       context.handle(_deletedByMeta,
           deletedBy.isAcceptableOrUnknown(data['deleted_by']!, _deletedByMeta));
     }
+    if (data.containsKey('risco_reversao')) {
+      context.handle(
+          _riscoReversaoMeta,
+          riscoReversao.isAcceptableOrUnknown(
+              data['risco_reversao']!, _riscoReversaoMeta));
+    }
+    if (data.containsKey('fonte_fogo_historico')) {
+      context.handle(
+          _fonteFogoHistoricoMeta,
+          fonteFogoHistorico.isAcceptableOrUnknown(
+              data['fonte_fogo_historico']!, _fonteFogoHistoricoMeta));
+    }
     return context;
   }
 
@@ -4214,6 +4240,10 @@ class $ProjetosMrvTable extends ProjetosMrv
           .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
       deletedBy: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}deleted_by']),
+      riscoReversao: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}risco_reversao']),
+      fonteFogoHistorico: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}fonte_fogo_historico']),
     );
   }
 
@@ -4245,6 +4275,8 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
   final DateTime updatedAt;
   final DateTime? deletedAt;
   final String? deletedBy;
+  final String? riscoReversao;
+  final String? fonteFogoHistorico;
   const ProjetosMrvData(
       {required this.uuid,
       required this.codigo,
@@ -4266,7 +4298,9 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
       required this.createdAt,
       required this.updatedAt,
       this.deletedAt,
-      this.deletedBy});
+      this.deletedBy,
+      this.riscoReversao,
+      this.fonteFogoHistorico});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -4319,6 +4353,12 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
     if (!nullToAbsent || deletedBy != null) {
       map['deleted_by'] = Variable<String>(deletedBy);
     }
+    if (!nullToAbsent || riscoReversao != null) {
+      map['risco_reversao'] = Variable<String>(riscoReversao);
+    }
+    if (!nullToAbsent || fonteFogoHistorico != null) {
+      map['fonte_fogo_historico'] = Variable<String>(fonteFogoHistorico);
+    }
     return map;
   }
 
@@ -4370,6 +4410,12 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
       deletedBy: deletedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedBy),
+      riscoReversao: riscoReversao == null && nullToAbsent
+          ? const Value.absent()
+          : Value(riscoReversao),
+      fonteFogoHistorico: fonteFogoHistorico == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fonteFogoHistorico),
     );
   }
 
@@ -4400,6 +4446,9 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       deletedBy: serializer.fromJson<String?>(json['deletedBy']),
+      riscoReversao: serializer.fromJson<String?>(json['riscoReversao']),
+      fonteFogoHistorico:
+          serializer.fromJson<String?>(json['fonteFogoHistorico']),
     );
   }
   @override
@@ -4427,6 +4476,8 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'deletedBy': serializer.toJson<String?>(deletedBy),
+      'riscoReversao': serializer.toJson<String?>(riscoReversao),
+      'fonteFogoHistorico': serializer.toJson<String?>(fonteFogoHistorico),
     };
   }
 
@@ -4451,7 +4502,9 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
           DateTime? createdAt,
           DateTime? updatedAt,
           Value<DateTime?> deletedAt = const Value.absent(),
-          Value<String?> deletedBy = const Value.absent()}) =>
+          Value<String?> deletedBy = const Value.absent(),
+          Value<String?> riscoReversao = const Value.absent(),
+          Value<String?> fonteFogoHistorico = const Value.absent()}) =>
       ProjetosMrvData(
         uuid: uuid ?? this.uuid,
         codigo: codigo ?? this.codigo,
@@ -4480,6 +4533,11 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
         updatedAt: updatedAt ?? this.updatedAt,
         deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
         deletedBy: deletedBy.present ? deletedBy.value : this.deletedBy,
+        riscoReversao:
+            riscoReversao.present ? riscoReversao.value : this.riscoReversao,
+        fonteFogoHistorico: fonteFogoHistorico.present
+            ? fonteFogoHistorico.value
+            : this.fonteFogoHistorico,
       );
   ProjetosMrvData copyWithCompanion(ProjetosMrvCompanion data) {
     return ProjetosMrvData(
@@ -4517,6 +4575,12 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       deletedBy: data.deletedBy.present ? data.deletedBy.value : this.deletedBy,
+      riscoReversao: data.riscoReversao.present
+          ? data.riscoReversao.value
+          : this.riscoReversao,
+      fonteFogoHistorico: data.fonteFogoHistorico.present
+          ? data.fonteFogoHistorico.value
+          : this.fonteFogoHistorico,
     );
   }
 
@@ -4543,7 +4607,9 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
-          ..write('deletedBy: $deletedBy')
+          ..write('deletedBy: $deletedBy, ')
+          ..write('riscoReversao: $riscoReversao, ')
+          ..write('fonteFogoHistorico: $fonteFogoHistorico')
           ..write(')'))
         .toString();
   }
@@ -4570,7 +4636,9 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
         createdAt,
         updatedAt,
         deletedAt,
-        deletedBy
+        deletedBy,
+        riscoReversao,
+        fonteFogoHistorico
       ]);
   @override
   bool operator ==(Object other) =>
@@ -4596,7 +4664,9 @@ class ProjetosMrvData extends DataClass implements Insertable<ProjetosMrvData> {
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt &&
-          other.deletedBy == this.deletedBy);
+          other.deletedBy == this.deletedBy &&
+          other.riscoReversao == this.riscoReversao &&
+          other.fonteFogoHistorico == this.fonteFogoHistorico);
 }
 
 class ProjetosMrvCompanion extends UpdateCompanion<ProjetosMrvData> {
@@ -4621,6 +4691,8 @@ class ProjetosMrvCompanion extends UpdateCompanion<ProjetosMrvData> {
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<String?> deletedBy;
+  final Value<String?> riscoReversao;
+  final Value<String?> fonteFogoHistorico;
   final Value<int> rowid;
   const ProjetosMrvCompanion({
     this.uuid = const Value.absent(),
@@ -4644,6 +4716,8 @@ class ProjetosMrvCompanion extends UpdateCompanion<ProjetosMrvData> {
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.deletedBy = const Value.absent(),
+    this.riscoReversao = const Value.absent(),
+    this.fonteFogoHistorico = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ProjetosMrvCompanion.insert({
@@ -4668,6 +4742,8 @@ class ProjetosMrvCompanion extends UpdateCompanion<ProjetosMrvData> {
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.deletedBy = const Value.absent(),
+    this.riscoReversao = const Value.absent(),
+    this.fonteFogoHistorico = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : uuid = Value(uuid),
         codigo = Value(codigo),
@@ -4695,6 +4771,8 @@ class ProjetosMrvCompanion extends UpdateCompanion<ProjetosMrvData> {
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<String>? deletedBy,
+    Expression<String>? riscoReversao,
+    Expression<String>? fonteFogoHistorico,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4720,6 +4798,9 @@ class ProjetosMrvCompanion extends UpdateCompanion<ProjetosMrvData> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (deletedBy != null) 'deleted_by': deletedBy,
+      if (riscoReversao != null) 'risco_reversao': riscoReversao,
+      if (fonteFogoHistorico != null)
+        'fonte_fogo_historico': fonteFogoHistorico,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4746,6 +4827,8 @@ class ProjetosMrvCompanion extends UpdateCompanion<ProjetosMrvData> {
       Value<DateTime>? updatedAt,
       Value<DateTime?>? deletedAt,
       Value<String?>? deletedBy,
+      Value<String?>? riscoReversao,
+      Value<String?>? fonteFogoHistorico,
       Value<int>? rowid}) {
     return ProjetosMrvCompanion(
       uuid: uuid ?? this.uuid,
@@ -4770,6 +4853,8 @@ class ProjetosMrvCompanion extends UpdateCompanion<ProjetosMrvData> {
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       deletedBy: deletedBy ?? this.deletedBy,
+      riscoReversao: riscoReversao ?? this.riscoReversao,
+      fonteFogoHistorico: fonteFogoHistorico ?? this.fonteFogoHistorico,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4841,6 +4926,12 @@ class ProjetosMrvCompanion extends UpdateCompanion<ProjetosMrvData> {
     if (deletedBy.present) {
       map['deleted_by'] = Variable<String>(deletedBy.value);
     }
+    if (riscoReversao.present) {
+      map['risco_reversao'] = Variable<String>(riscoReversao.value);
+    }
+    if (fonteFogoHistorico.present) {
+      map['fonte_fogo_historico'] = Variable<String>(fonteFogoHistorico.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4871,6 +4962,8 @@ class ProjetosMrvCompanion extends UpdateCompanion<ProjetosMrvData> {
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('deletedBy: $deletedBy, ')
+          ..write('riscoReversao: $riscoReversao, ')
+          ..write('fonteFogoHistorico: $fonteFogoHistorico, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -24773,6 +24866,8 @@ typedef $$ProjetosMrvTableCreateCompanionBuilder = ProjetosMrvCompanion
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
   Value<String?> deletedBy,
+  Value<String?> riscoReversao,
+  Value<String?> fonteFogoHistorico,
   Value<int> rowid,
 });
 typedef $$ProjetosMrvTableUpdateCompanionBuilder = ProjetosMrvCompanion
@@ -24798,6 +24893,8 @@ typedef $$ProjetosMrvTableUpdateCompanionBuilder = ProjetosMrvCompanion
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
   Value<String?> deletedBy,
+  Value<String?> riscoReversao,
+  Value<String?> fonteFogoHistorico,
   Value<int> rowid,
 });
 
@@ -24875,6 +24972,13 @@ class $$ProjetosMrvTableFilterComposer
 
   ColumnFilters<String> get deletedBy => $composableBuilder(
       column: $table.deletedBy, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get riscoReversao => $composableBuilder(
+      column: $table.riscoReversao, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get fonteFogoHistorico => $composableBuilder(
+      column: $table.fonteFogoHistorico,
+      builder: (column) => ColumnFilters(column));
 }
 
 class $$ProjetosMrvTableOrderingComposer
@@ -24952,6 +25056,14 @@ class $$ProjetosMrvTableOrderingComposer
 
   ColumnOrderings<String> get deletedBy => $composableBuilder(
       column: $table.deletedBy, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get riscoReversao => $composableBuilder(
+      column: $table.riscoReversao,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get fonteFogoHistorico => $composableBuilder(
+      column: $table.fonteFogoHistorico,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$ProjetosMrvTableAnnotationComposer
@@ -25025,6 +25137,12 @@ class $$ProjetosMrvTableAnnotationComposer
 
   GeneratedColumn<String> get deletedBy =>
       $composableBuilder(column: $table.deletedBy, builder: (column) => column);
+
+  GeneratedColumn<String> get riscoReversao => $composableBuilder(
+      column: $table.riscoReversao, builder: (column) => column);
+
+  GeneratedColumn<String> get fonteFogoHistorico => $composableBuilder(
+      column: $table.fonteFogoHistorico, builder: (column) => column);
 }
 
 class $$ProjetosMrvTableTableManager extends RootTableManager<
@@ -25074,6 +25192,8 @@ class $$ProjetosMrvTableTableManager extends RootTableManager<
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
             Value<String?> deletedBy = const Value.absent(),
+            Value<String?> riscoReversao = const Value.absent(),
+            Value<String?> fonteFogoHistorico = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProjetosMrvCompanion(
@@ -25098,6 +25218,8 @@ class $$ProjetosMrvTableTableManager extends RootTableManager<
             updatedAt: updatedAt,
             deletedAt: deletedAt,
             deletedBy: deletedBy,
+            riscoReversao: riscoReversao,
+            fonteFogoHistorico: fonteFogoHistorico,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -25122,6 +25244,8 @@ class $$ProjetosMrvTableTableManager extends RootTableManager<
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
             Value<String?> deletedBy = const Value.absent(),
+            Value<String?> riscoReversao = const Value.absent(),
+            Value<String?> fonteFogoHistorico = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ProjetosMrvCompanion.insert(
@@ -25146,6 +25270,8 @@ class $$ProjetosMrvTableTableManager extends RootTableManager<
             updatedAt: updatedAt,
             deletedAt: deletedAt,
             deletedBy: deletedBy,
+            riscoReversao: riscoReversao,
+            fonteFogoHistorico: fonteFogoHistorico,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

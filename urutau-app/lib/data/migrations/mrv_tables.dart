@@ -51,6 +51,9 @@ class ProjetosMrv extends Table {
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
   TextColumn get deletedBy => text().nullable()();
+  // v32 — RT-03: risco de reversao + fonte historico de fogo
+  TextColumn get riscoReversao => text().nullable()(); // baixo|medio|alto
+  TextColumn get fonteFogoHistorico => text().nullable()(); // ex: ULTRA/satelite
 }
 
 class PeriodosMonitoramento extends Table {
