@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
 import '../data/database.dart';
 import '../data/categoria_helper.dart';
+import '../theme/app_tokens.dart';
 import '../data/especie_item.dart';
 import '../services/image_service.dart';
 import '../services/species_service.dart';
@@ -144,14 +145,6 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categoriaColors = {
-      0: Colors.grey,
-      1: Colors.blue,
-      2: Colors.orange,
-      3: Colors.green,
-    };
-    final color = categoriaColors[_categoria] ?? Colors.grey;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Editar Planta' : 'Adicionar Planta'),
@@ -164,144 +157,7 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(16),
             children: [
-              if (_categoriaManual)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    color: categoriaColors[_categoriaManualSelecionada ?? 0]
-                            ?.withAlpha(30) ??
-                        Colors.grey.withAlpha(30),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: categoriaColors[_categoriaManualSelecionada ?? 0]
-                                ?.withAlpha(80) ??
-                            Colors.grey.withAlpha(80)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.category,
-                          color: categoriaColors[
-                                  _categoriaManualSelecionada ?? 0] ??
-                              Colors.grey),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Categoria ${_categoriaManualSelecionada ?? '-'}',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: categoriaColors[
-                                        _categoriaManualSelecionada ?? 0] ??
-                                    Colors.grey,
-                              ),
-                            ),
-                            if (_categoriaManualSelecionada != null)
-                              Text(
-                                descricaoCategoria(
-                                    _categoriaManualSelecionada!),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: categoriaColors[
-                                              _categoriaManualSelecionada ?? 0]
-                                          ?.withAlpha(200) ??
-                                      Colors.grey.withAlpha(200),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else if (_categoria > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withAlpha(30),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: color.withAlpha(80)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.category, color: color),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Categoria $_categoria',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: color,
-                              ),
-                            ),
-                            Text(
-                              descricaoCategoria(_categoria),
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: color.withAlpha(200),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 24),
-              Semantics(
-                label: 'Selecionar categoria manualmente',
-                child: CheckboxListTile(
-                  title: const Text('Quero apenas selecionar a categoria'),
-                  value: _categoriaManual,
-                  onChanged: (val) {
-                    setState(() {
-                      _categoriaManual = val ?? false;
-                      if (!_categoriaManual) _categoriaManualSelecionada = null;
-                    });
-                  },
-                ),
-              ),
-              if (_categoriaManual)
-                Semantics(
-                  label: 'Selecione a categoria',
-                  child: DropdownButtonFormField<int>(
-                    decoration: InputDecoration(
-                      labelText: 'Selecione a categoria',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    value: _categoriaManualSelecionada,
-                    items: [1, 2, 3]
-                        .map((cat) => DropdownMenuItem(
-                              value: cat,
-                              child: Text('Categoria $cat'),
-                            ))
-                        .toList(),
-                    onChanged: (val) {
-                      setState(() {
-                        _categoriaManualSelecionada = val;
-                      });
-                    },
-                    validator: (v) {
-                      if (v == null) return 'Selecione a categoria';
-                      return null;
-                    },
-                  ),
-                ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 4),
 Wrap(
         spacing: 8,
         runSpacing: 4,
@@ -575,6 +431,65 @@ Semantics(
                           ],
                         )
                       : const SizedBox.shrink(),
+                ),
+              // Categoria DEPOIS de altura/DAP (é derivada deles) e
+              // DISCRETA: linha de texto pequena + escape manual compacto.
+              const SizedBox(height: 4),
+              Text(
+                _categoriaManual
+                    ? 'Categoria: ${_categoriaManualSelecionada != null ? rotuloChipCategoria(_categoriaManualSelecionada!) : '—'}'
+                    : (_categoria > 0
+                        ? 'Categoria calculada: ${rotuloChipCategoria(_categoria)}'
+                        : 'Categoria: calculada pela altura/DAP'),
+                style: TextStyle(
+                  fontSize: AppTokens.fontCaption,
+                  color: Colors.grey[600],
+                ),
+              ),
+              Semantics(
+                label: 'Selecionar categoria manualmente',
+                child: CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  title: Text(
+                    'Quero apenas selecionar a categoria',
+                    style: TextStyle(fontSize: AppTokens.fontSmall),
+                  ),
+                  value: _categoriaManual,
+                  onChanged: (val) {
+                    setState(() {
+                      _categoriaManual = val ?? false;
+                      if (!_categoriaManual) _categoriaManualSelecionada = null;
+                    });
+                  },
+                ),
+              ),
+              if (_categoriaManual)
+                Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: DropdownButtonFormField<int>(
+                    decoration: const InputDecoration(
+                      labelText: 'Selecione a categoria',
+                      isDense: true,
+                    ),
+                    value: _categoriaManualSelecionada,
+                    items: [1, 2, 3]
+                        .map((cat) => DropdownMenuItem(
+                              value: cat,
+                              child: Text('Categoria $cat'),
+                            ))
+                        .toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _categoriaManualSelecionada = val;
+                      });
+                    },
+                    validator: (v) {
+                      if (v == null) return 'Selecione a categoria';
+                      return null;
+                    },
+                  ),
                 ),
               const SizedBox(height: 8),
               Text(
