@@ -13,6 +13,7 @@ const String kPhotoQualityKey = 'photo_compression_quality';
 const int kPhotoQualityDefault = 70;
 const String kForcedOfflineKey = 'forced_offline_mode';
 const String kAutoBackupKey = 'auto_backup_enabled';
+const String kWizardModeKey = 'wizard_mode_enabled';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -32,6 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _photoQuality = kPhotoQualityDefault;
   bool _forcedOffline = false;
   bool _autoBackupEnabled = false;
+  bool _wizardMode = true; // UX-APP-CAMPO: default ligado
 
   @override
   void initState() {
@@ -41,6 +43,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadPhotoQuality();
     _loadForcedOffline();
     _loadAutoBackup();
+    _loadWizardMode();
+  }
+
+  Future<void> _loadWizardMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // UX-APP-CAMPO: modo wizard é o padrão; desligado = form clássico.
+      _wizardMode = prefs.getBool(kWizardModeKey) ?? true;
+    });
   }
 
   Future<void> _loadPhotoQuality() async {
@@ -450,6 +461,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onChanged: (val) async =>
                             await themeProvider.setHighContrast(val),
                       );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ────────── FORMULÁRIO DE CAMPO (UX-APP-CAMPO) ──────────
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.view_carousel),
+                      SizedBox(width: 8),
+                      Text(
+                        'Formulário de Campo',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.segment),
+                    title: const Text('Modo wizard'),
+                    subtitle: const Text(
+                      'Formulário da parcela em 4 etapas com swipe '
+                      '(Local, Plantas, Fotos, Revisar). '
+                      'Desligado = formulário clássico de sempre.',
+                    ),
+                    value: _wizardMode,
+                    onChanged: (val) async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool(kWizardModeKey, val);
+                      setState(() => _wizardMode = val);
                     },
                   ),
                 ],

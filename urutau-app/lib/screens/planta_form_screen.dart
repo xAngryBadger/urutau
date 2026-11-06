@@ -61,11 +61,41 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
         setState(() {
           _allSpecies = list;
           _filteredSpecies = list;
+          // BUG-FIX (UX-APP-CAMPO): se o usuário já estava digitando/quando
+          // a lista chega depois do foco, mostrar as sugestões já vale.
+          if (_especieFocusNode.hasFocus ||
+              _especieController.text.trim().isNotEmpty) {
+            _filteredSpecies = SpeciesService.filter(
+              _allSpecies,
+              _especieController.text,
+              _useNomePopular,
+            );
+            _showSpeciesList = _filteredSpecies.isNotEmpty;
+          }
         });
       }
     });
+    // BUG-FIX (UX-APP-CAMPO): as sugestões precisam aparecer na PRIMEIRA
+    // interação. Antes a lista só era ligada no onChanged com texto não
+    // vazio (e no onTap somente quando o campo JÁ tinha texto) — ao tocar o
+    // campo vazio nada aparecia e a lista effectively só surgia numa
+    // interação posterior ("só no 2º clique"). Agora: ganhar foco MOSTRA a
+    // lista (filtrada pelo texto atual; campo vazio = catálogo inteiro) e
+    // perder foco esconde.
     _especieFocusNode.addListener(() {
-      if (!_especieFocusNode.hasFocus) setState(() => _showSpeciesList = false);
+      if (!mounted) return;
+      if (_especieFocusNode.hasFocus) {
+        setState(() {
+          _filteredSpecies = SpeciesService.filter(
+            _allSpecies,
+            _especieController.text,
+            _useNomePopular,
+          );
+          _showSpeciesList = _filteredSpecies.isNotEmpty;
+        });
+      } else {
+        setState(() => _showSpeciesList = false);
+      }
     });
     if (widget.existingPlanta != null) {
       final p = widget.existingPlanta!;
@@ -348,16 +378,16 @@ Semantics(
                     _updateCategoria();
                   },
                   onTap: () {
-                    if (_especieController.text.trim().isNotEmpty) {
-                      setState(() {
-                        _filteredSpecies = SpeciesService.filter(
-                          _allSpecies,
-                          _especieController.text,
-                          _useNomePopular,
-                        );
-                        _showSpeciesList = true;
-                      });
-                    }
+                    // BUG-FIX (UX-APP-CAMPO): mostrar também com o campo
+                    // vazio (catálogo inteiro) — sem esperar o 2º clique.
+                    setState(() {
+                      _filteredSpecies = SpeciesService.filter(
+                        _allSpecies,
+                        _especieController.text,
+                        _useNomePopular,
+                      );
+                      _showSpeciesList = _filteredSpecies.isNotEmpty;
+                    });
                   },
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Informe a espécie';
@@ -385,52 +415,60 @@ Semantics(
                 ),
               ),
               if (_showSpeciesList && _filteredSpecies.isNotEmpty)
-                Container(
-                  margin: const EdgeInsets.only(top: 4),
-                  decoration: BoxDecoration(
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  // Material (não Container colorido) como ancestral dos
+                  // ListTiles: o ink/splash do toque fica visível e o
+                  // debugCheckHasMaterial do ListTile passa.
+                  child: Material(
                     color: Colors.grey[50],
-                    border: Border.all(color: Colors.grey[300]!),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    padding: EdgeInsets.zero,
-                    itemCount: _filteredSpecies.length,
-                    itemBuilder: (_, i) {
-                      final e = _filteredSpecies[i];
-                      final nomeExibir = e.nomeCientifico.isNotEmpty
-                          ? e.nomeCientifico
-                          : e.nomePopular;
-                      return ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.eco, size: 20),
-                        title: Text(
-                          nomeExibir,
-                          style: const TextStyle(fontSize: 15),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: !_useNomePopular &&
-                                e.nomePopular.isNotEmpty &&
-                                e.nomePopular != e.nomeCientifico
-                            ? Text(
-                                e.nomePopular,
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.grey[600]),
-                                overflow: TextOverflow.ellipsis,
-                              )
-                            : null,
-                        onTap: () {
-                          _especieController.text = nomeExibir;
-                          setState(() {
-                            _showSpeciesList = false;
-                            _filteredSpecies = [];
-                          });
-                          _updateCategoria();
-                          FocusScope.of(context).unfocus();
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        itemCount: _filteredSpecies.length,
+                        itemBuilder: (_, i) {
+                          final e = _filteredSpecies[i];
+                          final nomeExibir = e.nomeCientifico.isNotEmpty
+                              ? e.nomeCientifico
+                              : e.nomePopular;
+                          return ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.eco, size: 20),
+                            title: Text(
+                              nomeExibir,
+                              style: const TextStyle(fontSize: 15),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: !_useNomePopular &&
+                                    e.nomePopular.isNotEmpty &&
+                                    e.nomePopular != e.nomeCientifico
+                                ? Text(
+                                    e.nomePopular,
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.grey[600]),
+                                    overflow: TextOverflow.ellipsis,
+                                  )
+                                : null,
+                            onTap: () {
+                              _especieController.text = nomeExibir;
+                              setState(() {
+                                _showSpeciesList = false;
+                                _filteredSpecies = [];
+                              });
+                              _updateCategoria();
+                              FocusScope.of(context).unfocus();
+                            },
+                          );
                         },
-                      );
-                    },
+                      ),
+                    ),
                   ),
                 ),
               if (_fotoObrigatoria) ...[
