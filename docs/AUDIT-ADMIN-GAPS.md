@@ -177,3 +177,22 @@ Os 2 defeitos apontados foram **corrigidos** e vários AUSENTE virou EXISTE:
 **Ainda AUSENTE (P2, próximos passos):** resolver incidente pelo painel (R7 — ação de escrita), dossiê ZIP no painel (R10), página MRV do projeto (R11: desenho amostral/risco/competências), dark mode HC (R13), mock `VITE_USE_MOCK` (R8.5), exportação auditável unificada (R9), modais acessíveis (R12).
 
 **Gates atuais:** `eslint` 0 erros · `vitest` 4/4 · `vite build` OK.
+
+---
+
+## ✅✅ FECHAMENTO TOTAL (2026-11-06 11:1x) — commits `b2801ec`, `334fa39`, `a870a33`, `33588eb`
+
+**Todos os P1 E os P2 da spec fechados.** O que era "AUSENTE" agora:
+
+| Requisito | Estado | Evidência |
+|---|---|---|
+| **R7** Incidentes + resolver (bloqueio de crédito) | **EXISTE** | `pages/Incidents.jsx`, `services/incidentes.js` — justificativa obrigatória (min 10), read-only bloqueado, espelha `resolverIncidente` do app |
+| **R10** Dossiê no painel | **EXISTE** | `services/dossie.js` + `components/dossier/DossierPanel.jsx` — manifesto publicado, download do ZIP e **conferência de hash no navegador** (confere/DIVERGE) |
+| **R11** Projeto MRV (4 abas) | **EXISTE** | `pages/MrvProject.jsx` + `services/mrvProject.js` — desenho amostral (meta vs realizada: "atingida/NÃO atingida"), risco RT-03, competências RG-05 (expirada em destaque), verificação interna RG-03 (divergente abre incidente) |
+| **R12** Modal acessível | **EXISTE** | `components/ui/Modal.jsx` — role=dialog, ESC, foco preso/devolvido; aplicado no resolver incidente |
+| **R13** Dark mode / alto contraste | **EXISTE** | `index.css` `[data-theme="hc"]` com os tokens HC do app (preto/amarelo) + botão persistido no header |
+| **R9** Exportação auditável | **EXISTE** | `services/export.js` — fonte única de colunas (status/GPS/protocolo/projeto/período/hashes/IC95/tCO₂e/crédito), CSV com BOM UTF-8, `exportarParcelasAuditavel` |
+| **R8.5** Mock `VITE_USE_MOCK` | **EXISTE** | `services/mock/*` — 3 parcelas, hashes reais (port do app), cadeia com elo adulterado de propósito, `DemoBanner` obrigatório |
+
+**Gates finais:** `eslint` 0 erros · `vitest` **10/10** · `vite build` OK.
+**Restando de verdade:** só o que depende de infraestrutura externa — aplicar migrações no PocketBase quando o servidor existir, publicar o dossiê/manifesto no servidor (a UI já lê), e teste em dispositivo real do painel.

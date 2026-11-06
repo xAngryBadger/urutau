@@ -19,10 +19,8 @@ import {
   incertezaRealizada,
 } from '../services/mrvProject';
 import { useAuth } from '../context/AuthContext';
-import { USE_MOCK } from '../services/mock/demoData';
 import EmptyState from '../components/ui/EmptyState';
 import ServerOfflineBanner from '../components/ui/ServerOfflineBanner';
-import DemoBanner from '../components/ui/DemoBanner';
 import { LoadingBlock } from '../components/ui/Loading';
 import { formatIncerteza } from '../theme/tokens';
 
@@ -107,7 +105,6 @@ const MrvProject = () => {
 
   return (
     <div className="space-y-6">
-      {USE_MOCK && <DemoBanner />}
       {offline && <ServerOfflineBanner onRetry={load} retrying={loading} />}
 
       <div>

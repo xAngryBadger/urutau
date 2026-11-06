@@ -10,13 +10,10 @@ import {
 } from 'lucide-react';
 import { fetchIncidentes, resolverIncidente } from '../services/incidentes';
 import { useAuth } from '../context/AuthContext';
-import { USE_MOCK } from '../services/mock/demoData';
 import EmptyState from '../components/ui/EmptyState';
 import ServerOfflineBanner from '../components/ui/ServerOfflineBanner';
-import DemoBanner from '../components/ui/DemoBanner';
 import { LoadingBlock } from '../components/ui/Loading';
 import Modal from '../components/ui/Modal';
-
 const SeveridadeBadge = ({ severidade }) => {
   const bloqueadora = String(severidade || '').toLowerCase().includes('bloquead');
   return (
@@ -80,7 +77,6 @@ const Incidents = () => {
 
   return (
     <div className="space-y-6">
-      {USE_MOCK && <DemoBanner />}
       {offline && <ServerOfflineBanner onRetry={load} retrying={loading} />}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
