@@ -29,9 +29,6 @@ import '../widgets/wizard/planta_card.dart';
 import '../widgets/wizard/wizard_stepper.dart';
 import '../widgets/wizard/wizard_step_page.dart';
 
-const String kPhotoQualityKey = 'photo_compression_quality';
-const int kPhotoQualityDefault = 70;
-
 class ParcelaFormScreen extends StatefulWidget {
   final String? parcelaUuid; // null = nova, preenchido = edição
   final String? prefilledPropriedade;

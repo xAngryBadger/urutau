@@ -1,0 +1,197 @@
+Analyzing urutau-app...                                         
+
+   info - Angle brackets will be interpreted as HTML. Try using backticks around the content with angle brackets, or try replacing `<` with `&lt;` and `>` with `&gt;` - lib\data\database.dart:136:36 - unintended_html_in_doc_comment
+   info - Angle brackets will be interpreted as HTML. Try using backticks around the content with angle brackets, or try replacing `<` with `&lt;` and `>` with `&gt;` - lib\data\database.dart:136:52 - unintended_html_in_doc_comment
+   info - Parameter 'e' could be a super parameter. Trying converting 'e' to a super parameter - lib\data\database.dart:217:3 - use_super_parameters
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\data\database.dart:758:13 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\data\database.dart:791:11 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\data\database.dart:1139:7 - curly_braces_in_flow_control_structures
+warning - The operand can't be 'null', so the condition is always 'true'. Remove the condition - lib\data\database.dart:1326:14 - unnecessary_null_comparison
+warning - The operand can't be 'null', so the condition is always 'true'. Remove the condition - lib\data\database.dart:1326:30 - unnecessary_null_comparison
+warning - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand - lib\data\database.dart:1330:49 - dead_null_aware_expression
+   info - Use interpolation to compose strings and values. Try using string interpolation to build the composite string - lib\data\database.dart:1404:7 - prefer_interpolation_to_compose_strings
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\data\database.dart:1649:11 - curly_braces_in_flow_control_structures
+   info - Use the '??' operator rather than '?:' when testing for 'null'. Try rewriting the code to use '??' - lib\data\database.dart:1740:15 - prefer_if_null_operators
+   info - Angle brackets will be interpreted as HTML. Try using backticks around the content with angle brackets, or try replacing `<` with `&lt;` and `>` with `&gt;` - lib\data\database.dart:2071:49 - unintended_html_in_doc_comment
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:83:37 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:83:41 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:83:44 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:83:49 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:83:63 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:83:67 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:83:70 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:83:75 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:116:42 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:116:46 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:116:49 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:116:54 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:116:68 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:116:72 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:116:75 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:116:80 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:124:30 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:124:34 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:124:37 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:124:42 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:124:56 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:124:60 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:124:63 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:124:68 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:156:54 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:156:58 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:156:61 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:156:66 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:167:64 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:167:68 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:167:71 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:167:76 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:196:81 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:196:85 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:196:88 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:196:93 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:207:85 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:207:89 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:207:92 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:207:97 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:234:28 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:234:32 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:234:35 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:234:40 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:234:54 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:234:58 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:234:61 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:234:66 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:258:104 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:258:108 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:258:111 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:258:116 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:259:99 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:259:103 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:259:106 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:259:111 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:260:110 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:260:114 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:260:117 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:260:122 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:261:110 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:261:114 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:261:117 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:261:122 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:262:97 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:262:101 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:262:104 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\data\migrations\mrv_migration.dart:262:109 - unnecessary_string_escapes
+warning - The declaration '_deletarUsuario' isn't referenced. Try removing the declaration of '_deletarUsuario' - lib\screens\admin_screen.dart:54:16 - unused_element
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\screens\admin_screen.dart:397:17 - curly_braces_in_flow_control_structures
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\admin_screen.dart:628:14 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\admin_screen.dart:676:15 - deprecated_member_use
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\screens\admin_screen.dart:920:48 - unnecessary_string_escapes
+   info - Unnecessary escape in string literal. Remove the '\' escape - lib\screens\admin_screen.dart:920:63 - unnecessary_string_escapes
+warning - The declaration '_formatBytes' isn't referenced. Try removing the declaration of '_formatBytes' - lib\screens\audit_log_screen.dart:72:10 - unused_element
+warning - The declaration '_showClaimDialog' isn't referenced. Try removing the declaration of '_showClaimDialog' - lib\screens\explorer_screen.dart:199:16 - unused_element
+warning - The declaration '_showLockedDialog' isn't referenced. Try removing the declaration of '_showLockedDialog' - lib\screens\explorer_screen.dart:249:8 - unused_element
+warning - The declaration '_syncInfoTile' isn't referenced. Try removing the declaration of '_syncInfoTile' - lib\screens\explorer_screen.dart:695:10 - unused_element
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\screens\explorer_screen.dart:991:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\screens\explorer_screen.dart:994:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\screens\explorer_screen.dart:999:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\screens\explorer_screen.dart:1004:9 - curly_braces_in_flow_control_structures
+   info - 'surfaceVariant' is deprecated and shouldn't be used. Use surfaceContainerHighest instead. This feature was deprecated after v3.18.0-0.1.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\explorer_screen.dart:1636:61 - deprecated_member_use
+warning - The declaration '_showDesistirDialog' isn't referenced. Try removing the declaration of '_showDesistirDialog' - lib\screens\explorer_screen.dart:2178:16 - unused_element
+warning - The value of the local variable 'syncService' isn't used. Try removing the variable or using it - lib\screens\explorer_screen.dart:2279:11 - unused_local_variable
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\home_screen.dart:415:15 - deprecated_member_use
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\screens\home_screen.dart:445:23 - curly_braces_in_flow_control_structures
+warning - The value of the local variable 'syncService' isn't used. Try removing the variable or using it - lib\screens\login_screen.dart:154:15 - unused_local_variable
+warning - The value of the local variable 'primaryColor' isn't used. Try removing the variable or using it - lib\screens\login_screen.dart:168:11 - unused_local_variable
+warning - The value of the local variable 'bgColor' isn't used. Try removing the variable or using it - lib\screens\login_screen.dart:169:11 - unused_local_variable
+warning - The value of the local variable 'onBg' isn't used. Try removing the variable or using it - lib\screens\login_screen.dart:170:11 - unused_local_variable
+   info - The variable name 'db_selectProjeto' isn't a lowerCamelCase identifier. Try changing the name to follow the lowerCamelCase style - lib\screens\mrv_projeto_screen.dart:144:28 - non_constant_identifier_names
+   info - The local variable '_d' starts with an underscore. Try renaming the variable to not start with an underscore - lib\screens\mrv_projeto_screen.dart:173:13 - no_leading_underscores_for_local_identifiers
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\mrv_projeto_screen.dart:341:21 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\mrv_projeto_screen.dart:484:31 - deprecated_member_use
+warning - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand - lib\screens\mrv_projeto_screen.dart:532:61 - dead_null_aware_expression
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\mrv_projeto_screen.dart:552:27 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\mrv_projeto_screen.dart:641:27 - deprecated_member_use
+warning - Unused import: '../widgets/wizard/planta_card.dart'. Try removing the import directive - lib\screens\parcela_form_screen.dart:28:8 - unused_import
+   info - 'desiredAccuracy' is deprecated and shouldn't be used. use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings. Try replacing the use of the deprecated member with the replacement - lib\screens\parcela_form_screen.dart:476:9 - deprecated_member_use
+   info - 'timeLimit' is deprecated and shouldn't be used. use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings. Try replacing the use of the deprecated member with the replacement - lib\screens\parcela_form_screen.dart:477:9 - deprecated_member_use
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\screens\parcela_form_screen.dart:537:56 - curly_braces_in_flow_control_structures
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\parcela_form_screen.dart:1090:23 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\parcela_form_screen.dart:1115:23 - deprecated_member_use
+warning - The declaration '_buildPlantaCard' isn't referenced. Try removing the declaration of '_buildPlantaCard' - lib\screens\parcela_form_screen.dart:1895:10 - unused_element
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\planta_form_screen.dart:476:21 - deprecated_member_use
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\screens\settings_screen.dart:337:47 - curly_braces_in_flow_control_structures
+warning - Unused import: 'package:shared_preferences/shared_preferences.dart'. Try removing the import directive - lib\screens\splash_screen.dart:3:8 - unused_import
+warning - The value of the local variable 'syncService' isn't used. Try removing the variable or using it - lib\screens\storage_screen.dart:50:11 - unused_local_variable
+warning - The value of the field '_syncedCount' isn't used. Try removing the field, or using it - lib\screens\sync_screen_pro.dart:31:7 - unused_field
+warning - The value of the field '_totalCount' isn't used. Try removing the field, or using it - lib\screens\sync_screen_pro.dart:32:7 - unused_field
+   info - The private field _selectedParcelas could be 'final'. Try making the field 'final' - lib\screens\sync_screen_pro.dart:39:15 - prefer_final_fields
+warning - The value of the field '_isCheckingConflicts' isn't used. Try removing the field, or using it - lib\screens\sync_screen_pro.dart:42:8 - unused_field
+warning - The declaration '_getStatusColor' isn't referenced. Try removing the declaration of '_getStatusColor' - lib\screens\sync_screen_pro.dart:331:10 - unused_element
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss. Try replacing the use of the deprecated member with the replacement - lib\screens\sync_screen_pro.dart:459:48 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss. Try replacing the use of the deprecated member with the replacement - lib\screens\sync_screen_pro.dart:461:48 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss. Try replacing the use of the deprecated member with the replacement - lib\screens\sync_screen_pro.dart:559:60 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss. Try replacing the use of the deprecated member with the replacement - lib\screens\sync_screen_pro.dart:786:42 - deprecated_member_use
+warning - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand - lib\screens\sync_screen_pro.dart:960:62 - dead_null_aware_expression
+warning - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand - lib\screens\sync_screen_pro.dart:960:86 - dead_null_aware_expression
+warning - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand - lib\screens\sync_screen_pro.dart:1041:53 - dead_null_aware_expression
+warning - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand - lib\screens\sync_screen_pro.dart:1041:77 - dead_null_aware_expression
+warning - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand - lib\screens\sync_screen_pro.dart:1059:58 - dead_null_aware_expression
+warning - The receiver can't be null, so the null-aware operator '?.' is unnecessary. Try replacing the operator '?.' with '.' - lib\services\dossie_service.dart:127:44 - invalid_null_aware_operator
+   info - Use the '??' operator rather than '?:' when testing for 'null'. Try rewriting the code to use '??' - lib\services\dossie_service.dart:146:25 - prefer_if_null_operators
+   info - Use the '??' operator rather than '?:' when testing for 'null'. Try rewriting the code to use '??' - lib\services\dossie_service.dart:148:13 - prefer_if_null_operators
+   info - Unnecessary use of string interpolation. Try replacing the string literal with the variable name - lib\services\dossie_service.dart:274:31 - unnecessary_string_interpolations
+warning - The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand - lib\services\dossie_service.dart:274:57 - dead_null_aware_expression
+warning - The receiver can't be null, so the null-aware operator '?.' is unnecessary. Try replacing the operator '?.' with '.' - lib\services\dossie_service.dart:366:41 - invalid_null_aware_operator
+   info - Use the '??' operator rather than '?:' when testing for 'null'. Try rewriting the code to use '??' - lib\services\dossie_service.dart:377:35 - prefer_if_null_operators
+   info - Statements in a for should be enclosed in a block. Try wrapping the statement in a block - lib\services\export_service.dart:821:53 - curly_braces_in_flow_control_structures
+   info - Statements in a for should be enclosed in a block. Try wrapping the statement in a block - lib\services\export_service.dart:822:52 - curly_braces_in_flow_control_structures
+   info - Statements in a for should be enclosed in a block. Try wrapping the statement in a block - lib\services\export_service.dart:823:50 - curly_braces_in_flow_control_structures
+warning - The operand can't be 'null', so the condition is always 'false'. Try removing the condition, an enclosing condition, or the whole conditional statement - lib\services\image_service.dart:255:26 - unnecessary_null_comparison
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\species_service.dart:73:13 - curly_braces_in_flow_control_structures
+warning - Unused import: 'package:flutter/foundation.dart'. Try removing the import directive - lib\services\storage_service.dart:3:8 - unused_import
+warning - The receiver can't be null, so the null-aware operator '?.' is unnecessary. Try replacing the operator '?.' with '.' - lib\services\sync_service.dart:180:44 - invalid_null_aware_operator
+warning - The value of the local variable 'partialSyncCount' isn't used. Try removing the variable or using it - lib\services\sync_service.dart:748:11 - unused_local_variable
+   info - 'expand' is deprecated and shouldn't be used. This field is superseded by the more generic get<T>(keyPath) method. You can access the expanded record models and fields using dot-notation similar to the regular record fields: record.get<String>("expand.user.email"); record.get<RecordModel>("expand.user"); record.get<List<RecordModel>>("expand.products");. Try replacing the use of the deprecated member with the replacement - lib\services\sync_service.dart:997:23 - deprecated_member_use
+warning - The operand can't be 'null', so the condition is always 'false'. Try removing the condition, an enclosing condition, or the whole conditional statement - lib\services\sync_service.dart:998:15 - unnecessary_null_comparison
+   info - 'expand' is deprecated and shouldn't be used. This field is superseded by the more generic get<T>(keyPath) method. You can access the expanded record models and fields using dot-notation similar to the regular record fields: record.get<String>("expand.user.email"); record.get<RecordModel>("expand.user"); record.get<List<RecordModel>>("expand.products");. Try replacing the use of the deprecated member with the replacement - lib\services\sync_service.dart:1017:41 - deprecated_member_use
+warning - The operand can't be 'null', so the condition is always 'true'. Remove the condition - lib\services\sync_service.dart:1017:48 - unnecessary_null_comparison
+   info - 'expand' is deprecated and shouldn't be used. This field is superseded by the more generic get<T>(keyPath) method. You can access the expanded record models and fields using dot-notation similar to the regular record fields: record.get<String>("expand.user.email"); record.get<RecordModel>("expand.user"); record.get<List<RecordModel>>("expand.products");. Try replacing the use of the deprecated member with the replacement - lib\services\sync_service.dart:1018:27 - deprecated_member_use
+warning - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator - lib\services\sync_service.dart:1018:33 - unnecessary_non_null_assertion
+   info - 'expand' is deprecated and shouldn't be used. This field is superseded by the more generic get<T>(keyPath) method. You can access the expanded record models and fields using dot-notation similar to the regular record fields: record.get<String>("expand.user.email"); record.get<RecordModel>("expand.user"); record.get<List<RecordModel>>("expand.products");. Try replacing the use of the deprecated member with the replacement - lib\services\sync_service.dart:1019:25 - deprecated_member_use
+warning - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator - lib\services\sync_service.dart:1019:31 - unnecessary_non_null_assertion
+   info - 'created' is deprecated and shouldn't be used. created is no longer mandatory field; use get<String>('created'). Try replacing the use of the deprecated member with the replacement - lib\services\sync_service.dart:1238:42 - deprecated_member_use
+   info - 'expand' is deprecated and shouldn't be used. This field is superseded by the more generic get<T>(keyPath) method. You can access the expanded record models and fields using dot-notation similar to the regular record fields: record.get<String>("expand.user.email"); record.get<RecordModel>("expand.user"); record.get<List<RecordModel>>("expand.products");. Try replacing the use of the deprecated member with the replacement - lib\services\sync_service.dart:2139:41 - deprecated_member_use
+warning - The operand can't be 'null', so the condition is always 'true'. Remove the condition - lib\services\sync_service.dart:2139:48 - unnecessary_null_comparison
+   info - 'expand' is deprecated and shouldn't be used. This field is superseded by the more generic get<T>(keyPath) method. You can access the expanded record models and fields using dot-notation similar to the regular record fields: record.get<String>("expand.user.email"); record.get<RecordModel>("expand.user"); record.get<List<RecordModel>>("expand.products");. Try replacing the use of the deprecated member with the replacement - lib\services\sync_service.dart:2140:30 - deprecated_member_use
+warning - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator - lib\services\sync_service.dart:2140:36 - unnecessary_non_null_assertion
+warning - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator - lib\services\sync_service.dart:2193:19 - unnecessary_non_null_assertion
+   info - 'surfaceVariant' is deprecated and shouldn't be used. Use surfaceContainerHighest instead. This feature was deprecated after v3.18.0-0.1.pre. Try replacing the use of the deprecated member with the replacement - lib\services\theme_provider.dart:146:7 - deprecated_member_use
+   info - 'surfaceVariant' is deprecated and shouldn't be used. Use surfaceContainerHighest instead. This feature was deprecated after v3.18.0-0.1.pre. Try replacing the use of the deprecated member with the replacement - lib\services\theme_provider.dart:385:7 - deprecated_member_use
+   info - Use 'isNotEmpty' instead of 'length' to test whether the collection is empty. Try rewriting the expression to use 'isNotEmpty' - lib\widgets\conflict_resolution_dialog.dart:51:28 - prefer_is_empty
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\widgets\conflict_resolution_dialog.dart:68:17 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\widgets\conflict_resolution_dialog.dart:69:17 - deprecated_member_use
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\widgets\conflict_resolution_dialog.dart:75:17 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\widgets\conflict_resolution_dialog.dart:76:17 - deprecated_member_use
+warning - Unused import: 'package:provider/provider.dart'. Try removing the import directive - lib\widgets\low_space_banner.dart:3:8 - unused_import
+warning - A value for optional parameter 'tooltip' isn't ever given. Try removing the unused parameter - lib\widgets\wizard\planta_card.dart:179:10 - unused_element_parameter
+   info - The local variable '_projetoSeed' starts with an underscore. Try renaming the variable to not start with an underscore - test\fase10_projeto_mrv_test.dart:22:18 - no_leading_underscores_for_local_identifiers
+warning - Unused import: 'package:drift/drift.dart'. Try removing the import directive - test\fase11_p2_test.dart:2:8 - unused_import
+   info - The local variable '_count' starts with an underscore. Try renaming the variable to not start with an underscore - test\mrv_fresh_install_test.dart:37:17 - no_leading_underscores_for_local_identifiers
+   info - The imported package 'path_provider_platform_interface' isn't a dependency of the importing package. Try adding a dependency for 'path_provider_platform_interface' in the 'pubspec.yaml' file - test\photo_evidence_test.dart:6:8 - depend_on_referenced_packages
+warning - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator - test\rc05_clock_test.dart:60:23 - unnecessary_non_null_assertion
+   info - The local variable '_criarParcelaDeletada' starts with an underscore. Try renaming the variable to not start with an underscore - test\rc06_purge_softdelete_test.dart:19:16 - no_leading_underscores_for_local_identifiers
+warning - Unused import: 'package:drift/drift.dart'. Try removing the import directive - test\rc13_device_test.dart:2:8 - unused_import
+   info - The imported package 'path_provider_platform_interface' isn't a dependency of the importing package. Try adding a dependency for 'path_provider_platform_interface' in the 'pubspec.yaml' file - test\s2_catalogo_vivo_test.dart:17:8 - depend_on_referenced_packages
+   info - The imported package 'path_provider_platform_interface' isn't a dependency of the importing package. Try adding a dependency for 'path_provider_platform_interface' in the 'pubspec.yaml' file - test\t2_foto_hash_upload_test.dart:23:8 - depend_on_referenced_packages
+   info - Use a function declaration rather than a variable assignment to bind a function to a name. Try rewriting the closure assignment as a function declaration - test\theme_contrast_test.dart:24:9 - prefer_function_declarations_over_variables
+   info - 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion. Try replacing the use of the deprecated member with the replacement - test\theme_contrast_test.dart:24:28 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion. Try replacing the use of the deprecated member with the replacement - test\theme_contrast_test.dart:100:43 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use component accessors like .r or .g, or toARGB32 for an explicit conversion. Try replacing the use of the deprecated member with the replacement - test\theme_contrast_test.dart:107:43 - deprecated_member_use
+warning - Unused import: 'package:drift/drift.dart'. Try removing the import directive - test\v26_parcela_serverid_test.dart:9:8 - unused_import
+   info - Dangling library doc comment. Add a 'library' directive after the library comment - tool\seed_pocketbase_from_csv.dart:1:1 - dangling_library_doc_comments
+warning - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator - tool\seed_pocketbase_from_csv.dart:80:29 - unnecessary_non_null_assertion
+warning - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator - tool\seed_pocketbase_from_csv.dart:84:39 - unnecessary_non_null_assertion
+warning - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator - tool\seed_pocketbase_from_csv.dart:88:45 - unnecessary_non_null_assertion
+warning - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator - tool\seed_pocketbase_from_csv.dart:93:28 - unnecessary_non_null_assertion
+
+193 issues found. (ran in 3.7s)

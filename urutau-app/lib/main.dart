@@ -1,15 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:workmanager/workmanager.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'data/database.dart';
 import 'services/backup_service.dart';
 import 'services/device_service.dart';
 import 'services/sync_service.dart';
 import 'services/theme_provider.dart';
 import 'services/password_service.dart';
-import 'services/secure_storage_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -27,19 +24,11 @@ void main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    // Initialize Workmanager for background backup
-    Workmanager().initialize(callbackDispatcher);
-    
-    // Register periodic background backup (daily)
-    await Workmanager().registerPeriodicTask(
-      'urutau-background-backup',
-      'localBackup',
-      frequency: Duration(hours: 24),
-      constraints: Constraints(
-        networkType: NetworkType.notRequired,
-        requiresStorageNotLow: true,
-      ),
-    );
+    // Backup automático LOCAL removido (t9): uma cópia dentro do mesmo sandbox
+    // do app não sobrevive a celular perdido/quebrado nem à desinstalação —
+    // era redundante e enganoso. O backup ÚTIL é o manual/explícito
+    // (BackupService.exportBackup, que compartilha o ZIP pra fora do aparelho),
+    // usado antes de reinstalar e em ações destrutivas. Ver settings_screen.
 
     final db = AppDatabase();
     await BackupService.runPendingRestore();
@@ -89,30 +78,6 @@ void main() async {
   }, (error, stack) {
     debugPrint('Unhandled error: $error\n$stack');
     appErrorNotifier.value = error.toString();
-  });
-}
-
-@pragma('vm:entry-point')
-void callbackDispatcher() {
-  Workmanager().executeTask((taskName, inputData) async {
-    if (taskName == 'localBackup') {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final autoBackupEnabled = prefs.getBool('auto_backup_enabled') ?? false;
-        if (!autoBackupEnabled) {
-          debugPrint('Background backup skipped: auto-backup disabled');
-          return true;
-        }
-        
-        final db = AppDatabase();
-        await BackupService.exportBackgroundBackup();
-        return true;
-      } catch (e) {
-        debugPrint('Background backup failed: $e');
-        return false;
-      }
-    }
-    return false;
   });
 }
 

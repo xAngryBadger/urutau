@@ -10,7 +10,6 @@ import '../services/storage_service.dart';
 
 // >>> t14 S3: inicio
 import 'package:crypto/crypto.dart';
-import 'dart:convert';
 // <<< t14 S3: fim
 
 class ImageService {
@@ -56,9 +55,15 @@ class ImageService {
   }
   // <<< t14 S3: fim
 
-  /// Comprime uma imagem para reduzir tamanho no upload.
-  /// Foto original ~5MB → comprimida ~500KB-1MB.
-  static Future<File?> compressImage(File file, {int quality = 70}) async {
+  /// Comprime uma imagem (re-encode JPEG).
+  ///
+  /// ATENÇÃO — NÃO é usado no fluxo de captura. O caminho principal (D-1)
+  /// salva e sobe o ORIGINAL, sem re-encodar: comprimir alteraria os bytes e
+  /// o hash SHA-256 passaria a ser do arquivo COMPRIMIDO, não do original —
+  /// quebrando a promessa de evidência (o servidor precisa do original).
+  /// Default 100 = sem perda; usar <100 só faz sentido para quem chamar esta
+  /// função explicitamente sabendo que o hash a seguir é do comprimido.
+  static Future<File?> compressImage(File file, {int quality = 100}) async {
     if (kIsWeb) return null; // Web não suporta compressão local
     
     // Verifica espaço em disco antes de comprimir
@@ -100,10 +105,13 @@ class ImageService {
     }
   }
 
-  /// (S3) Comprime E devolve os metadados do resultado. Não substitui
-  /// compressImage — os 2 chamadores de sync_service.dart continuam iguais.
+  /// (S3) Comprime E devolve os metadados do RESULTADO comprimido.
+  ///
+  /// O hash/bytes devolvidos são SEMPRE do arquivo comprimido (coerentes com
+  /// o que seria enviado), nunca do original. Default 100 (sem perda). Não é
+  /// usado pelo fluxo de captura — ver [compressImage].
   static Future<({String caminho, String? sha256, int? bytes})?>
-      comprimirComMetadados(File file, {int quality = 70}) async {
+      comprimirComMetadados(File file, {int quality = 100}) async {
     final result = await compressImage(file, quality: quality);
     if (result == null) return null;
     final meta = await metadadosDe(result.path);

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:workmanager/workmanager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,10 +8,7 @@ import '../services/backup_service.dart';
 import '../services/sync_service.dart';
 import '../services/theme_provider.dart';
 
-const String kPhotoQualityKey = 'photo_compression_quality';
-const int kPhotoQualityDefault = 70;
 const String kForcedOfflineKey = 'forced_offline_mode';
-const String kAutoBackupKey = 'auto_backup_enabled';
 const String kWizardModeKey = 'wizard_mode_enabled';
 
 class SettingsScreen extends StatefulWidget {
@@ -30,9 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _testResult;
   bool? _testOk;
 
-  int _photoQuality = kPhotoQualityDefault;
   bool _forcedOffline = false;
-  bool _autoBackupEnabled = false;
   bool _wizardMode = true; // UX-APP-CAMPO: default ligado
 
   @override
@@ -40,9 +34,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     final syncService = context.read<SyncService>();
     _serverUrlController.text = syncService.serverUrl ?? '';
-    _loadPhotoQuality();
     _loadForcedOffline();
-    _loadAutoBackup();
     _loadWizardMode();
   }
 
@@ -54,24 +46,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  Future<void> _loadPhotoQuality() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _photoQuality = prefs.getInt(kPhotoQualityKey) ?? kPhotoQualityDefault;
-    });
-  }
-
   Future<void> _loadForcedOffline() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _forcedOffline = prefs.getBool(kForcedOfflineKey) ?? false;
-    });
-  }
-
-  Future<void> _loadAutoBackup() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _autoBackupEnabled = prefs.getBool(kAutoBackupKey) ?? false;
     });
   }
 
@@ -320,7 +298,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Exporte um backup antes de desinstalar; após reinstalar, use Restaurar e escolha o ficheiro. O Android também pode restaurar dados automaticamente se o backup estiver ativo.',
+                    'Backup LOCAL = ficheiro ZIP com o banco (SQLite) e as fotos. '
+                    'Use "Exportar backup local" e GUARDE o ficheiro fora do celular '
+                    '(Downloads/Drive): uma cópia que fica só no aparelho desaparece '
+                    'se ele for perdido, quebrado ou o app desinstalado. '
+                    'Para voltar, use "Restaurar" e escolha o ficheiro — substitui os dados atuais.',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
@@ -453,13 +435,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 12),
                   Consumer<ThemeProvider>(
                     builder: (context, themeProvider, _) {
-                      return SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        secondary: const Icon(Icons.contrast),
-                        title: const Text('Modo Alto Contraste'),
-                        value: themeProvider.isHighContrast,
-                        onChanged: (val) async =>
-                            await themeProvider.setHighContrast(val),
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SegmentedButton<ThemeModeUrutau>(
+                            segments: const [
+                              ButtonSegment(
+                                value: ThemeModeUrutau.claro,
+                                label: Text('Claro'),
+                              ),
+                              ButtonSegment(
+                                value: ThemeModeUrutau.altoContraste,
+                                label: Text('Alto contraste'),
+                              ),
+                              ButtonSegment(
+                                value: ThemeModeUrutau.kanagawa,
+                                label: Text('Kanagawa'),
+                              ),
+                            ],
+                            selected: {themeProvider.mode},
+                            onSelectionChanged: (sel) async =>
+                                await themeProvider.setMode(sel.first),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Claro = tema padrão. Alto contraste = preto/amarelo/'
+                            'branco com contraste AA, para uso sob sol. '
+                            'Kanagawa = paleta escura do kanagawa.nvim. '
+                            'A escolha fica guardada.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -514,7 +520,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 16),
 
-          // ────────── QUALIDADE DAS FOTOS ──────────
+          // ────────── FOTOS (integridade) ──────────
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -526,7 +532,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Icon(Icons.image),
                       SizedBox(width: 8),
                       Text(
-                        'Qualidade das Fotos',
+                        'Fotos',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -534,37 +540,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.image, size: 20),
-                        const SizedBox(width: 12),
-                        const Text('Qualidade das Fotos', style: TextStyle(fontSize: 16)),
-                        const Spacer(),
-                        Text('${_photoQuality}%', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  Slider(
-                    value: _photoQuality.toDouble(),
-                    min: 50,
-                    max: 95,
-                    divisions: 9,
-                    label: '${_photoQuality.round()}%',
-                    onChanged: (val) async {
-                      setState(() => _photoQuality = val.round());
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setInt(kPhotoQualityKey, val.round());
-                    },
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Maior qualidade = arquivos maiores. Recomendado: 70%.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'As fotos são guardadas e enviadas como o ORIGINAL capturado, '
+                    'sem compressão. O hash SHA-256 é calculado sobre exatamente '
+                    'o arquivo que sobe — a evidência não é alterada. '
+                    'Não há opção de comprimir: comprimir mudaria os bytes e o '
+                    'hash deixaria de ser do original.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                 ],
               ),
@@ -639,68 +622,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       'Reinicie o app para aplicar completamente.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // ────────── BACKUP AUTOMÁTICO ──────────
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.schedule),
-                      SizedBox(width: 8),
-                      Text(
-                        'Backup Automático Diário',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    secondary: const Icon(Icons.backup),
-                    title: const Text('Backup Automático Diário'),
-                    subtitle: const Text(
-                      'Cria backup local automaticamente a cada 24h em segundo plano.',
-                    ),
-                    value: _autoBackupEnabled,
-                    onChanged: (val) async {
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setBool(kAutoBackupKey, val);
-                      setState(() => _autoBackupEnabled = val);
-                      if (val) {
-                        await Workmanager().registerPeriodicTask(
-                          'urutau-background-backup',
-                          'localBackup',
-                          frequency: Duration(hours: 24),
-                        constraints: Constraints(
-                          networkType: NetworkType.notRequired,
-                          requiresStorageNotLow: true,
-                        ),
-                        );
-                      } else {
-                        await Workmanager().cancelByUniqueName('urutau-background-backup');
-                      }
-                    },
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Backups são salvos localmente. Use "Exportar backup" para salvar cópia externa.',
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ),
