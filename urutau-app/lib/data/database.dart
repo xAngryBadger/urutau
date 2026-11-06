@@ -1325,13 +1325,14 @@ VGVG0069;UT04;0.0;1''';
     if (existente == null) return; // sem linha não inventa
 
     if (existente.sha256 != null && existente.sha256 != sha256) {
-      // divergência → incidente (nunca overwrite)
+      // divergência → incidente BLOQUEADOR de crédito (RG-06; nunca overwrite)
       await into(incidentes).insert(IncidentesCompanion.insert(
         uuid: _novoUuid(),
         tipo: 'hash_divergente',
         entidadeTipo: const Value('ativo'),
         entidadeUuid: Value(ativoUuid),
-        severidade: 'alta',
+        severidade: 'bloqueadora',
+        bloqueiaUsoParaCredito: const Value(true),
         descricao: Value(
             'hash divergente: catalogo=${existente.sha256} novo=$sha256'),
       ));
@@ -1358,6 +1359,30 @@ VGVG0069;UT04;0.0;1''';
           ..limit(1))
         .getSingleOrNull();
     return row?.sha256;
+  }
+
+  /// RG-06: true se existe incidente BLOQUEADOR de crédito ainda aberto que
+  /// atinja a entidade (ou global — entidadeUuid null bloqueia tudo).
+  Future<bool> haIncidenteBloqueadorAberto(String? entidadeUuid) async {
+    final query = selectOnly(incidentes)
+      ..addColumns([incidentes.uuid.count()])
+      ..where(incidentes.bloqueiaUsoParaCredito.equals(true) &
+          incidentes.resolvidoEm.isNull());
+    if (entidadeUuid != null) {
+      query.where(incidentes.entidadeUuid.equals(entidadeUuid) |
+          incidentes.entidadeUuid.isNull());
+    }
+    final row = await query.getSingle();
+    return (row.read(incidentes.uuid.count()) ?? 0) > 0;
+  }
+
+  /// RG-06: incidentes abertos (qualquer severidade) ligados à entidade.
+  Future<List<Incidente>> incidentesAbertos(String entidadeUuid) async {
+    return (select(incidentes)
+          ..where((t) =>
+              t.entidadeUuid.equals(entidadeUuid) & t.resolvidoEm.isNull())
+          ..orderBy([(t) => OrderingTerm.desc(t.detectadoEm)]))
+        .get();
   }
 
   /// (S3 H6 / RC-07) Recalcula o hash dos arquivos do catálogo e compara.
@@ -1389,7 +1414,8 @@ VGVG0069;UT04;0.0;1''';
           tipo: 'integridade_divergente',
           entidadeTipo: const Value('ativo'),
           entidadeUuid: Value(a.uuid),
-          severidade: 'alta',
+          severidade: 'bloqueadora',
+          bloqueiaUsoParaCredito: const Value(true),
           descricao: Value(
               'recheck divergente: catalogo=${a.sha256} arquivo=$hash'),
         ));

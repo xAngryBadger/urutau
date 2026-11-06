@@ -214,6 +214,20 @@ class MrvCalcService {
     final calcUuid = const Uuid().v4();
     final agora = DateTime.now();
 
+    // RG-06: incidente bloqueador aberto (desta parcela ou global) bloqueia
+    // o uso do resultado para crédito — o cálculo é gravado como evidência,
+    // mas com status 'bloqueado_incidente'.
+    final bloqueado = await db.haIncidenteBloqueadorAberto(parcelaUuid);
+    if (bloqueado) {
+      await db.logTrilha(
+        acao: 'credito_bloqueado',
+        entidadeTipo: 'calculo_mrv',
+        entidadeUuid: calcUuid,
+        depois: 'incidente bloqueador aberto — resultado não pode virar crédito',
+        origem: 'app',
+      );
+    }
+
     await db.into(db.calculosMrv).insert(CalculosMrvCompanion(
       uuid: drift.Value(calcUuid),
       escopoTipo: drift.Value('parcela'),
@@ -234,7 +248,8 @@ class MrvCalcService {
           ? drift.Value(jsonEncode(resultado['incerteza']))
           : const drift.Value(null),
       unidadeArea: drift.Value(areaM2),
-      status: drift.Value('valido'),
+      // RG-06
+      status: drift.Value(bloqueado ? 'bloqueado_incidente' : 'valido'),
       executadoEm: drift.Value(agora),
     ));
 

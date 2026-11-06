@@ -108,10 +108,88 @@ void main() {
     expect((calcs.first['resultado'] as Map)['resultado_hash'], isNotNull);
     expect(dados['trilha'], hasLength(1));
     expect(dados['verificacao']['cadeia_local'], 'INTEGRA');
+    expect(dados['verificacao']['creditacao'], 'liberada');
 
     // PDF começa com %PDF
     final pdf = zip.firstWhere((f) => f.name == 'dossie.pdf');
     final head = utf8.decode((pdf.content as List<int>).sublist(0, 5));
     expect(head, '%PDF-');
+  });
+
+  test('RG-06: incidente bloqueador aberto bloqueia o crédito no cálculo e no dossiê',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    await db.customSelect('SELECT 1').get();
+    addTearDown(db.close);
+
+    await db.insertParcela(ParcelasCompanion.insert(
+      uuid: 'p1',
+      propriedade: const drift.Value('Faz Modelo'),
+      propUt: 'UT-01',
+      idParcela: 7,
+      userId: 'u1',
+    ));
+    expect(await db.haIncidenteBloqueadorAberto('p1'), isFalse);
+
+    // abre incidente bloqueador ligado à parcela
+    await db.into(db.incidentes).insert(IncidentesCompanion.insert(
+      uuid: 'inc1',
+      tipo: 'integridade_divergente',
+      entidadeTipo: const drift.Value('parcela'),
+      entidadeUuid: const drift.Value('p1'),
+      severidade: 'bloqueadora',
+      bloqueiaUsoParaCredito: const drift.Value(true),
+    ));
+    expect(await db.haIncidenteBloqueadorAberto('p1'), isTrue);
+    expect(await db.haIncidenteBloqueadorAberto('outra'), isFalse);
+
+    // cálculo sai bloqueado + trilha registra o bloqueio
+    final plantas = [
+      Planta(
+        id: 1,
+        uuid: 'pl1',
+        parcelaUuid: 'p1',
+        especie: 'Eucalipto',
+        alturaCm: 1500,
+        dapCm: 22.5,
+        categoria: 1,
+        synced: false,
+        fotoEspeciePath: null,
+        fotoAusente: false,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        deletedAt: null,
+        serverPlantaId: null,
+        parcelaServerId: null,
+        arquivoEstado: 'capturado',
+        enviadoVerificadoEm: null,
+      ),
+    ];
+    final r = MrvCalcService.calcularParcela(plantas: plantas, areaM2: 400);
+    await MrvCalcService.persistirCalculo(
+        db: db, parcelaUuid: 'p1', resultado: r, areaM2: 400);
+    final calc = await (db.select(db.calculosMrv)).getSingle();
+    expect(calc.status, 'bloqueado_incidente');
+    final trilha = await (db.select(db.trilhaAuditoria)).get();
+    expect(trilha.any((t) => t.acao == 'credito_bloqueado'), isTrue);
+
+    // dossiê marca creditação bloqueada e lista o incidente
+    final zipPath = await DossieService.gerarDossieParcela(db, 'p1');
+    final zip = ZipDecoder()
+        .decodeBytes(await io.File(zipPath).readAsBytes());
+    final dadosFile = zip.firstWhere((f) => f.name == 'dados.json');
+    final dados = jsonDecode(utf8.decode(dadosFile.content as List<int>))
+        as Map<String, dynamic>;
+    expect(dados['verificacao']['creditacao'], contains('BLOQUEADA'));
+    expect(dados['incidentes_abertos'], hasLength(1));
+
+    // resolvendo o incidente, libera de novo
+    await (db.update(db.incidentes)..where((t) => t.uuid.equals('inc1')))
+        .write(const IncidentesCompanion(resolvidoEm: drift.Value.absent()));
+    await db.customUpdate(
+        "UPDATE incidentes SET resolvido_em = datetime('now') WHERE uuid = 'inc1'",
+        updates: {db.incidentes});
+    expect(await db.haIncidenteBloqueadorAberto('p1'), isFalse);
   });
 }

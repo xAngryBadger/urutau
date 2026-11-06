@@ -44,6 +44,9 @@ class DossieService {
           ..orderBy([(t) => OrderingTerm.asc(t.idSeq)]))
         .get();
     final cadeiaLocal = await db.verificarCadeiaAuditoria();
+    // RG-06: crédito bloqueado por incidente aberto?
+    final bloqueado = await db.haIncidenteBloqueadorAberto(parcelaUuid);
+    final incidentes = await db.incidentesAbertos(parcelaUuid);
 
     final geradoEm = await ClockService.agoraConfiavel();
     final offsetMs = (await ClockService.offsetMedido())?.inMilliseconds ?? 0;
@@ -129,10 +132,23 @@ class DossieService {
                 'entry_hash': t.entryHash,
               })
           .toList(),
+      'incidentes_abertos': incidentes
+          .map((i) => {
+                'uuid': i.uuid,
+                'tipo': i.tipo,
+                'severidade': i.severidade,
+                'bloqueia_credito': i.bloqueiaUsoParaCredito,
+                'descricao': i.descricao,
+                'detectado_em': i.detectadoEm?.toIso8601String(),
+              })
+          .toList(),
       'verificacao': {
         'cadeia_local': cadeiaLocal == null ? 'INTEGRA' : cadeiaLocal,
         'cadeia_servidor':
             serverChainStatus == null ? 'INTEGRA (ultimo sync)' : serverChainStatus,
+        // RG-06
+        'creditacao':
+            bloqueado ? 'BLOQUEADA — incidente aberto' : 'liberada',
       },
     };
     final dadosJson = const JsonEncoder.withIndent('  ').convert(dados);
@@ -146,6 +162,7 @@ class DossieService {
       trilha: trilha,
       cadeiaLocalOk: cadeiaLocal == null,
       serverChainStatus: serverChainStatus,
+      bloqueado: bloqueado,
       geradoEm: geradoEm,
     );
 
@@ -227,6 +244,7 @@ class DossieService {
     required List<TrilhaAuditoriaData> trilha,
     required bool cadeiaLocalOk,
     String? serverChainStatus,
+    required bool bloqueado,
     required DateTime geradoEm,
   }) async {
     final doc = pw.Document();
@@ -357,6 +375,13 @@ class DossieService {
           pw.Text('Cadeia local: ${cadeiaLocalOk ? 'INTEGRA' : 'QUEBRADA'}'),
           pw.Text(
               'Cadeia servidor: ${serverChainStatus == null ? 'INTEGRA (último sync)' : serverChainStatus}'),
+          // RG-06
+          pw.Text(
+            'Creditação: ${bloqueado ? 'BLOQUEADA — incidente aberto (não usar para crédito)' : 'liberada'}',
+            style: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: bloqueado ? PdfColors.red : PdfColors.green),
+          ),
           pw.SizedBox(height: 16),
           pw.Text(
               'O manifesto.json deste ZIP traz o SHA-256 de cada arquivo, '
