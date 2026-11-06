@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, startTransition } from 'react';
+import { Link } from 'react-router-dom';
 import {
   fetchParcels,
   fetchAllParcels,
@@ -30,6 +31,7 @@ import {
   User,
   TreePine,
   Camera,
+  ShieldCheck,
 } from 'lucide-react';
 
 const ParcelDetailModal = ({ parcel, onClose }) => {
@@ -727,13 +729,23 @@ const Parcels = () => {
                               : '-'}
                           </td>
                           <td className="table-cell">
-                            <button
-                              className="text-forest-600 hover:text-forest-800"
-                              title="Ver detalhes"
-                              onClick={() => setDetailParcel(parcel)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                className="text-forest-600 hover:text-forest-800"
+                                title="Ver detalhes"
+                                onClick={() => setDetailParcel(parcel)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              <Link
+                                to={`/parcels/${parcel.id}/auditoria`}
+                                className="inline-flex items-center gap-1 rounded-md border border-urutau-300 px-2 py-1 text-xs font-medium text-urutau-700 transition-colors hover:bg-urutau-100"
+                                title="Auditoria completa: cálculo, trilha, hashes"
+                              >
+                                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                Auditar
+                              </Link>
+                            </div>
                           </td>
                         </tr>
                       ))}

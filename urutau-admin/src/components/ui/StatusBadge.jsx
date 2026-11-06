@@ -1,11 +1,11 @@
 import React from 'react';
-import { Hourglass, FactCheckOutlined, VerifiedOutlined, EditNote } from 'lucide-react';
+import { Hourglass, ListChecks, BadgeCheck, SquarePen } from 'lucide-react';
 import { statusToken } from '../../theme/tokens';
 const ICONS = {
   hourglass: Hourglass,
-  'fact-check': FactCheckOutlined,
-  verified: VerifiedOutlined,
-  edit: EditNote,
+  'fact-check': ListChecks,
+  verified: BadgeCheck,
+  edit: SquarePen,
 };
 
 /**
