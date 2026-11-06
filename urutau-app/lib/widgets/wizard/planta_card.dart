@@ -28,15 +28,8 @@ class PlantaCard extends StatelessWidget {
     this.onRemover,
   });
 
-  static const Map<int, Color> _coresCategoria = {
-    1: Colors.blue,
-    2: Colors.orange,
-    3: Colors.green,
-  };
-
   @override
   Widget build(BuildContext context) {
-    final corCat = _coresCategoria[planta.categoria] ?? Colors.grey;
     final popular = nomePopular;
 
     return Semantics(
@@ -90,11 +83,6 @@ class PlantaCard extends StatelessWidget {
                         runSpacing: 2,
                         children: [
                           _MiniChip(
-                            rotulo: rotuloChipCategoria(planta.categoria),
-                            cor: corCat,
-                            tooltip: descricaoCategoria(planta.categoria),
-                          ),
-                          _MiniChip(
                             rotulo:
                                 'Alt ${planta.alturaCm.toStringAsFixed(0)} cm',
                             cor: Colors.grey[700]!,
@@ -112,6 +100,21 @@ class PlantaCard extends StatelessWidget {
                               icone: Icons.photo_camera,
                             ),
                         ],
+                      ),
+                      // Categoria: informação de protocolo, não ação. Fica
+                      // DISCRETA no rodapé do card (letra pequena, cinza,
+                      // sem fundo) — a regra completa no tooltip/Semantics.
+                      Tooltip(
+                        message: descricaoCategoria(planta.categoria),
+                        child: Text(
+                          rotuloChipCategoria(planta.categoria),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: AppTokens.fontCaption,
+                            color: Colors.grey[500],
+                          ),
+                        ),
                       ),
                     ],
                   ),

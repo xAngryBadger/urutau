@@ -3,14 +3,16 @@ import 'package:flutter/material.dart';
 import '../../theme/app_tokens.dart';
 
 /// Stepper do wizard de parcela (UX-APP-CAMPO): mostra "Etapa N de 4", o nome
-/// da etapa atual e os 4 passos (Local, Plantas, Fotos, Revisar).
+/// da etapa atual e os 4 passos. Ordem = protocolo de campo: primeiro a
+/// PROPRIEDADE/UT (Local), depois as FOTOS DA PARCELA (visão geral), depois
+/// as PLANTAS com suas fotos de espécie, e por fim Revisar.
 /// Etapas já visitadas/anteriores podem ser tocadas para voltar; etapas
 /// seguintes só avançam pelas travas de validação (quem decide é a tela).
 class WizardStepper extends StatelessWidget {
   final int etapaAtual; // 0-based
   final void Function(int etapa) onEtapaTap;
 
-  static const List<String> etapas = ['Local', 'Plantas', 'Fotos', 'Revisar'];
+  static const List<String> etapas = ['Local', 'Fotos', 'Plantas', 'Revisar'];
 
   const WizardStepper({
     super.key,

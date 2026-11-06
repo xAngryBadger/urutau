@@ -137,15 +137,20 @@ void main() {
     addTearDown(db.close);
     await _pumpForm(tester, db, parcelaUuid: 'p1');
 
-    // etapa 1 válida (campos carregados da parcela) — GPS não obriga avançar
+    // etapa 1 (Local) válida (campos carregados da parcela) → Fotos (2)
     await tester.tap(find.text('Continuar'));
     await _settle(tester);
     expect(find.text('Etapa 2 de 4'), findsOneWidget);
+
+    // Fotos não travam o avanço → Plantas (3)
+    await tester.tap(find.text('Continuar'));
+    await _settle(tester);
+    expect(find.text('Etapa 3 de 4'), findsOneWidget);
     expect(find.text('Nenhuma planta adicionada'), findsOneWidget);
 
     await tester.tap(find.text('Continuar'));
     await tester.pump();
-    expect(find.text('Etapa 2 de 4'), findsOneWidget); // não avançou
+    expect(find.text('Etapa 3 de 4'), findsOneWidget); // não avançou
     expect(
         find.text('Adicione pelo menos 1 planta para concluir a parcela.'),
         findsOneWidget);

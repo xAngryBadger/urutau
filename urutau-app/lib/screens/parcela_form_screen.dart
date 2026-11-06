@@ -1443,8 +1443,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             onPageChanged: _onPaginaMudou,
             children: [
               _etapaLocal(),
-              _etapaPlantas(),
               _etapaFotos(),
+              _etapaPlantas(),
               _etapaRevisar(),
             ],
           ),
@@ -1808,11 +1808,13 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   }
 
   /// Motivo (mensagem atual) que impede avançar da etapa [step]; null = ok.
+  /// Ordem do wizard: 0 Local · 1 Fotos · 2 Plantas · 3 Revisar.
+  /// Só Local (validators) e Plantas (≥1 planta) travam — como no clássico.
   String? _erroAoAvancarDe(int step) {
     switch (step) {
       case 0:
         return _erroEtapaLocal();
-      case 1:
+      case 2:
         return _plantas.isEmpty
             ? 'Adicione pelo menos 1 planta para concluir a parcela.'
             : null;
