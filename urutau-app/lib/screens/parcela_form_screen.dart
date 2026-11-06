@@ -404,7 +404,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         _latitude = pos.latitude;
         _longitude = pos.longitude;
         _acuraciaM = pos.accuracy;
-        _satelites = null; // geolocator não expõe nº de satélites; fica null
+        // RC-14: geolocator não expõe nº de satélites — fica null e o geoJson
+        // registra a fonte pra não parecer dado medido
+        _satelites = null;
         _fixEm = pos.timestamp;
         _isGettingLocation = false;
       });
@@ -429,6 +431,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       'crs': 'WGS84',
       'acuracia_m': _acuraciaM,
       'n_satelites': _satelites,
+      // RC-14: quando null, diz a fonte — o número não foi medido
+      'n_satelites_fonte': _satelites == null ? 'indisponivel_geolocator' : 'fix',
       'fix_em': _fixEm?.toIso8601String(),
       'fonte': 'geolocator',
     });

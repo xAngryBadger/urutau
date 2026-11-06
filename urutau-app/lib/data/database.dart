@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/backup_service.dart';
 import '../services/clock_service.dart';
 import '../services/password_service.dart';
@@ -1948,6 +1949,16 @@ VGVG0069;UT04;0.0;1''';
           ..where((t) => t.uuid.equals(ativoUuid)))
         .getSingleOrNull();
 
+    // RC-13/RC-14: dispositivo que registrou + EXIF preservado (o app copia
+    // os bytes originais da foto — savePhotoLocally usa copy, não re-encode)
+    String? dispUuid;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      dispUuid = prefs.getString('device_uuid');
+    } catch (_) {
+      dispUuid = null; // ex.: teste puro sem binding — sem dispositivo
+    }
+
     if (existente == null) {
       await into(ativosBrutos).insert(AtivosBrutosCompanion.insert(
         // required = valor cru no Companion.insert (Value é para update/nullable)
@@ -1960,12 +1971,16 @@ VGVG0069;UT04;0.0;1''';
         capturadoEm: Value(capturadoEm),
         status: Value(status),
         sha256Verificado: const Value(false),
+        dispositivoUuid: Value(dispUuid), // RC-13
+        exifPreservado: const Value(true), // RC-14: bytes originais copiados
       ));
     } else {
       await (update(ativosBrutos)..where((t) => t.uuid.equals(ativoUuid)))
           .write(AtivosBrutosCompanion(
         status: Value(status),
         caminhoOriginal: Value(caminhoOriginal),
+        dispositivoUuid: Value(dispUuid), // RC-13
+        exifPreservado: const Value(true), // RC-14
         updatedAt: Value(DateTime.now()),
       ));
     }

@@ -5,6 +5,7 @@ import 'package:workmanager/workmanager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/database.dart';
 import 'services/backup_service.dart';
+import 'services/device_service.dart';
 import 'services/sync_service.dart';
 import 'services/theme_provider.dart';
 import 'services/password_service.dart';
@@ -43,6 +44,12 @@ void main() async {
     await BackupService.runPendingRestore();
     await BackupService.cleanPreRestoreFiles();
     await _migratePlaintextPasswords(db);
+    // RC-13: registra o dispositivo (modelo/SO/versão app) na tabela Dispositivos
+    try {
+      await DeviceService.registrarDispositivo(db);
+    } catch (e) {
+      debugPrint('RC-13: falha ao registrar dispositivo: $e');
+    }
 
   String? integrityError;
   try {

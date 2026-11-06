@@ -168,6 +168,8 @@ class SyncService extends ChangeNotifier {
         final existe = await _withRetry(() => _pb!.collection('trilha_auditoria')
             .getList(page: 1, perPage: 1, filter: "entry_hash = '${e.entryHash}'"));
         if (existe.items.isEmpty) {
+          // RC-13: dispositivo_id vai no registro do servidor (fora do hash local)
+          final dispId = prefs.getString('device_uuid');
           await _withRetry(() => _pb!.collection('trilha_auditoria').create(body: {
                 'entidade_tipo': e.entidadeTipo,
                 'entidade_uuid': e.entidadeUuid,
@@ -181,6 +183,7 @@ class SyncService extends ChangeNotifier {
                 'origem': e.origem,
                 'prev_hash': e.prevHash,
                 'entry_hash': e.entryHash,
+                'dispositivo_id': dispId,
               }));
         }
         enviadas++;
