@@ -772,7 +772,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   Widget _gpsCard() {
     return UrutauSectionCard(
       icon: Icons.location_on,
-      title: 'Localização GPS (obrigatória ao concluir)',
+      // Sem "(obrigatória ao concluir)" no título: quem tentar concluir sem
+      // GPS já é travado com o aviso explícito (MRV exige geo auditável).
+      title: 'Localização GPS',
       accent: _latitude != null ? AppTokens.success : Colors.grey,
       background:
           _latitude != null ? AppTokens.successBg : AppTokens.neutralBg,
@@ -784,11 +786,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             child: CircularProgressIndicator(strokeWidth: 2),
           )
         else
-          TextButton.icon(
+          TextButton(
             onPressed: widget.readOnly ? null : _getLocation,
-            icon: const Icon(Icons.my_location, size: 18),
-            label:
-                Text(_latitude != null ? 'Atualizar' : 'Capturar GPS'),
+            child: Text(_latitude != null ? 'Atualizar' : 'Capturar GPS'),
           ),
       ],
       child: Column(
@@ -798,20 +798,19 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             Text(
               '${_latitude!.toStringAsFixed(6)}, '
               '${_longitude!.toStringAsFixed(6)}'
-              '${_acuraciaM != null ? '  ·  ±${_acuraciaM!.toStringAsFixed(1)} m' : ''}'
-              '${_fixEm != null ? '  ·  ${_fixEm!.toLocal().toString().substring(0, 19)}' : ''}',
+              '${_acuraciaM != null ? '  ·  ±${_acuraciaM!.round()} m' : ''}'
+              '${_fixEm != null ? '  ·  ${_dataHoraCurta(_fixEm!)}' : ''}',
               style: const TextStyle(
                   fontFamily: 'monospace', fontSize: AppTokens.fontSmall),
             ),
             const Text(
-              'Datum WGS84 · fonte: GPS do aparelho',
+              'WGS84 · GPS do aparelho',
               style: TextStyle(
                   fontSize: AppTokens.fontCaption, color: Colors.black54),
             ),
           ] else ...[
             const Text(
-              'Nenhum ponto capturado. Ao concluir a parcela, '
-              'o GPS é obrigatório (MRV exige geo auditável).',
+              'Nenhum ponto capturado.',
               style: TextStyle(fontSize: 12, color: Colors.black54),
             ),
           ],
@@ -823,6 +822,13 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         ],
       ),
     );
+  }
+
+  /// Data/hora curtas pt-BR para o card de GPS ("06/11 19:05").
+  String _dataHoraCurta(DateTime dt) {
+    final d = dt.toLocal();
+    String dois(int n) => n.toString().padLeft(2, '0');
+    return '${dois(d.day)}/${dois(d.month)} ${dois(d.hour)}:${dois(d.minute)}';
   }
 
   Widget _propriedadeField() {
