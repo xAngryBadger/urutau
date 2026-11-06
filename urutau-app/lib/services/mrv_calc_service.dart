@@ -83,6 +83,7 @@ class MrvCalcService {
     required List<Planta> plantas,
     required double areaM2,
     double? densidadeBasica,
+    Map<String, double>? densidadesPorEspecie, // RQ-03: chave = nome em lowercase
   }) {
     final areaHa = areaM2 / 10000;
     double agbTotalKg = 0;
@@ -90,13 +91,18 @@ class MrvCalcService {
     double somaAltura = 0;
     double somaDap = 0;
     final tco2eHaPorIndividuo = <double>[];
+    bool usouCatalogo = false;
 
     for (final p in plantas) {
       final dap = p.dapCm;
       final alturaM = p.alturaCm / 100;
       somaAltura += alturaM;
       if (dap != null && dap > 0 && alturaM > 0) {
-        final rho = densidadeBasica ?? densidadePadrao;
+        // RQ-03: densidade da espécie vinda do catálogo; senão, densidade
+        // única informada; senão, fallback 0.60 (e a fonte diz isso)
+        final rhoCatalogo = densidadesPorEspecie?[p.especie.toLowerCase().trim()];
+        final rho = rhoCatalogo ?? densidadeBasica ?? densidadePadrao;
+        if (rhoCatalogo != null) usouCatalogo = true;
         // AGB em kg: a · (ρ·D²·H)^b
         final agb = aPadrao * pow(rho * dap * dap * alturaM, bPadrao);
         agbTotalKg += agb;
@@ -126,6 +132,13 @@ class MrvCalcService {
               'dap_cm': p.dapCm,
               'altura_cm': p.alturaCm,
               'autor_uuid': p.autorUuid,
+              // RQ-03: densidade usada neste indivíduo + fonte dela
+              'densidade_g_cm3': densidadesPorEspecie?[p.especie.toLowerCase().trim()] ??
+                  densidadeBasica ??
+                  densidadePadrao,
+              'densidade_fonte': densidadesPorEspecie?[p.especie.toLowerCase().trim()] != null
+                  ? 'catalogo_especies'
+                  : (densidadeBasica != null ? 'informada' : 'fallback_0.60'),
             })
         .toList();
 
@@ -145,6 +158,10 @@ class MrvCalcService {
       'fator_co2': fatorCo2,
       'equacao': codigoEquacaoPadrao,
       'densidade_g_cm3': densidadeBasica ?? densidadePadrao,
+      // RQ-03: fonte da densidade — o auditor vê se foi catálogo ou fallback
+      'densidade_fonte': usouCatalogo
+          ? 'catalogo_especies'
+          : (densidadeBasica != null ? 'informada' : 'fallback_0.60'),
       'incerteza': incerteza,
       'incerteza_pct': incerteza['incerteza_pct'],
       'ic95_tco2e_ha': incerteza['ic95_tco2e_ha'],

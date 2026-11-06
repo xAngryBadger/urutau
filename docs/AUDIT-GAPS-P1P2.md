@@ -1,5 +1,32 @@
 # AUDIT-GAPS-P1P2 — Auditoria read-only dos itens P1/P2 do mapa MRV
 
+> ## ✅ ATUALIZAÇÃO 2026-11-06 — TODOS os itens P1/P2 com escopo de app FECHADOS
+> Fases 1–11 implementadas e pushadas em `main` (analyze 0 erros, **114/114 testes**).
+> | Item | Como foi fechado | Commit |
+> |---|---|---|
+> | RS-03 (P0) incerteza ±%/IC95 | `mrv_calc_service.dart` `calcularIncerteza`, saindo no card MRV e no dossiê | `3fd8511` |
+> | RC-06/RC-07 purge/WORM | `purgarDeletados` piso 3650d + `confirmarDestruicao`, soft-delete com trilha | `1e5538f` |
+> | RC-05 relógio confiável | `clock_service.dart` offset via `/api/health`, trilha v29 com `offset_relogio_ms`, alerta de desalinhamento na tela de sync | `56cab7d` |
+> | RG-04 trilha no servidor | `pushTrilhaAuditoria` + `verificarCadeiaServidor` (idempotente por `entry_hash`) | `fb08795` |
+> | RQ-04 hash do cálculo | `insumos_hash` + `resultado_hash` em `calculos_mrv`, "Rastro do cálculo" no card | `ac92c2b` |
+> | RC-09 dossiê verificável | `dossie_service.dart`: ZIP com `dossie.pdf` + `dados.json` + `manifesto.json` (sha256 de cada arquivo) + fotos; botão na parcela | `a3c544f` |
+> | RG-06 bloqueio de crédito | incidente bloqueador trava `calculos_mrv` (`bloqueado_incidente`), dossiê mostra linha vermelha; resolução via painel (fase 10) | `1c747ef` + `4f107bb` |
+> | RT-01 projeto/período no sync | schema v30 `parcelas.projeto_uuid/periodo_uuid`, dropdowns no form, push/pull `projeto_id/periodo_id`, migração servidor `1779200000` | `d44b555` |
+> | RC-11 protocolo versionado | `protocoloVersao='SOP-MRV-V1'` gravado em todo save da parcela + sync | `d44b555` |
+> | RC-13 dispositivo | `device_service.dart` povoa `dispositivos` no startup (idempotente), `dispositivo_id` na trilha do servidor, `ativos_brutos.dispositivo_uuid` | `05eeb25` |
+> | RC-14 EXIF + n_satelites | `exifPreservado=true` (bytes originais copiados); `n_satelites_fonte='indisponivel_geolocator'` quando null | `05eeb25` |
+> | RT-04 baseline/adicionalidade | painel Projeto MRV (`mrv_projeto_screen.dart`, rota `/mrv-projeto`) + `salvarProjeto` com refs JSON, tudo na trilha | `4f107bb` |
+> | RS-04/RS-05 desenho amostral | `salvarDesenhoAmostral` (upsert) com estratos + meta de incerteza alvo, no painel | `4f107bb` |
+> | RT-02 campanhas de revisita | `criarCampanha`/`listarCampanhas` vinculadas a projeto+período, no painel | `4f107bb` |
+> | RG-03 verificação interna | `registrarVerificacaoInterna`; conclusão `divergente` abre incidente bloqueador global | `4f107bb` |
+> | RT-03 risco de reversão (P2) | v32 `projetos_mrv.risco_reversao/fonte_fogo_historico` + seção no painel (alerta em si = workstation ULTRA, fora do app de campo) | `e257249` |
+> | RG-05 competências (P2) | `registrarCompetencia` + expiração por `valido_ate`, seção no painel | `e257249` |
+> | RS-06 substituição por sensoriamento (P2) | checkbox no form da parcela → `substituta_de` com fonte (drone/satélite) | `e257249` |
+> | RQ-03 densidade por espécie | `calcularParcela` recebe `densidadesPorEspecie` do `especies_catalogo`; fonte registrada (`catalogo_especies`/`informada`/`fallback_0.60`) e hash muda com a densidade. **Ressalva:** o asset `dados_especies.xlsx` NÃO tem coluna de densidade — até alguém povoar `densidade_basica`, o cálculo usa fallback 0.60 **declarado** | `e257249+` |
+> | BUG v31 (dates seed) | seeds v20+ gravaram `CURRENT_TIMESTAMP` (texto) em colunas DateTime → drift quebrava no int.parse; v31 normaliza texto→epoch e seeds novos usam `strftime('%s','now')` | `4f107bb` |
+>
+> **Fora de escopo do app (decisão de arquitetura aprovada):** ponte Urutau↔ULTRA (CHM/NDVI/ML), alertas de satélite e o cálculo pesado ficam na workstation RTX 3060; o app registra o rastreio (substituta_de, fonte_fogo). ML ano 1 fora de escopo está consistente com o próprio pitch.
+
 **Data:** 2026-10-27 · **Escopo:** `D:\projetos\urutau\urutau-app` (lib/, test/) + spec `docs/mapa-mrv.md`
 **Modo:** somente leitura de código + este 1 arquivo de relatório. Nenhum arquivo de código do app foi alterado.
 **Método:** mapa-mrv.md lido inteiro; busca por ripgrep (ferramenta de busca do ambiente) em `lib/`; leitura de arquivos nos pontos de evidência; `git log` para confirmar commits. Toda afirmação técnica tem `arquivo:linha`.

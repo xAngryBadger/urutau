@@ -79,6 +79,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   // RS-06: parcela substituída por sensoriamento remoto (drone/satélite)
   bool _substituidaPorSensoriamento = false;
   final _fonteSensoriamentoController = TextEditingController();
+  // RQ-03: cache de densidades por espécie vindas do catálogo
+  Map<String, double> _densidadesCache = {};
   bool _prontaParaSync =
       false; // carregado ao editar; rascunho até marcar concluída
   bool _popGuard = false;
@@ -113,11 +115,33 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     return double.tryParse(_areaController.text.replaceAll(',', '.'));
   }
 
+  /// RQ-03: densidades do catálogo de espécies (chave = nome em lowercase,
+  /// cobrindo nome popular e científico).
+  Future<Map<String, double>> _densidadesCatalogo() async {
+    final map = <String, double>{};
+    final especies = await (_db.select(_db.especiesCatalogo)
+          ..where((t) => t.densidadeBasica.isNotNull()))
+        .get();
+    for (final e in especies) {
+      final d = e.densidadeBasica!;
+      map[e.nomeCientifico.toLowerCase().trim()] = d;
+      final pop = e.nomePopular;
+      if (pop != null && pop.isNotEmpty) {
+        map[pop.toLowerCase().trim()] = d;
+      }
+    }
+    return map;
+  }
+
   /// RQ-01..03: estimativa de carbono ao vivo (só quando há plantas + área).
   Map<String, dynamic>? get _estimativaMrv {
     final area = _areaM2Calculada;
     if (_plantas.isEmpty || area == null || area <= 0) return null;
-    return MrvCalcService.calcularParcela(plantas: _plantas, areaM2: area);
+    return MrvCalcService.calcularParcela(
+      plantas: _plantas,
+      areaM2: area,
+      densidadesPorEspecie: _densidadesCache,
+    );
   }
 
   @override
@@ -148,6 +172,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     // RT-01: listas de projeto/período (sempre existem: há o LEGADO seed)
     _projetos = await _db.select(_db.projetosMrv).get();
     _periodos = await _db.select(_db.periodosMonitoramento).get();
+    _densidadesCache = await _densidadesCatalogo(); // RQ-03
     _projetoUuid ??= _projetos.isNotEmpty ? _projetos.first.uuid : null;
     _periodoUuid ??= _periodos.isNotEmpty ? _periodos.first.uuid : null;
     _loadSugestoes();
@@ -1962,9 +1987,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     // da parcela em calculos_mrv + resultados_amostra.
     final area = _areaM2Calculada;
     if (prontaParaSync && area != null && area > 0 && _plantas.isNotEmpty) {
+      _densidadesCache = await _densidadesCatalogo();
       final resultado = MrvCalcService.calcularParcela(
         plantas: _plantas,
         areaM2: area,
+        densidadesPorEspecie: _densidadesCache,
       );
       await MrvCalcService.persistirCalculo(
         db: _db,
