@@ -30,6 +30,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import EmptyState from '../components/ui/EmptyState';
 import ServerOfflineBanner from '../components/ui/ServerOfflineBanner';
 import { LoadingBlock } from '../components/ui/Loading';
+import DossierPanel from '../components/dossier/DossierPanel';
 import safeError from '../services/logger';
 
 const Section = ({ icon, title, children, action }) => {
@@ -527,13 +528,9 @@ const ParcelaAuditoria = () => {
         )}
       </Section>
 
-      {/* Dossiê */}
+      {/* Dossiê (R10) */}
       <Section icon={FileJson} title="Dossiê de auditoria">
-        <p className="text-sm text-gray-600">
-          O dossiê completo (PDF + dados + manifesto de hashes + fotos) é gerado pelo app no
-          campo. O painel mostra aqui os metadados conferíveis: hash dos insumos, hashes dos
-          ativos e o estado da cadeia acima.
-        </p>
+        <DossierPanel parcelaId={parcel.uuid || parcel.id} />
       </Section>
     </div>
   );

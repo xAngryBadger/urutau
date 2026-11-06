@@ -7,6 +7,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Parcels from './pages/Parcels';
 import ParcelaAuditoria from './pages/ParcelaAuditoria';
+import Incidents from './pages/Incidents';
+import MrvProject from './pages/MrvProject';
 import Photos from './pages/Photos';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
@@ -93,6 +95,8 @@ const AppRoutes = () => {
         <Route index element={<Dashboard />} />
         <Route path="parcels" element={<Parcels />} />
         <Route path="parcels/:id/auditoria" element={<ParcelaAuditoria />} />
+        <Route path="incidents" element={<Incidents />} />
+        <Route path="mrv" element={<MrvProject />} />
         <Route path="photos" element={<Photos />} />
         <Route path="reports" element={<Reports />} />
         <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import useServerHealth from '../hooks/useServerHealth';
@@ -15,7 +15,9 @@ import {
   LogOut,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle,
+  ClipboardList
 } from 'lucide-react';
 
 const Layout = () => {
@@ -25,6 +27,13 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const health = useServerHealth();
+
+  // R13: alto contraste (campo sob sol) — persistido, igual ao app.
+  const [hc, setHc] = useState(() => localStorage.getItem('urutau_tema') === 'hc');
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', hc ? 'hc' : 'claro');
+    localStorage.setItem('urutau_tema', hc ? 'hc' : 'claro');
+  }, [hc]);
 
   // Fecha o drawer mobile ao navegar (substitui o effect com setState —
   // o React não aceita efeito sincronizado disparando render em cascata).
@@ -38,6 +47,8 @@ const Layout = () => {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Parcelas', href: '/parcels', icon: TreePine },
+    { name: 'Incidentes', href: '/incidents', icon: AlertTriangle },
+    { name: 'Projeto MRV', href: '/mrv', icon: ClipboardList },
     { name: 'Fotos', href: '/photos', icon: Image },
     { name: 'Relatórios', href: '/reports', icon: FileSpreadsheet },
     ...(isAdmin ? [{ name: 'Usuários', href: '/users', icon: Users }] : []),
@@ -147,12 +158,25 @@ const Layout = () => {
           </div>
 
           <div className="flex items-center gap-3 text-sm text-gray-500">
-            <span>Urutau</span>
-            <ChevronRight className="h-4 w-4" />
-            <span className="text-forest-700 font-medium">
+            <span className="hidden sm:inline">Urutau</span>
+            <ChevronRight className="hidden h-4 w-4 sm:inline" />
+            <span className="font-medium text-forest-700">
               {navigation.find(n => n.href === location.pathname)?.name || 'Dashboard'}
             </span>
             {isReadOnly && <ReadOnlyBadge role={user?.role} />}
+            <button
+              type="button"
+              onClick={() => setHc((v) => !v)}
+              className={`rounded-lg border px-2 py-1 text-xs font-medium transition-colors ${
+                hc
+                  ? 'border-hc-primary bg-hc-primary text-hc-on-primary'
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+              }`}
+              aria-pressed={hc}
+              title="Alto contraste (uso em campo sob sol)"
+            >
+              {hc ? 'HC' : 'Alto contraste'}
+            </button>
           </div>
         </header>
 

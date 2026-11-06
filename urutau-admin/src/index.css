@@ -83,6 +83,83 @@ body {
   }
 }
 
+/* ── R13: alto contraste (campo sob sol) — mesmo par do app ─────────────
+   Ativado por [data-theme="hc"] no <html> (botão no header, persistido).
+   Fundo preto, superfície escura, texto branco, amarelo de destaque. */
+[data-theme="hc"] {
+  --color-urutau-50: #0b0b0b;
+  --color-urutau-100: #141200;
+  --color-urutau-200: #e8e8e8;
+  --color-urutau-300: #c9c9c9;
+  --color-urutau-400: #a9a9a9;
+  --color-urutau-500: #8f8f8f;
+  --color-urutau-600: #6f6f6f;
+  --color-urutau-700: #FFD600;
+  --color-urutau-800: #FFD600;
+  --color-urutau-900: #FFD600;
+  --color-brand-bg: #000000;
+  --color-brand-primary: #FFD600;
+  --color-brand-secondary: #FFD600;
+  --color-forest-50: #0b0b0b;
+  --color-forest-100: #141200;
+  --color-forest-200: #e8e8e8;
+  --color-forest-400: #c9c9c9;
+  --color-forest-700: #FFD600;
+  --color-forest-800: #141200;
+  --color-status-pendente: #FFD600;
+  --color-status-revisado: #7FB2FF;
+  --color-status-aprovado: #58D68D;
+  --color-mrv-green: #58D68D;
+  --color-mrv-danger: #FF6B6B;
+  --color-mrv-warning: #FFD600;
+  color-scheme: dark;
+}
+
+[data-theme="hc"] body {
+  background-color: #000000;
+  color: #FFFFFF;
+}
+
+[data-theme="hc"] .card,
+[data-theme="hc"] .bg-white {
+  background-color: #141200 !important;
+  border-color: #332B00 !important;
+  color: #FFFFFF;
+}
+
+[data-theme="hc"] .text-gray-900,
+[data-theme="hc"] .text-gray-800,
+[data-theme="hc"] .text-gray-700,
+[data-theme="hc"] .text-gray-600,
+[data-theme="hc"] .text-gray-500 {
+  color: #FFFFFF;
+}
+
+[data-theme="hc"] .bg-gray-50 {
+  background-color: #000000 !important;
+}
+
+[data-theme="hc"] .border-gray-200,
+[data-theme="hc"] .border-gray-100,
+[data-theme="hc"] .divide-gray-200,
+[data-theme="hc"] .divide-gray-100 {
+  border-color: #332B00 !important;
+}
+
+[data-theme="hc"] .bg-gray-100 {
+  background-color: #1A1500 !important;
+}
+
+[data-theme="hc"] .input-field {
+  background-color: #141200;
+  border-color: #FFD600;
+  color: #FFFFFF;
+}
+
+[data-theme="hc"] .table-header {
+  color: #FFD600;
+}
+
 /* Button styles */
 .btn-primary {
   background-color: var(--color-urutau-700);
