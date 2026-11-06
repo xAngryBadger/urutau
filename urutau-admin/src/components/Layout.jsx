@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -20,11 +20,9 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const closeMobile = useCallback(() => setMobileOpen(false), []);
-
-  useEffect(() => {
-    closeMobile();
-  }, [location.pathname, closeMobile]);
+  // Fecha o drawer mobile ao navegar (substitui o effect com setState —
+  // o React não aceita efeito sincronizado disparando render em cascata).
+  const closeMobileNav = useCallback(() => setMobileOpen(false), []);
 
   const handleLogout = () => {
     logout();
@@ -44,7 +42,7 @@ const Layout = () => {
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 md:hidden"
-          onClick={closeMobile}
+          onClick={closeMobileNav}
         />
       )}
 
@@ -75,6 +73,7 @@ const Layout = () => {
                 <li key={item.name}>
                   <Link
                     to={item.href}
+                    onClick={closeMobileNav}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                       isActive
                         ? 'bg-forest-700 text-white'

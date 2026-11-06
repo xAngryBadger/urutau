@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef, startTransition } from 'react';
+import React, { useEffect, useState, useCallback, startTransition } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { fetchUsers, updateUserAdmin, deleteUser, getAllUsersParcelasCount, resetUserPassword } from '../services/pocketbase';
 import safeError from '../services/logger';
@@ -12,14 +12,18 @@ const [confirmPassword, setConfirmPassword] = useState('');
 const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+  // Padrão React documentado: ajustar estado quando a prop muda DURANTE o
+  // render (evita cascata de renders de um effect com setState sincronizado).
+  const [prevUserId, setPrevUserId] = useState(user?.id);
+  if (prevUserId !== user?.id) {
+    setPrevUserId(user?.id);
     setAction(null);
     setDeleteUserData(false);
     setNewPassword('');
     setConfirmPassword('');
     setLoading(false);
     setError(null);
-  }, [user?.id]);
+  }
 
   const handleDelete = async () => {
     setLoading(true);

@@ -42,35 +42,23 @@ const Photos = () => {
   const [parcels, setParcels] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
-  const [hasMore, setHasMore] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [actionError, setActionError] = useState(null);
   const pageRef = useRef(1);
 
-  const loadPhotos = useCallback(async (page = 1, append = false) => {
+  const loadPhotos = useCallback(async (page = 1) => {
     try {
-      if (append) {
-        startTransition(() => { setLoadingMore(true); });
-      } else {
-        startTransition(() => { setLoading(true); setError(null); });
-      }
+      startTransition(() => { setLoading(true); setError(null); });
 
       const result = await fetchParcels({ hasPhotos: true }, page, PHOTOS_PER_PAGE);
       const newPhotos = result.items.flatMap(parcelToPhotos);
 
       startTransition(() => {
-        if (append) {
-          setParcels((prev) => [...prev, ...result.items]);
-          setPhotos((prev) => [...prev, ...newPhotos]);
-        } else {
-          setParcels(result.items);
-          setPhotos(newPhotos);
-        }
-        setHasMore(result.items.length === PHOTOS_PER_PAGE);
+        setParcels(result.items);
+        setPhotos(newPhotos);
       });
     } catch (err) {
       startTransition(() => setError('Erro ao carregar fotos. Tente novamente.'));
@@ -78,7 +66,6 @@ const Photos = () => {
     } finally {
       startTransition(() => {
         setLoading(false);
-        setLoadingMore(false);
       });
     }
   }, []);
@@ -87,12 +74,6 @@ const Photos = () => {
     pageRef.current = 1;
     startTransition(() => { loadPhotos(1); });
   }, [loadPhotos]);
-
-  const loadMore = () => {
-    const nextPage = pageRef.current + 1;
-    pageRef.current = nextPage;
-    loadPhotos(nextPage, true);
-  };
 
   useEffect(() => {
     if (!actionError) return;

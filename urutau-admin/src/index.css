@@ -12,7 +12,33 @@
   --color-urutau-700: #5A6B5C;
   --color-urutau-800: #4A5A4C;
   --color-urutau-900: #2C3E2E;
-  
+
+  /* ── Tokens canônicos do app (app_tokens.dart) ─────────────────────── */
+  --color-brand-bg: #F9F6F0;        /* brandBackground (off-white quente)  */
+  --color-brand-primary: #5A6B5C;   /* brandPrimary (verde-sálvia)        */
+  --color-brand-secondary: #C4A47C; /* brandSecondary (bege-dourado)      */
+
+  /* Status de verificação (RG-02) — cor + label canônicos */
+  --color-status-pendente: #E8A13A;
+  --color-status-revisado: #3A7BD5;
+  --color-status-aprovado: #3E8E4F;
+  --color-status-rascunho: #6B7280;
+
+  /* MRV / carbono + semânticas */
+  --color-mrv-green: #2E7D32;
+  --color-mrv-green-bg: #E8F5E9;
+  --color-mrv-danger: #C62828;
+  --color-mrv-warning: #FF9800;
+  --color-mrv-success: #4CAF50;
+
+  /* Alto contraste (campo sob sol) — mesmo par do app */
+  --color-hc-primary: #FFD600;
+  --color-hc-bg: #000000;
+  --color-hc-surface: #141200;
+  --color-hc-surface-2: #1A1500;
+  --color-hc-outline: #332B00;
+  --color-hc-text: #FFFFFF;
+
   --color-wood-50: #efebe9;
   --color-wood-100: #d7ccc8;
   --color-wood-200: #bcaaa4;
@@ -39,6 +65,22 @@
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-brand-bg);
+}
+
+/* Foco visível consistente (WCAG 2.4.7) — painel é ferramenta de auditoria */
+:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Respeita preferência por menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Button styles */
