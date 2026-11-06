@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/database.dart';
 import '../services/backup_service.dart';
+import '../services/dossie_service.dart';
 import '../services/export_service.dart';
 import '../services/image_service.dart';
 import '../services/mrv_calc_service.dart';
@@ -68,6 +69,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   final Map<String, int?> _bytesNovasFotos = {};
   bool _isLoading = false;
   bool _isEditing = false;
+  bool _isExportandoDossie = false;
   String? _currentUuid;
   bool _prontaParaSync =
       false; // carregado ao editar; rascunho até marcar concluída
@@ -550,6 +552,18 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                 ),
               ),
             ],
+            // RC-09: dossiê de auditoria — disponível em edição e em
+            // somente-leitura (o verificador também precisa do rastro)
+            Semantics(
+              label: 'Exportar dossiê de auditoria',
+              button: true,
+              child: IconButton(
+                icon: const Icon(Icons.folder_zip),
+                onPressed:
+                    (_isLoading || _isExportandoDossie) ? null : _exportarDossie,
+                tooltip: 'Dossiê de auditoria (PDF + manifesto de hashes)',
+              ),
+            ),
           ],
         ),
         body: SafeArea(
@@ -1176,6 +1190,39 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         ),
       ),
     );
+  }
+
+  /// RC-09: gera o ZIP do dossiê (PDF + dados.json + manifesto.json +
+  /// fotos) e abre o compartilhador.
+  Future<void> _exportarDossie() async {
+    final uuid = _currentUuid;
+    if (uuid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Salve a parcela antes de gerar o dossiê.')),
+      );
+      return;
+    }
+    setState(() => _isExportandoDossie = true);
+    try {
+      final sync = context.read<SyncService>();
+      final zipPath = await DossieService.gerarDossieParcela(
+        _db,
+        uuid,
+        serverChainStatus: sync.lastServerChainStatus,
+      );
+      if (!mounted) return;
+      await Share.shareXFiles(
+        [XFile(zipPath)],
+        text: 'Dossiê MRV — parcela (PDF + manifesto de hashes)',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao gerar dossiê: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isExportandoDossie = false);
+    }
   }
 
   Widget _sectionTitle(String title, IconData icon) =>
