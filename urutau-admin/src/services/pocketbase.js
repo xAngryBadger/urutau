@@ -101,7 +101,16 @@ return {
     displayUser,
     synced: parcel.synced === true,
     prontaParaSync: parcel.prontaParaSync === true,
-      syncLabel: parcel.prontaParaSync ? 'Pronto para sync' : 'Rascunho',
+    // Status canônico de verificação (RG-02) — o app grava status_verificacao;
+    // status_parcela (ativa/arquivada) é legado e fica como fallback.
+    statusVerificacao: parcel.status_verificacao ?? parcel.status_parcela ?? null,
+    protocoloVersao: parcel.protocolo_versao || parcel.protocoloVersao || null,
+    projetoId: parcel.projeto_id || parcel.projetoId || null,
+    periodoId: parcel.periodo_id || parcel.periodoId || null,
+    latitude: parcel.latitude ?? null,
+    longitude: parcel.longitude ?? null,
+    areaM2: parcel.area_m2 ?? parcel.area_ha ?? null,
+    substitutaDe: parcel.substituta_de || null,
     createdAt: parcel.created || parcel.updated || null,
   };
 };

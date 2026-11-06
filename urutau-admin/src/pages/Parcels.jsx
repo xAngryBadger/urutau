@@ -13,6 +13,7 @@ import {
   getPhotoUrl,
 } from '../services/pocketbase';
 import { useAuth } from '../context/AuthContext';
+import StatusBadge from '../components/ui/StatusBadge';
 import safeError from '../services/logger';
 import {
   Search,
@@ -701,15 +702,11 @@ const Parcels = () => {
                             </div>
                           </td>
                           <td className="table-cell">
-        {parcel.prontaParaSync ? (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">
-            <CheckCircle className="h-3 w-3" /> Sync
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-            <Clock className="h-3 w-3" /> Rascunho
-          </span>
-        )}
+                            <StatusBadge
+                              statusParcela={parcel.statusVerificacao ?? parcel.status_parcela}
+                              prontaParaSync={parcel.prontaParaSync}
+                              size="sm"
+                            />
                           </td>
                           <td className="table-cell">
                             {parcel.photoCount > 0 ? (

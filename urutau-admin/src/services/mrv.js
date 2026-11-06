@@ -215,3 +215,34 @@ export const checkServerHealth = async () => {
     return { ok: false, offline: true, error: String(error?.message || error) };
   }
 };
+
+/**
+ * PROMESSA DO PITCH por foto: hash SHA-256 + GPS + timestamp + dono.
+ * O app sobe `fotos_meta` (JSON) em parcelas — sync_service.dart:1825.
+ * Retorna [{arquivo, sha256, lat, long, timestamp, autor}]; foto sem hash
+ * (ainda não processada no device) volta com sha256 null — o painel NUNCA
+ * afirma verificação sem hash.
+ */
+export const fetchFotosMeta = async (parcelId) => {
+  try {
+    const rec = await pb.collection('parcelas').getOne(parcelId, { fields: 'fotos_meta' });
+    const raw = rec?.fotos_meta;
+    if (raw == null || raw === '') return { ok: true, offline: false, data: [] };
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const arr = Array.isArray(parsed) ? parsed : [];
+    return {
+      ok: true,
+      offline: false,
+      data: arr.map((f) => ({
+        arquivo: f.arquivo ?? f.file ?? null,
+        sha256: f.sha256 ?? null,
+        lat: f.lat ?? f.latitude ?? null,
+        long: f.long ?? f.longitude ?? null,
+        timestamp: f.timestamp ?? f.capturado_em ?? null,
+        autor: f.autor ?? f.dono ?? null,
+      })),
+    };
+  } catch (error) {
+    return fail(error, 'fetchFotosMeta');
+  }
+};

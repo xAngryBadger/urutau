@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef, startTransition } from 'react';
 import { fetchParcels, getPhotoUrl } from '../services/pocketbase';
+import { fetchFotosMeta } from '../services/mrv';
+import PhotoMetaPanel from '../components/photos/PhotoMetaPanel';
 import safeError from '../services/logger';
 import {
   Image,
@@ -48,6 +50,7 @@ const Photos = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [actionError, setActionError] = useState(null);
   const pageRef = useRef(1);
+  const [fotosMeta, setFotosMeta] = useState({});
 
   const loadPhotos = useCallback(async (page = 1) => {
     try {
@@ -59,6 +62,25 @@ const Photos = () => {
       startTransition(() => {
         setParcels(result.items);
         setPhotos(newPhotos);
+      });
+
+      // R4: provas por foto (hash/GPS/ts/dono) — o app sobe fotos_meta
+      startTransition(() => {
+        setFotosMeta((prev) => {
+          const next = { ...prev };
+          for (const p of result.items) {
+            if (next[p.id]) continue;
+            fetchFotosMeta(p.id).then((res) => {
+              if (!res.ok) return;
+              const byFile = new Map(res.data.map((m) => [m.arquivo, m]));
+              setFotosMeta((cur) => ({
+                ...cur,
+                [p.id]: Object.fromEntries(byFile),
+              }));
+            });
+          }
+          return next;
+        });
       });
     } catch (err) {
       startTransition(() => setError('Erro ao carregar fotos. Tente novamente.'));
@@ -311,8 +333,8 @@ const Photos = () => {
                 <div>
                   <p className="font-medium">{selectedPhoto.property} - {selectedPhoto.ut}</p>
                   <p className="text-sm opacity-80">
-                    Parcela {String(selectedPhoto.parcelNumber).padStart(3, '0')} • 
-                    {' '}{selectedPhoto.user} • 
+                    Parcela {String(selectedPhoto.parcelNumber).padStart(3, '0')} •
+                    {' '}{selectedPhoto.user} •
                     {' '}{selectedPhoto.date ? new Date(selectedPhoto.date).toLocaleDateString('pt-BR') : '-'}
                   </p>
                 </div>
@@ -323,6 +345,10 @@ const Photos = () => {
                   <Download className="h-4 w-4" />
                   Baixar
                 </button>
+              </div>
+              {/* Promessa do pitch por foto: hash + GPS + timestamp + dono */}
+              <div className="mt-3 border-t border-white/20 pt-3">
+                <PhotoMetaPanel meta={fotosMeta[selectedPhoto.parcelId]} />
               </div>
             </div>
           </div>
