@@ -1365,6 +1365,30 @@ VGVG0069;UT04;0.0;1''';
     ));
   }
 
+  /// RC-04 pós-upload: o sync confere o hash ANTES de enviar
+  /// (sync_service recheck); depois do sucesso marca `sha256_verificado=true`
+  /// nos ativos da parcela (fotos da parcela + fotos das plantas dela).
+  /// Idempotente.
+  Future<void> marcarAtivosVerificadosDaParcela(String parcelaUuid) async {
+    final plantasUuids = await (select(plantas)
+          ..where((t) => t.parcelaUuid.equals(parcelaUuid)))
+        .map((p) => p.uuid)
+        .get();
+    await (update(ativosBrutos)
+          ..where((t) =>
+              t.sha256.isNotNull() &
+              ((t.entidadeTipo.equals('parcela') &
+                      t.entidadeUuid.equals(parcelaUuid)) |
+                  (t.entidadeTipo.equals('planta') &
+                      t.entidadeUuid.isIn(plantasUuids)) |
+                  (t.entidadeTipo.equals('foto') &
+                      t.entidadeUuid.equals(parcelaUuid)))))
+        .write(const AtivosBrutosCompanion(
+      sha256Verificado: Value(true),
+      status: Value('presente'),
+    ));
+  }
+
   /// (D-1 H4) Estado do arquivo local de uma foto (para o guard da UI).
   Future<String?> estadoArquivoFoto(String fotoUuid) async {
     final f = await (select(fotosParcela)

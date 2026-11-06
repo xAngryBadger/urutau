@@ -763,6 +763,8 @@ class SyncService extends ChangeNotifier {
             await _syncParcela(parcela);
             // >>> t16 D-1 (H3): sync MARCA, nunca apaga (RC-03)
             await _db.marcarFotosEnviadasVerificadas(parcela.uuid);
+            // RC-04 pós-upload: hash conferido no recheck -> sha256_verificado
+            await _db.marcarAtivosVerificadosDaParcela(parcela.uuid);
             // <<< t16 D-1: fim
             sincronizados++;
             _syncProgress = total > 0 ? sincronizados / total : 1.0;
@@ -1548,6 +1550,8 @@ class SyncService extends ChangeNotifier {
           await _syncParcela(p);
           // >>> t16 D-1 (H3): sync MARCA, nunca apaga (RC-03)
           await _db.marcarFotosEnviadasVerificadas(p.uuid);
+          // RC-04 pós-upload: sha256_verificado nos ativos da parcela
+          await _db.marcarAtivosVerificadosDaParcela(p.uuid);
           // <<< t16 D-1: fim
           sent++;
           notifyListeners();
