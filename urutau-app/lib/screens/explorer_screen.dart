@@ -2016,7 +2016,8 @@ ScaffoldMessenger.of(context).showSnackBar(
       builder: (ctx) => AlertDialog(
         title: const Text('Limpar dados desta parcela?'),
         content: const Text(
-          'Plantas, fotos e observações serão removidos.\n'
+          'Plantas e fotos serão movidas para a lixeira (soft-delete) e a ação\n'
+          'fica registrada na trilha de auditoria — nada é apagado de vez.\n'
           'A parcela voltará a ficar disponível no catálogo.',
         ),
         actions: [
@@ -2064,8 +2065,9 @@ ScaffoldMessenger.of(context).showSnackBar(
       );
       // <<< t16 D-1: fim
     }
-    await _db.deleteAllPlantasByParcela(p.uuid);
-    await _db.deleteAllFotosByParcela(p.uuid);
+    // RC-06/RC-07 (MRV): soft-delete — nada é hard-deletado; a ação entra
+    // na trilha encadeada (softDeleteDadosParcela registra 'parcela_dados_limpos').
+    await _db.softDeleteDadosParcela(p.uuid);
     await _db.updateParcela(
       ParcelasCompanion(
         userId: const drift.Value(''),

@@ -1769,11 +1769,13 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   }
 
   /// Limpa dados da parcela (plantas, fotos, obs) e reseta para disponível.
+  /// RC-06/RC-07 (MRV): soft-delete — as linhas ficam no DB (deletedAt) e a
+  /// ação entra na trilha encadeada. Arquivos de foto não são hard-deletados.
   Future<void> _limparDadosParcela(String uuid) async {
     final p = await _db.getParcelaByUuid(uuid);
     if (p == null) return;
 
-    // Pre-backup de segurança antes de operação destrutiva
+    // Pre-backup de segurança antes de qualquer operação
     try {
       await BackupService.exportBackup();
     } catch (_) {
@@ -1782,11 +1784,6 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
 
     try {
       await _db.transaction(() async {
-        for (final planta in await _db.getPlantasByParcela(uuid)) {
-          if (planta.fotoEspeciePath != null) {
-            await ImageService.deletePhoto(planta.fotoEspeciePath!);
-          }
-        }
         for (final foto in await _db.getFotosByParcela(uuid)) {
           await ImageService.limparFotoConfirmada(
             path: foto.filePath,
@@ -1798,8 +1795,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             ),
           );
         }
-        await _db.deleteAllPlantasByParcela(uuid);
-        await _db.deleteAllFotosByParcela(uuid);
+        await _db.softDeleteDadosParcela(uuid);
         await _db.updateParcela(
           ParcelasCompanion(
             userId: const drift.Value(''),

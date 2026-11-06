@@ -1481,36 +1481,98 @@ VGVG0069;UT04;0.0;1''';
     return query.get();
   }
 
-  /// Remove permanentemente parcelas soft-deletadas há mais de N dias.
-  Future<int> purgarDeletados({int diasRetencao = 30}) async {
-    final cutoff = DateTime.now().subtract(Duration(days: diasRetencao));
+  /// RC-06/RC-07 (MRV): purge DESTRÓI evidência. Regras endurecidas:
+  /// - sem `confirmarDestruicao: true`, não apaga nada (return 0);
+  /// - piso de retenção de 10 anos (retencaoMinimaDias): valores menores
+  ///   são corrigidos para o piso — MRV não admite destroying evidence em 30d;
+  /// - cada parcela purgada é registrada na trilha encadeada ANTES de apagar.
+  static const int retencaoMinimaDias = 3650; // 10 anos
+
+  Future<int> purgarDeletados({
+    int diasRetencao = retencaoMinimaDias,
+    bool confirmarDestruicao = false,
+  }) async {
+    if (!confirmarDestruicao) return 0;
+    final retencao = diasRetencao < retencaoMinimaDias
+        ? retencaoMinimaDias
+        : diasRetencao;
+    final cutoff = DateTime.now().subtract(Duration(days: retencao));
     final parcelasParaPurgar = await (select(parcelas)
           ..where((t) =>
               t.deletedAt.isNotNull() & t.deletedAt.isSmallerThanValue(cutoff)))
         .get();
     final photoPaths = <String>[];
     for (final p in parcelasParaPurgar) {
-      final fotos = await getFotosByParcela(p.uuid);
+      final fotos = await (select(fotosParcela)
+            ..where((t) => t.parcelaUuid.equals(p.uuid)))
+          .get();
       photoPaths.addAll(fotos.map((f) => f.filePath));
-      final plantas = await getPlantasByParcela(p.uuid);
-      for (final planta in plantas) {
+      final plantasRows = await (select(plantas)
+            ..where((t) => t.parcelaUuid.equals(p.uuid)))
+          .get();
+      for (final planta in plantasRows) {
         if (planta.fotoEspeciePath != null)
           photoPaths.add(planta.fotoEspeciePath!);
       }
     }
 
-  int count = 0;
-  await ImageService.deletePhotos(photoPaths);
-  await transaction(() async {
+    // Evidência da destruição vai pra trilha ANTES de apagar (RC-06).
     for (final p in parcelasParaPurgar) {
-      await deleteAllPlantasByParcela(p.uuid);
-      await deleteAllFotosByParcela(p.uuid);
-      await deleteParcela(p.uuid);
-      count++;
+      await logTrilha(
+        acao: 'purge_parcela',
+        entidadeTipo: 'parcela',
+        entidadeUuid: p.uuid,
+        antes: 'soft-deletada em ${p.deletedAt?.toIso8601String()}',
+        depois: 'hard-delete por purge (retencao $retencao dias)',
+        origem: 'app',
+      );
     }
-  });
 
-  return count;
+    int count = 0;
+    await ImageService.deletePhotos(photoPaths);
+    await transaction(() async {
+      for (final p in parcelasParaPurgar) {
+        await deleteAllPlantasByParcela(p.uuid);
+        await deleteAllFotosByParcela(p.uuid);
+        await deleteParcela(p.uuid);
+        count++;
+      }
+    });
+
+    return count;
+  }
+
+  /// RC-06/RC-07 (MRV): "limpar dados da parcela" vira SOFT-DELETE —
+  /// plantas e fotos são marcadas com deletedAt (ficam no DB e na trilha),
+  /// nada é hard-deletado. Arquivos de foto não são tocados aqui.
+  Future<void> softDeleteDadosParcela(String uuid, {String? by}) async {
+    final now = DateTime.now();
+    final nPlantas = await (select(plantas)
+          ..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
+        .get()
+        .then((l) => l.length);
+    final nFotos = await (select(fotosParcela)
+          ..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
+        .get()
+        .then((l) => l.length);
+    await transaction(() async {
+      await (update(plantas)
+            ..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
+          .write(PlantasCompanion(deletedAt: Value(now), updatedAt: Value(now)));
+      await (update(fotosParcela)
+            ..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
+          .write(FotosParcelaCompanion(deletedAt: Value(now)));
+      await logAudit(
+        'parcela_dados_limpos',
+        entityType: 'parcela',
+        entityUuid: uuid,
+        userId: by,
+        details:
+            'soft-delete: $nPlantas plantas, $nFotos fotos (retencao preservada)',
+        oldValue: 'com dados',
+        newValue: 'soft-delete',
+      );
+    });
   }
 
   // ========== AUDIT LOG ==========
