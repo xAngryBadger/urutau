@@ -26,6 +26,57 @@ class MrvCalcService {
   static const double fatorCo2 = 44 / 12; // 3.6667
   static const double densidadePadrao = 0.60; // g/cm³ — fallback quando a espécie não tem densidade no catálogo
 
+  /// t de Student bicaudal 95% (t_0.975) por graus de liberdade 1..30;
+  /// acima de 30 usa 1.96 (aproximação normal).
+  static const Map<int, double> _t95 = {
+    1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365,
+    8: 2.306, 9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179, 13: 2.160,
+    14: 2.145, 15: 2.131, 16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093,
+    20: 2.086, 21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060,
+    26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042,
+  };
+
+  static double _tCritico95(int gl) => gl >= 30 ? 1.96 : (_t95[gl] ?? 1.96);
+
+  /// Incerteza amostral (RS-03): a partir dos tCO₂e/ha por individuo,
+  /// calcula média, desvio padrão amostral, erro padrão e IC 95% (t de
+  /// Student), propagando o ±% para o tCO₂e/ha da parcela.
+  static Map<String, dynamic> calcularIncerteza(
+      List<double> tco2eHaPorIndividuo, double mediaTHa) {
+    final n = tco2eHaPorIndividuo.length;
+    if (n < 2 || mediaTHa <= 0) {
+      return {
+        'n': n,
+        'desvio_padrao_tco2e_ha': 0.0,
+        'erro_padrao_tco2e_ha': 0.0,
+        'ic95_tco2e_ha': 0.0,
+        'incerteza_pct': null,
+        'nivel_confianca': 0.95,
+        'metodo': 't-student',
+        'observacao': n < 2
+            ? 'n < 2: intervalo de confianca nao calculavel'
+            : 'media <= 0',
+      };
+    }
+    final media = tco2eHaPorIndividuo.reduce((a, b) => a + b) / n;
+    final variancia =
+        tco2eHaPorIndividuo.map((x) => pow(x - media, 2)).reduce((a, b) => a + b) /
+            (n - 1);
+    final dp = sqrt(variancia);
+    final ep = dp / sqrt(n);
+    final ic95 = _tCritico95(n - 1) * ep;
+    return {
+      'n': n,
+      'media_tco2e_ha': media,
+      'desvio_padrao_tco2e_ha': dp,
+      'erro_padrao_tco2e_ha': ep,
+      'ic95_tco2e_ha': ic95,
+      'incerteza_pct': 100 * ic95 / mediaTHa,
+      'nivel_confianca': 0.95,
+      'metodo': 't-student (gl=${n - 1})',
+    };
+  }
+
   /// Resultado agregado de uma parcela.
   static Map<String, dynamic> calcularParcela({
     required List<Planta> plantas,
@@ -37,6 +88,7 @@ class MrvCalcService {
     int nComDap = 0;
     double somaAltura = 0;
     double somaDap = 0;
+    final tco2eHaPorIndividuo = <double>[];
 
     for (final p in plantas) {
       final dap = p.dapCm;
@@ -49,6 +101,10 @@ class MrvCalcService {
         agbTotalKg += agb;
         nComDap++;
         somaDap += dap;
+        if (areaHa > 0) {
+          tco2eHaPorIndividuo
+              .add((agb * fracaoCarbono * fatorCo2 / 1000) / areaHa);
+        }
       }
     }
 
@@ -56,6 +112,10 @@ class MrvCalcService {
     final carbonoTotalT = (agbTotalKg * fracaoCarbono) / 1000;
     final co2eTotalT = carbonoTotalT * fatorCo2;
     final tco2eHa = areaHa > 0 ? co2eTotalT / areaHa : 0.0;
+
+    // RS-03: incerteza amostral propagada ao tCO2e/ha (promessa do pitch:
+    // "o sistema diz o quanto confia no numero").
+    final incerteza = calcularIncerteza(tco2eHaPorIndividuo, tco2eHa);
 
     return {
       'n_individuos': plantas.length,
@@ -73,6 +133,9 @@ class MrvCalcService {
       'fator_co2': fatorCo2,
       'equacao': codigoEquacaoPadrao,
       'densidade_g_cm3': densidadeBasica ?? densidadePadrao,
+      'incerteza': incerteza,
+      'incerteza_pct': incerteza['incerteza_pct'],
+      'ic95_tco2e_ha': incerteza['ic95_tco2e_ha'],
     };
   }
 
@@ -128,6 +191,10 @@ class MrvCalcService {
       poolsIncluidos: drift.Value(jsonEncode(['agb_aerea'])),
       poolsNaoMedidos: drift.Value(jsonEncode(['raizes', 'serapilheira', 'solo', 'madeira_morta'])),
       resultado: drift.Value(jsonEncode(resultado)),
+      // RS-03: incerteza amostral persistida junto ao cálculo (JSON).
+      incerteza: resultado['incerteza'] != null
+          ? drift.Value(jsonEncode(resultado['incerteza']))
+          : const drift.Value(null),
       unidadeArea: drift.Value(areaM2),
       status: drift.Value('valido'),
       executadoEm: drift.Value(agora),
@@ -141,6 +208,10 @@ class MrvCalcService {
       agbTHa: drift.Value(resultado['agb_t_ha'] as double),
       tco2eHa: drift.Value(resultado['tco2e_ha'] as double),
       nIndividuos: drift.Value(resultado['n_individuos'] as int),
+      // RS-03
+      incerteza: resultado['incerteza'] != null
+          ? drift.Value(jsonEncode(resultado['incerteza']))
+          : const drift.Value(null),
     ));
 
     return calcUuid;

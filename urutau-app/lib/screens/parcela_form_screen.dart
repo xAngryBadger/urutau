@@ -1024,6 +1024,29 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                                   '  ·  ${_estimativaMrv!['n_com_dap']}/${_estimativaMrv!['n_individuos']} com DAP',
                                   style: const TextStyle(fontSize: 14),
                                 ),
+                                // RS-03: margem de certeza (promessa do pitch)
+                                Builder(
+                                  builder: (_) {
+                                    final pct =
+                                        _estimativaMrv!['incerteza_pct'];
+                                    if (pct is! double) {
+                                      return const Text(
+                                        'Incerteza: n < 2 — não calculável',
+                                        style: TextStyle(
+                                            fontSize: AppTokens.fontSmall,
+                                            color: Colors.black54),
+                                      );
+                                    }
+                                    return Text(
+                                      '± ${pct.toStringAsFixed(1)}% (IC 95%, n=${_estimativaMrv!['n_com_dap']})'
+                                      '  ·  IC = ${(_estimativaMrv!['tco2e_ha'] as double).toStringAsFixed(1)} ± ${(_estimativaMrv!['ic95_tco2e_ha'] as double).toStringAsFixed(1)} tCO₂e/ha',
+                                      style: const TextStyle(
+                                          fontSize: AppTokens.fontSmall,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppTokens.mrvGreen),
+                                    );
+                                  },
+                                ),
                                 const Text(
                                   'Equação: Chave et al. 2014 (pantropical) · '
                                   'FC 0,47 · 44/12 · AGB aérea apenas',
