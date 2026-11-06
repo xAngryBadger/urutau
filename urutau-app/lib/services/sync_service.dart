@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'dart:io' if (dart.library.html) 'dart:io';
 import 'dart:async';
 import 'dart:isolate';
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
@@ -53,6 +54,10 @@ class SyncService extends ChangeNotifier {
   String? _serverUrl;
   bool _isConnected = false;
   double _syncProgress = 0.0; // 0.0 a 1.0
+
+  /// RG-04: resultado da última verificação da cadeia NO SERVIDOR
+  /// (null = íntegra ou ainda não verificada; string = problema encontrado).
+  String? lastServerChainStatus;
 
   // Usuário local atual
   Usuario? _currentUser;
@@ -140,6 +145,103 @@ class SyncService extends ChangeNotifier {
 
     await _updatePendingCount();
     notifyListeners();
+  }
+
+  /// RG-04/RC-05: envia entradas novas da trilha local para o servidor
+  /// (append-only). Idempotente: pula entry_hash já existente no servidor.
+  /// Mantém a ordem: se uma falhar, para (não pula buraco na cadeia).
+  /// Retorna quantas entradas foram effectively enviadas.
+  Future<int> pushTrilhaAuditoria() async {
+    if (_pb == null) return 0;
+    final prefs = await SharedPreferences.getInstance();
+    final ultimoId = prefs.getInt('trilha_last_synced_idseq') ?? 0;
+    final entradas = await (_db.select(_db.trilhaAuditoria)
+          ..where((t) => t.idSeq.isBiggerThanValue(ultimoId))
+          ..orderBy([(t) => OrderingTerm.asc(t.idSeq)]))
+        .get();
+    if (entradas.isEmpty) return 0;
+
+    int enviadas = 0;
+    int ultimoEnviado = ultimoId;
+    for (final e in entradas) {
+      try {
+        final existe = await _withRetry(() => _pb!.collection('trilha_auditoria')
+            .getList(page: 1, perPage: 1, filter: "entry_hash = '${e.entryHash}'"));
+        if (existe.items.isEmpty) {
+          await _withRetry(() => _pb!.collection('trilha_auditoria').create(body: {
+                'entidade_tipo': e.entidadeTipo,
+                'entidade_uuid': e.entidadeUuid,
+                'acao': e.acao,
+                'antes': e.antes,
+                'depois': e.depois,
+                'usuario_uuid': e.usuarioUuid,
+                'ts_servidor': e.tsServidor?.toUtc().toIso8601String(),
+                'ts_dispositivo': e.tsDispositivo?.toUtc().toIso8601String(),
+                'offset_relogio_ms': e.offsetRelogioMs,
+                'origem': e.origem,
+                'prev_hash': e.prevHash,
+                'entry_hash': e.entryHash,
+              }));
+        }
+        enviadas++;
+        ultimoEnviado = e.idSeq;
+      } catch (err) {
+        debugPrint('Falha ao enviar trilha idSeq=${e.idSeq}: $err — parando (cadeia em ordem).');
+        break;
+      }
+    }
+    await prefs.setInt('trilha_last_synced_idseq', ultimoEnviado);
+    return enviadas;
+  }
+
+  /// RG-04: verifica a cadeia COMPLETA no servidor (ordem por id de criação),
+  /// remontando o mesmo payload hasheado no app. Retorna null se íntegra.
+  Future<String?> verificarCadeiaServidor() async {
+    if (_pb == null) return 'servidor não configurado';
+    try {
+      final todos = await _withRetry(() => _pb!
+          .collection('trilha_auditoria')
+          .getFullList(sort: 'id', batch: 500));
+      String prev = 'GENESIS';
+      for (final rec in todos) {
+        final prevHash = (rec.data['prev_hash'] as String?) ?? '';
+        if (prevHash != prev) {
+          return 'Cadeia quebrada no servidor (id=${rec.id}): prevHash esperado $prev, encontrado $prevHash';
+        }
+        // mesmo payload do insert local (mesma ordem de chaves)
+        final tsDisp = rec.data['ts_dispositivo'] as String?;
+        final offset = (rec.data['offset_relogio_ms'] as num?)?.toInt();
+        final payload = jsonEncode({
+          'prev': prevHash,
+          'acao': rec.getStringValue('acao'),
+          'entidade_tipo': rec.data['entidade_tipo'] as String?,
+          'entidade_uuid': rec.data['entidade_uuid'] as String?,
+          'usuario_uuid': rec.data['usuario_uuid'] as String?,
+          'antes': rec.data['antes'] as String?,
+          'depois': rec.data['depois'] as String?,
+          'ts_dispositivo': tsDisp == null
+              ? null
+              : DateTime.fromMillisecondsSinceEpoch(
+                      DateTime.parse(tsDisp).toUtc().millisecondsSinceEpoch,
+                      isUtc: true)
+                  .toIso8601String(),
+          if (offset != null) 'offset_relogio_ms': offset,
+          'origem': rec.getStringValue('origem'),
+        });
+        final esperado = sha256.convert(utf8.encode(payload)).toString();
+        final entryHash = rec.data['entry_hash'] as String?;
+        if (entryHash == null) {
+          return 'Hash ausente no servidor (id=${rec.id})';
+        }
+        if (entryHash != esperado) {
+          return 'Hash divergente no servidor (id=${rec.id})';
+        }
+        prev = entryHash;
+      }
+      return null; // íntegra
+    } catch (e) {
+      return 'erro ao verificar cadeia no servidor: $e';
+    }
   }
 
   /// Testa conexão com o servidor PocketBase.
@@ -674,6 +776,16 @@ class SyncService extends ChangeNotifier {
             }
           }
         }
+      }
+
+      // ── 1b. PUSH da trilha de auditoria (RG-04/RC-05): réplica append-only
+      // pro servidor. Falha não bloqueia o sync de parcelas. ──
+      try {
+        final enviadas = await pushTrilhaAuditoria();
+        if (enviadas > 0) debugPrint('Trilha: $enviadas entradas enviadas ao servidor.');
+        lastServerChainStatus = await verificarCadeiaServidor();
+      } catch (e) {
+        debugPrint('Erro ao enviar trilha de auditoria: $e');
       }
 
       // ── 2. PULL usuários do servidor ──
