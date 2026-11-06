@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:uuid/uuid.dart';
 
@@ -117,7 +118,18 @@ class MrvCalcService {
     // "o sistema diz o quanto confia no numero").
     final incerteza = calcularIncerteza(tco2eHaPorIndividuo, tco2eHa);
 
-    return {
+    // RQ-04: insumos brutos que alimentaram o cálculo (o auditor refaz a conta)
+    final insumos = plantas
+        .map((p) => {
+              'uuid': p.uuid,
+              'especie': p.especie,
+              'dap_cm': p.dapCm,
+              'altura_cm': p.alturaCm,
+              'autor_uuid': p.autorUuid,
+            })
+        .toList();
+
+    final base = <String, dynamic>{
       'n_individuos': plantas.length,
       'n_com_dap': nComDap,
       'altura_media_m': plantas.isEmpty ? 0.0 : somaAltura / plantas.length,
@@ -136,7 +148,30 @@ class MrvCalcService {
       'incerteza': incerteza,
       'incerteza_pct': incerteza['incerteza_pct'],
       'ic95_tco2e_ha': incerteza['ic95_tco2e_ha'],
+      'insumos': insumos,
     };
+
+    // RQ-04: hash dos insumos e hash do resultado (sobre o map SEM as chaves
+    // de hash — senão vira auto-referência).
+    final insumosHash = hashInsumos(base);
+    base['insumos_hash'] = insumosHash;
+    base['resultado_hash'] =
+        sha256.convert(utf8.encode(jsonEncode(base))).toString();
+    return base;
+  }
+
+  /// RQ-04: hash SHA-256 canônico dos insumos do cálculo (área, equacao,
+  /// parametros e cada planta medida). Muda qualquer DAP/altura -> muda o hash.
+  static String hashInsumos(Map<String, dynamic> resultado) {
+    final canon = jsonEncode({
+      'area_m2': resultado['area_m2'],
+      'equacao': resultado['equacao'],
+      'densidade_g_cm3': resultado['densidade_g_cm3'],
+      'fracao_carbono': resultado['fracao_carbono'],
+      'fator_co2': resultado['fator_co2'],
+      'insumos': resultado['insumos'],
+    });
+    return sha256.convert(utf8.encode(canon)).toString();
   }
 
   /// Garante que a equação padrão exista em `equacoes_alometricas`
@@ -190,6 +225,9 @@ class MrvCalcService {
       fatorCo2: drift.Value(fatorCo2),
       poolsIncluidos: drift.Value(jsonEncode(['agb_aerea'])),
       poolsNaoMedidos: drift.Value(jsonEncode(['raizes', 'serapilheira', 'solo', 'madeira_morta'])),
+      // RQ-04: hash dos insumos vai na coluna dedicada; o resultado JSON já
+      // carrega 'insumos_hash' e 'resultado_hash' (calculados no calcularParcela).
+      insumosHash: drift.Value(resultado['insumos_hash'] as String?),
       resultado: drift.Value(jsonEncode(resultado)),
       // RS-03: incerteza amostral persistida junto ao cálculo (JSON).
       incerteza: resultado['incerteza'] != null

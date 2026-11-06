@@ -118,6 +118,47 @@ void main() {
       expect(inc['observacao'], contains('n < 2'));
     });
 
+    test('RQ-04: hash dos insumos muda quando muda um DAP, e é estável', () {
+      final base = List.generate(
+          5, (i) => _plantaFake(alturaCm: 1500, dapCm: 20));
+      final r1 = MrvCalcService.calcularParcela(plantas: base, areaM2: 400);
+      final r2 = MrvCalcService.calcularParcela(plantas: base, areaM2: 400);
+      expect(r1['insumos_hash'], r2['insumos_hash']); // determinístico
+      expect(r1['resultado_hash'], r2['resultado_hash']);
+      expect((r1['insumos_hash'] as String).length, 64); // sha256 hex
+
+      final mudou = List.generate(
+          5, (i) => _plantaFake(alturaCm: 1500, dapCm: i == 0 ? 25 : 20));
+      final r3 = MrvCalcService.calcularParcela(plantas: mudou, areaM2: 400);
+      expect(r3['insumos_hash'], isNot(r1['insumos_hash']));
+      expect(r3['resultado_hash'], isNot(r1['resultado_hash']));
+    });
+
+    test('RQ-04: persistirCalculo grava insumosHash na coluna (auditor refaz)', () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      await db.customSelect('SELECT 1').get();
+      addTearDown(db.close);
+
+      await db.insertParcela(ParcelasCompanion.insert(
+        uuid: 'p1',
+        propriedade: const drift.Value('Faz X'),
+        propUt: 'UT01',
+        idParcela: 1,
+        userId: 'u1',
+      ));
+      final plantas = List.generate(
+          3, (i) => _plantaFake(alturaCm: 1500, dapCm: 20.0 + i));
+      final r = MrvCalcService.calcularParcela(plantas: plantas, areaM2: 400);
+      await MrvCalcService.persistirCalculo(
+          db: db, parcelaUuid: 'p1', resultado: r, areaM2: 400);
+
+      final calc = await (db.select(db.calculosMrv)).getSingle();
+      expect(calc.insumosHash, r['insumos_hash']);
+      final resultadoJson = jsonDecode(calc.resultado!) as Map<String, dynamic>;
+      expect(resultadoJson['resultado_hash'], r['resultado_hash']);
+      expect(resultadoJson['insumos'], hasLength(3));
+    });
+
     test('persistirCalculo grava incerteza nas duas tabelas (RS-03)', () async {
       final db = AppDatabase.forTesting(NativeDatabase.memory());
       await db.customSelect('SELECT 1').get();

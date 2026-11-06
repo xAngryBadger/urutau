@@ -1054,6 +1054,15 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                                       fontSize: AppTokens.fontCaption,
                                       color: Colors.black54),
                                 ),
+                                // RQ-04: rastro do cálculo (hash do resultado)
+                                if (_estimativaMrv!['resultado_hash'] is String)
+                                  Text(
+                                    'Rastro do cálculo: #${(_estimativaMrv!['resultado_hash'] as String).substring(0, 12)}…',
+                                    style: const TextStyle(
+                                        fontFamily: 'monospace',
+                                        fontSize: AppTokens.fontCaption,
+                                        color: Colors.black54),
+                                  ),
                               ],
                             ),
                           ),
