@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import '../data/database.dart';
 import '../models/conflict_info.dart';
 import '../widgets/conflict_resolution_dialog.dart';
+import 'clock_service.dart';
 import 'image_service.dart';
 import 'secure_storage_service.dart';
 import 'password_service.dart';
@@ -154,6 +155,8 @@ class SyncService extends ChangeNotifier {
       final response = await testPb.health.check();
       if (response.code == 200) {
         _isConnected = true;
+        // RC-05: mede offset device↔servidor pelo cabeçalho Date
+        await ClockService.capturarOffsetServidor(url);
         notifyListeners();
         return 'OK';
       }
@@ -594,6 +597,10 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // ── RC-05: atualiza o offset do relógio antes de gravar qualquer coisa ──
+      if (_serverUrl != null) {
+        await ClockService.capturarOffsetServidor(_serverUrl!);
+      }
       // ── 0. Reconcilia UUIDs de TODOS os usuários locais com PocketBase ──
       await _buildUserIdMap();
       // Recarrega currentUser pois o uuid pode ter mudado

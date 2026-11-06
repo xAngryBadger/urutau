@@ -151,7 +151,7 @@ Future<int> _count(NativeDatabase e, String sql) async {
 }
 
 void main() {
-  group('migracao MRV v19 -> v28 (v24 + motor Fase 1 + v26 + D-1 v27 + foto/planta GPS/dono v28)', () {
+  group('migracao MRV v19 -> v29 (v24 + motor Fase 1 + v26 + D-1 v27 + foto/planta GPS/dono v28 + offset relogio v29)', () {
     late NativeDatabase executor;
     late AppDatabase db;
 
@@ -163,12 +163,21 @@ void main() {
       await db.close();
     });
 
-    test('a migracao roda e o banco sai em v28', () async {
+    test('a migracao roda e o banco sai em v29', () async {
       db = AppDatabase.forTesting(executor);
       await db.customSelect('SELECT 1').get(); // forca abertura
       final v = await _count(executor, 'PRAGMA user_version');
-      expect(v, 28,
-          reason: 'schemaVersion tem de ser 28 (v27 + foto/planta GPS/dono)');
+      expect(v, 29,
+          reason: 'schemaVersion tem de ser 29 (v28 + offset_relogio_ms na trilha)');
+    });
+
+    test('v29: trilha_auditoria tem offset_relogio_ms', () async {
+      db = AppDatabase.forTesting(executor);
+      await db.customSelect('SELECT 1').get();
+      final cols = await executor
+          .runSelect('PRAGMA table_info(trilha_auditoria)', const []);
+      final nomes = cols.map((r) => r.values.elementAt(1) as String).toList();
+      expect(nomes, contains('offset_relogio_ms'));
     });
 
     test('v28: fotos_parcela e plantas têm as colunas de rastreabilidade',

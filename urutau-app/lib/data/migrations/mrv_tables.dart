@@ -358,6 +358,7 @@ class TrilhaAuditoria extends Table {
   TextColumn get usuarioUuid => text().nullable()();
   DateTimeColumn get tsServidor => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get tsDispositivo => dateTime().nullable()();
+  IntColumn get offsetRelogioMs => integer().nullable()(); // RC-05 (v29)
   TextColumn get origem => text()(); // app | painel | servidor | pipeline | importacao
   TextColumn get prevHash => text().nullable()();
   TextColumn get entryHash => text().nullable()();

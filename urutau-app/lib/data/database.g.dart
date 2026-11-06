@@ -16129,6 +16129,12 @@ class $TrilhaAuditoriaTable extends TrilhaAuditoria
   late final GeneratedColumn<DateTime> tsDispositivo =
       GeneratedColumn<DateTime>('ts_dispositivo', aliasedName, true,
           type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _offsetRelogioMsMeta =
+      const VerificationMeta('offsetRelogioMs');
+  @override
+  late final GeneratedColumn<int> offsetRelogioMs = GeneratedColumn<int>(
+      'offset_relogio_ms', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _origemMeta = const VerificationMeta('origem');
   @override
   late final GeneratedColumn<String> origem = GeneratedColumn<String>(
@@ -16165,6 +16171,7 @@ class $TrilhaAuditoriaTable extends TrilhaAuditoria
         usuarioUuid,
         tsServidor,
         tsDispositivo,
+        offsetRelogioMs,
         origem,
         prevHash,
         entryHash,
@@ -16229,6 +16236,12 @@ class $TrilhaAuditoriaTable extends TrilhaAuditoria
           tsDispositivo.isAcceptableOrUnknown(
               data['ts_dispositivo']!, _tsDispositivoMeta));
     }
+    if (data.containsKey('offset_relogio_ms')) {
+      context.handle(
+          _offsetRelogioMsMeta,
+          offsetRelogioMs.isAcceptableOrUnknown(
+              data['offset_relogio_ms']!, _offsetRelogioMsMeta));
+    }
     if (data.containsKey('origem')) {
       context.handle(_origemMeta,
           origem.isAcceptableOrUnknown(data['origem']!, _origemMeta));
@@ -16274,6 +16287,8 @@ class $TrilhaAuditoriaTable extends TrilhaAuditoria
           .read(DriftSqlType.dateTime, data['${effectivePrefix}ts_servidor'])!,
       tsDispositivo: attachedDatabase.typeMapping.read(
           DriftSqlType.dateTime, data['${effectivePrefix}ts_dispositivo']),
+      offsetRelogioMs: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}offset_relogio_ms']),
       origem: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}origem'])!,
       prevHash: attachedDatabase.typeMapping
@@ -16302,6 +16317,7 @@ class TrilhaAuditoriaData extends DataClass
   final String? usuarioUuid;
   final DateTime tsServidor;
   final DateTime? tsDispositivo;
+  final int? offsetRelogioMs;
   final String origem;
   final String? prevHash;
   final String? entryHash;
@@ -16316,6 +16332,7 @@ class TrilhaAuditoriaData extends DataClass
       this.usuarioUuid,
       required this.tsServidor,
       this.tsDispositivo,
+      this.offsetRelogioMs,
       required this.origem,
       this.prevHash,
       this.entryHash,
@@ -16343,6 +16360,9 @@ class TrilhaAuditoriaData extends DataClass
     map['ts_servidor'] = Variable<DateTime>(tsServidor);
     if (!nullToAbsent || tsDispositivo != null) {
       map['ts_dispositivo'] = Variable<DateTime>(tsDispositivo);
+    }
+    if (!nullToAbsent || offsetRelogioMs != null) {
+      map['offset_relogio_ms'] = Variable<int>(offsetRelogioMs);
     }
     map['origem'] = Variable<String>(origem);
     if (!nullToAbsent || prevHash != null) {
@@ -16376,6 +16396,9 @@ class TrilhaAuditoriaData extends DataClass
       tsDispositivo: tsDispositivo == null && nullToAbsent
           ? const Value.absent()
           : Value(tsDispositivo),
+      offsetRelogioMs: offsetRelogioMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(offsetRelogioMs),
       origem: Value(origem),
       prevHash: prevHash == null && nullToAbsent
           ? const Value.absent()
@@ -16400,6 +16423,7 @@ class TrilhaAuditoriaData extends DataClass
       usuarioUuid: serializer.fromJson<String?>(json['usuarioUuid']),
       tsServidor: serializer.fromJson<DateTime>(json['tsServidor']),
       tsDispositivo: serializer.fromJson<DateTime?>(json['tsDispositivo']),
+      offsetRelogioMs: serializer.fromJson<int?>(json['offsetRelogioMs']),
       origem: serializer.fromJson<String>(json['origem']),
       prevHash: serializer.fromJson<String?>(json['prevHash']),
       entryHash: serializer.fromJson<String?>(json['entryHash']),
@@ -16419,6 +16443,7 @@ class TrilhaAuditoriaData extends DataClass
       'usuarioUuid': serializer.toJson<String?>(usuarioUuid),
       'tsServidor': serializer.toJson<DateTime>(tsServidor),
       'tsDispositivo': serializer.toJson<DateTime?>(tsDispositivo),
+      'offsetRelogioMs': serializer.toJson<int?>(offsetRelogioMs),
       'origem': serializer.toJson<String>(origem),
       'prevHash': serializer.toJson<String?>(prevHash),
       'entryHash': serializer.toJson<String?>(entryHash),
@@ -16436,6 +16461,7 @@ class TrilhaAuditoriaData extends DataClass
           Value<String?> usuarioUuid = const Value.absent(),
           DateTime? tsServidor,
           Value<DateTime?> tsDispositivo = const Value.absent(),
+          Value<int?> offsetRelogioMs = const Value.absent(),
           String? origem,
           Value<String?> prevHash = const Value.absent(),
           Value<String?> entryHash = const Value.absent(),
@@ -16453,6 +16479,9 @@ class TrilhaAuditoriaData extends DataClass
         tsServidor: tsServidor ?? this.tsServidor,
         tsDispositivo:
             tsDispositivo.present ? tsDispositivo.value : this.tsDispositivo,
+        offsetRelogioMs: offsetRelogioMs.present
+            ? offsetRelogioMs.value
+            : this.offsetRelogioMs,
         origem: origem ?? this.origem,
         prevHash: prevHash.present ? prevHash.value : this.prevHash,
         entryHash: entryHash.present ? entryHash.value : this.entryHash,
@@ -16477,6 +16506,9 @@ class TrilhaAuditoriaData extends DataClass
       tsDispositivo: data.tsDispositivo.present
           ? data.tsDispositivo.value
           : this.tsDispositivo,
+      offsetRelogioMs: data.offsetRelogioMs.present
+          ? data.offsetRelogioMs.value
+          : this.offsetRelogioMs,
       origem: data.origem.present ? data.origem.value : this.origem,
       prevHash: data.prevHash.present ? data.prevHash.value : this.prevHash,
       entryHash: data.entryHash.present ? data.entryHash.value : this.entryHash,
@@ -16496,6 +16528,7 @@ class TrilhaAuditoriaData extends DataClass
           ..write('usuarioUuid: $usuarioUuid, ')
           ..write('tsServidor: $tsServidor, ')
           ..write('tsDispositivo: $tsDispositivo, ')
+          ..write('offsetRelogioMs: $offsetRelogioMs, ')
           ..write('origem: $origem, ')
           ..write('prevHash: $prevHash, ')
           ..write('entryHash: $entryHash, ')
@@ -16515,6 +16548,7 @@ class TrilhaAuditoriaData extends DataClass
       usuarioUuid,
       tsServidor,
       tsDispositivo,
+      offsetRelogioMs,
       origem,
       prevHash,
       entryHash,
@@ -16532,6 +16566,7 @@ class TrilhaAuditoriaData extends DataClass
           other.usuarioUuid == this.usuarioUuid &&
           other.tsServidor == this.tsServidor &&
           other.tsDispositivo == this.tsDispositivo &&
+          other.offsetRelogioMs == this.offsetRelogioMs &&
           other.origem == this.origem &&
           other.prevHash == this.prevHash &&
           other.entryHash == this.entryHash &&
@@ -16548,6 +16583,7 @@ class TrilhaAuditoriaCompanion extends UpdateCompanion<TrilhaAuditoriaData> {
   final Value<String?> usuarioUuid;
   final Value<DateTime> tsServidor;
   final Value<DateTime?> tsDispositivo;
+  final Value<int?> offsetRelogioMs;
   final Value<String> origem;
   final Value<String?> prevHash;
   final Value<String?> entryHash;
@@ -16562,6 +16598,7 @@ class TrilhaAuditoriaCompanion extends UpdateCompanion<TrilhaAuditoriaData> {
     this.usuarioUuid = const Value.absent(),
     this.tsServidor = const Value.absent(),
     this.tsDispositivo = const Value.absent(),
+    this.offsetRelogioMs = const Value.absent(),
     this.origem = const Value.absent(),
     this.prevHash = const Value.absent(),
     this.entryHash = const Value.absent(),
@@ -16577,6 +16614,7 @@ class TrilhaAuditoriaCompanion extends UpdateCompanion<TrilhaAuditoriaData> {
     this.usuarioUuid = const Value.absent(),
     this.tsServidor = const Value.absent(),
     this.tsDispositivo = const Value.absent(),
+    this.offsetRelogioMs = const Value.absent(),
     required String origem,
     this.prevHash = const Value.absent(),
     this.entryHash = const Value.absent(),
@@ -16593,6 +16631,7 @@ class TrilhaAuditoriaCompanion extends UpdateCompanion<TrilhaAuditoriaData> {
     Expression<String>? usuarioUuid,
     Expression<DateTime>? tsServidor,
     Expression<DateTime>? tsDispositivo,
+    Expression<int>? offsetRelogioMs,
     Expression<String>? origem,
     Expression<String>? prevHash,
     Expression<String>? entryHash,
@@ -16608,6 +16647,7 @@ class TrilhaAuditoriaCompanion extends UpdateCompanion<TrilhaAuditoriaData> {
       if (usuarioUuid != null) 'usuario_uuid': usuarioUuid,
       if (tsServidor != null) 'ts_servidor': tsServidor,
       if (tsDispositivo != null) 'ts_dispositivo': tsDispositivo,
+      if (offsetRelogioMs != null) 'offset_relogio_ms': offsetRelogioMs,
       if (origem != null) 'origem': origem,
       if (prevHash != null) 'prev_hash': prevHash,
       if (entryHash != null) 'entry_hash': entryHash,
@@ -16625,6 +16665,7 @@ class TrilhaAuditoriaCompanion extends UpdateCompanion<TrilhaAuditoriaData> {
       Value<String?>? usuarioUuid,
       Value<DateTime>? tsServidor,
       Value<DateTime?>? tsDispositivo,
+      Value<int?>? offsetRelogioMs,
       Value<String>? origem,
       Value<String?>? prevHash,
       Value<String?>? entryHash,
@@ -16639,6 +16680,7 @@ class TrilhaAuditoriaCompanion extends UpdateCompanion<TrilhaAuditoriaData> {
       usuarioUuid: usuarioUuid ?? this.usuarioUuid,
       tsServidor: tsServidor ?? this.tsServidor,
       tsDispositivo: tsDispositivo ?? this.tsDispositivo,
+      offsetRelogioMs: offsetRelogioMs ?? this.offsetRelogioMs,
       origem: origem ?? this.origem,
       prevHash: prevHash ?? this.prevHash,
       entryHash: entryHash ?? this.entryHash,
@@ -16676,6 +16718,9 @@ class TrilhaAuditoriaCompanion extends UpdateCompanion<TrilhaAuditoriaData> {
     if (tsDispositivo.present) {
       map['ts_dispositivo'] = Variable<DateTime>(tsDispositivo.value);
     }
+    if (offsetRelogioMs.present) {
+      map['offset_relogio_ms'] = Variable<int>(offsetRelogioMs.value);
+    }
     if (origem.present) {
       map['origem'] = Variable<String>(origem.value);
     }
@@ -16703,6 +16748,7 @@ class TrilhaAuditoriaCompanion extends UpdateCompanion<TrilhaAuditoriaData> {
           ..write('usuarioUuid: $usuarioUuid, ')
           ..write('tsServidor: $tsServidor, ')
           ..write('tsDispositivo: $tsDispositivo, ')
+          ..write('offsetRelogioMs: $offsetRelogioMs, ')
           ..write('origem: $origem, ')
           ..write('prevHash: $prevHash, ')
           ..write('entryHash: $entryHash, ')
@@ -29986,6 +30032,7 @@ typedef $$TrilhaAuditoriaTableCreateCompanionBuilder = TrilhaAuditoriaCompanion
   Value<String?> usuarioUuid,
   Value<DateTime> tsServidor,
   Value<DateTime?> tsDispositivo,
+  Value<int?> offsetRelogioMs,
   required String origem,
   Value<String?> prevHash,
   Value<String?> entryHash,
@@ -30002,6 +30049,7 @@ typedef $$TrilhaAuditoriaTableUpdateCompanionBuilder = TrilhaAuditoriaCompanion
   Value<String?> usuarioUuid,
   Value<DateTime> tsServidor,
   Value<DateTime?> tsDispositivo,
+  Value<int?> offsetRelogioMs,
   Value<String> origem,
   Value<String?> prevHash,
   Value<String?> entryHash,
@@ -30043,6 +30091,10 @@ class $$TrilhaAuditoriaTableFilterComposer
 
   ColumnFilters<DateTime> get tsDispositivo => $composableBuilder(
       column: $table.tsDispositivo, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get offsetRelogioMs => $composableBuilder(
+      column: $table.offsetRelogioMs,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get origem => $composableBuilder(
       column: $table.origem, builder: (column) => ColumnFilters(column));
@@ -30096,6 +30148,10 @@ class $$TrilhaAuditoriaTableOrderingComposer
       column: $table.tsDispositivo,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get offsetRelogioMs => $composableBuilder(
+      column: $table.offsetRelogioMs,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get origem => $composableBuilder(
       column: $table.origem, builder: (column) => ColumnOrderings(column));
 
@@ -30144,6 +30200,9 @@ class $$TrilhaAuditoriaTableAnnotationComposer
 
   GeneratedColumn<DateTime> get tsDispositivo => $composableBuilder(
       column: $table.tsDispositivo, builder: (column) => column);
+
+  GeneratedColumn<int> get offsetRelogioMs => $composableBuilder(
+      column: $table.offsetRelogioMs, builder: (column) => column);
 
   GeneratedColumn<String> get origem =>
       $composableBuilder(column: $table.origem, builder: (column) => column);
@@ -30194,6 +30253,7 @@ class $$TrilhaAuditoriaTableTableManager extends RootTableManager<
             Value<String?> usuarioUuid = const Value.absent(),
             Value<DateTime> tsServidor = const Value.absent(),
             Value<DateTime?> tsDispositivo = const Value.absent(),
+            Value<int?> offsetRelogioMs = const Value.absent(),
             Value<String> origem = const Value.absent(),
             Value<String?> prevHash = const Value.absent(),
             Value<String?> entryHash = const Value.absent(),
@@ -30209,6 +30269,7 @@ class $$TrilhaAuditoriaTableTableManager extends RootTableManager<
             usuarioUuid: usuarioUuid,
             tsServidor: tsServidor,
             tsDispositivo: tsDispositivo,
+            offsetRelogioMs: offsetRelogioMs,
             origem: origem,
             prevHash: prevHash,
             entryHash: entryHash,
@@ -30224,6 +30285,7 @@ class $$TrilhaAuditoriaTableTableManager extends RootTableManager<
             Value<String?> usuarioUuid = const Value.absent(),
             Value<DateTime> tsServidor = const Value.absent(),
             Value<DateTime?> tsDispositivo = const Value.absent(),
+            Value<int?> offsetRelogioMs = const Value.absent(),
             required String origem,
             Value<String?> prevHash = const Value.absent(),
             Value<String?> entryHash = const Value.absent(),
@@ -30239,6 +30301,7 @@ class $$TrilhaAuditoriaTableTableManager extends RootTableManager<
             usuarioUuid: usuarioUuid,
             tsServidor: tsServidor,
             tsDispositivo: tsDispositivo,
+            offsetRelogioMs: offsetRelogioMs,
             origem: origem,
             prevHash: prevHash,
             entryHash: entryHash,

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
+import '../services/clock_service.dart';
 import '../services/sync_service.dart';
 import '../data/database.dart';
 
@@ -471,6 +472,46 @@ class SyncScreenProState extends State<SyncScreenPro> {
                       ),
                     ),
                 ],
+              ),
+              // RC-05: status do relógio (offset device↔servidor medido no teste de conexão)
+              const SizedBox(height: 8),
+              FutureBuilder<Duration?>(
+                future: ClockService.offsetMedido(),
+                builder: (ctx, snap) {
+                  if (!snap.hasData) {
+                    return Text(
+                      'Relógio: offset ainda não medido (teste a conexão)',
+                      style: AppTheme.labelSmall
+                          .copyWith(color: AppTheme.onSurfaceVariant),
+                    );
+                  }
+                  final off = snap.data!;
+                  final desalinhado =
+                      off.abs() > ClockService.alertaDesalinhamento;
+                  return Row(
+                    children: [
+                      Icon(
+                        desalinhado ? Icons.warning_amber : Icons.schedule,
+                        size: 16,
+                        color:
+                            desalinhado ? AppTheme.error : AppTheme.secondary,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          desalinhado
+                              ? 'Relógio DESALINHADO ${off.inSeconds}s — ajuste o relógio do aparelho (a trilha usa o tempo do servidor)'
+                              : 'Relógio alinhado com o servidor (offset ${off.inMilliseconds >= 0 ? '+' : ''}${(off.inMilliseconds / 1000).toStringAsFixed(1)}s)',
+                          style: AppTheme.labelSmall.copyWith(
+                            color: desalinhado
+                                ? AppTheme.error
+                                : AppTheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),

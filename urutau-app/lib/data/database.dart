@@ -5,6 +5,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../services/backup_service.dart';
+import '../services/clock_service.dart';
 import '../services/password_service.dart';
 import '../services/image_service.dart';
 // >>> t14 S3: inicio
@@ -226,7 +227,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 28; // v27 + MRV: foto/planta com GPS+dono (fotos_meta)
+  int get schemaVersion => 29; // v28 + RC-05: trilha_auditoria.offset_relogio_ms
 
   @override
   MigrationStrategy get migration {
@@ -387,6 +388,18 @@ class AppDatabase extends _$AppDatabase {
       if (from < 23) { await _mrvV23Ddl(m); await MrvMigration.v23(m); }
       // v24 nao tem DDL: e o marco de depreciacao controlada. Nada e dropado.
       if (from < 24) { await MrvMigration.v24(m); }
+      // v29 DEPOIS dos DDLs MRV (trilha_auditoria é criada no DDL v20+)
+      if (from < 29) {
+        // RC-05: offset do relógio medido no servidor entra na trilha (hash).
+        // Em instalacao nova o DDL ja traz a coluna; so adiciona se faltar.
+        final cols = await m.database
+            .customSelect('PRAGMA table_info(trilha_auditoria)')
+            .get();
+        final tem = cols.any((r) => r.data['name'] == 'offset_relogio_ms');
+        if (!tem) {
+          await m.addColumn(trilhaAuditoria, trilhaAuditoria.offsetRelogioMs);
+        }
+      }
       // <<< t9 patch: fim
   },
       beforeOpen: (details) async {
@@ -1627,11 +1640,20 @@ VGVG0069;UT04;0.0;1''';
         .getSingleOrNull();
     final prevHash = ultimo?.entryHash ?? 'GENESIS';
 
-    // Trunca pra SEGUNDOS UTC: o drift guarda DateTime no SQLite como
-    // epoch em segundos (descarta ms) — sem isso o hash calculado no insert
-    // não bate com o recalculado na verificação após o round-trip.
+    // RC-05: ts vem do relógio CONFIÁVEL (device + offset medido contra o
+    // servidor). O relógio bruto do device vai no payload como
+    // 'ts_dispositivo' e o offset entra no hash — adulterar o relógio quebra
+    // a cadeia. Trunca pra SEGUNDOS UTC porque o drift guarda DateTime no
+    // SQLite como epoch em segundos (descarta ms).
+    final tsDispositivoBruto = DateTime.now().toUtc();
+    final offsetMs = (await ClockService.offsetMedido())?.inMilliseconds ?? 0;
+    // Trunca o relógio bruto pra segundos (o drift guarda epoch em segundos)
+    final tsDisp = DateTime.fromMillisecondsSinceEpoch(
+        (tsDispositivoBruto.millisecondsSinceEpoch ~/ 1000) * 1000,
+        isUtc: true);
+    // tsServidor = relógio ajustado (device + offset), também em segundos
     final ts = DateTime.fromMillisecondsSinceEpoch(
-        (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000) * 1000,
+        ((tsDisp.millisecondsSinceEpoch + offsetMs) ~/ 1000) * 1000,
         isUtc: true);
     final payload = jsonEncode({
       'prev': prevHash,
@@ -1641,7 +1663,8 @@ VGVG0069;UT04;0.0;1''';
       'usuario_uuid': usuarioUuid,
       'antes': antes,
       'depois': depois,
-      'ts_dispositivo': ts.toIso8601String(),
+      'ts_dispositivo': tsDisp.toIso8601String(),
+      'offset_relogio_ms': offsetMs,
       'origem': origem,
     });
     final entryHash =
@@ -1654,8 +1677,9 @@ VGVG0069;UT04;0.0;1''';
       antes: Value(antes),
       depois: Value(depois),
       usuarioUuid: Value(usuarioUuid),
-      tsServidor: Value(ts),
-      tsDispositivo: Value(ts),
+      tsServidor: Value(ts), // tempo ajustado (device + offset, RC-05)
+      tsDispositivo: Value(tsDisp), // relógio bruto do aparelho (truncado)
+      offsetRelogioMs: Value(offsetMs), // RC-05: offset entra na linha e no hash
       origem: origem,
       prevHash: Value(prevHash),
       entryHash: Value(entryHash),
@@ -1690,6 +1714,10 @@ VGVG0069;UT04;0.0;1''';
                     e.tsDispositivo!.millisecondsSinceEpoch,
                     isUtc: true)
                 .toIso8601String(),
+        // RC-05 (v29): entradas novas trazem o offset no hash; entradas
+        // legadas (coluna null) foram hasheadas SEM a chave — reproduzir
+        // exatamente pra não quebrar a cadeia na migração.
+        if (e.offsetRelogioMs != null) 'offset_relogio_ms': e.offsetRelogioMs,
         'origem': e.origem,
       });
       final esperado = sha256.convert(utf8.encode(payload)).toString();
