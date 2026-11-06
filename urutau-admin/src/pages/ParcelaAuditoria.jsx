@@ -14,15 +14,17 @@ import {
   Link2,
   CheckCircle2,
   XCircle,
+  RotateCcw,
 } from 'lucide-react';
 import { fetchParcelById, fetchPlantsByParcel } from '../services/pocketbase';
 import {
   fetchCalculoByParcela,
   fetchTrilhaByEntidade,
-  verificarCadeia,
+  verificarCadeiaGlobal,
   fetchIncidentesAbertos,
   fetchAtivosByParcela,
 } from '../services/mrv';
+import { calcularParcela, hashInsumos } from '../services/mrvCalc';
 import { formatTco2e, formatIncerteza, shortHash } from '../theme/tokens';
 import StatusBadge from '../components/ui/StatusBadge';
 import EmptyState from '../components/ui/EmptyState';
@@ -75,11 +77,18 @@ const ParcelaAuditoria = () => {
   const [calculo, setCalculo] = useState(null);
   const [ativos, setAtivos] = useState([]);
   const [incidentes, setIncidentes] = useState([]);
-  const [cadeia, setCadeia] = useState(null);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [error, setError] = useState(null);
+
+  const [cadeia, setCadeia] = useState(null);
   const [verificando, setVerificando] = useState(false);
+  const [recalc, setRecalc] = useState(null);
+  const [recalcLoading, setRecalcLoading] = useState(false);
+
+  // O app grava `status_verificacao` (ativa/pendente/revisado/aprovado);
+  // `status_parcela` é legado — aceitar os dois, preferindo o canônico.
+  const statusVerificacao = parcel?.status_verificacao ?? parcel?.status_parcela ?? null;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,16 +126,47 @@ const ParcelaAuditoria = () => {
   }, [load]);
 
   const verificar = async () => {
-    if (!parcel) return;
     setVerificando(true);
     try {
-      const res = await verificarCadeia(parcel.uuid || parcel.id);
+      // Cadeia é GLOBAL (GENESIS sobre todas as entidades) — igual ao app.
+      const res = await verificarCadeiaGlobal();
       setCadeia(res);
     } catch (err) {
-      safeError('verificarCadeia', err);
+      safeError('verificarCadeiaGlobal', err);
       setCadeia({ ok: false, offline: true, integra: null });
     } finally {
       setVerificando(false);
+    }
+  };
+
+  /** RQ-04/"refazer a conta": recalcula no navegador e confere o hash. */
+  const refazerConta = async () => {
+    if (!calculo) return;
+    setRecalcLoading(true);
+    try {
+      const area = resultado.area_m2 ?? parcel.area_m2 ?? 0;
+      const plantasCalc = plants.map((p) => ({
+        uuid: p.uuid,
+        especie: p.especie,
+        dap_cm: p.dap_cm,
+        altura_cm: p.altura_cm,
+        autor_uuid: p.autor_uuid ?? null,
+      }));
+      const recalc = calcularParcela({ plantas: plantasCalc, areaM2: area });
+      const hash = await hashInsumos(recalc);
+      const delta = calculo.tco2e_ha != null && resultado.tco2e_ha != null
+        ? recalc.tco2e_ha - resultado.tco2e_ha
+        : null;
+      setRecalc({
+        tco2e_ha: recalc.tco2e_ha,
+        hash,
+        confere: hash === calculo.insumos_hash,
+        delta,
+      });
+    } catch (err) {
+      safeError('refazerConta', err);
+    } finally {
+      setRecalcLoading(false);
     }
   };
 
@@ -184,7 +224,7 @@ const ParcelaAuditoria = () => {
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge
-            statusParcela={parcel.status_parcela}
+            statusParcela={statusVerificacao}
             prontaParaSync={parcel.prontaParaSync}
           />
           {bloqueada ? (
@@ -250,7 +290,24 @@ const ParcelaAuditoria = () => {
       </Section>
 
       {/* Cálculo MRV */}
-      <Section icon={Calculator} title="Cálculo MRV">
+      <Section
+        icon={Calculator}
+        title="Cálculo MRV"
+        action={
+          calculo ? (
+            <button
+              type="button"
+              onClick={refazerConta}
+              disabled={recalcLoading}
+              className="btn-secondary disabled:opacity-60"
+              title="Recalcula o carbono no navegador e confere com o hash dos insumos"
+            >
+              <RotateCcw className={`h-4 w-4 ${recalcLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
+              {recalcLoading ? 'Recalculando…' : 'Refazer a conta'}
+            </button>
+          ) : null
+        }
+      >
         {calculo ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -298,6 +355,34 @@ const ParcelaAuditoria = () => {
                 Hash dos insumos <HashPill value={calculo.insumos_hash} label="insumos_hash" />
               </span>
             </div>
+            {recalc && (
+              <div
+                className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                  recalc.confere
+                    ? 'border-mrv-success/40 bg-mrv-success/10 text-mrv-green'
+                    : 'border-mrv-danger/40 bg-mrv-danger/10 text-mrv-danger'
+                }`}
+                role="status"
+              >
+                {recalc.confere ? (
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <XCircle className="h-4 w-4" aria-hidden="true" />
+                )}
+                {recalc.confere ? (
+                  <>
+                    Conta refeita no navegador: <strong>{formatTco2e(recalc.tco2e_ha)}</strong> —{' '}
+                    hash dos insumos confere com o app.
+                  </>
+                ) : (
+                  <>
+                    Divergência: recálculo <strong>{formatTco2e(recalc.tco2e_ha)}</strong>
+                    {recalc.delta != null && ` (Δ ${recalc.delta.toFixed(3)})`} — hash diferente, os
+                    insumos foram alterados desde o cálculo.
+                  </>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <EmptyState
@@ -373,12 +458,12 @@ const ParcelaAuditoria = () => {
             {cadeia.integra === true && <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
             {cadeia.integra === false && <XCircle className="h-4 w-4" aria-hidden="true" />}
             {cadeia.integra === true
-              ? `Cadeia ÍNTEGRA — ${cadeia.data.length} elos conferidos (prev_hash → entry_hash).`
+              ? `Cadeia ÍNTEGRA — ${cadeia.total} elos; prev_hash conferido e sha256(payload) recalculado para cada um.`
               : cadeia.integra === false
-                ? `Cadeia QUEBRADA no elo #${cadeia.quebradoEm} — hash divergente.`
+                ? `Cadeia QUEBRADA no elo ${cadeia.quebradoEm} — ${cadeia.motivo}.`
                 : cadeia.offline
                   ? 'Servidor indisponível — não foi possível verificar a cadeia.'
-                  : 'Nenhuma entrada na trilha para esta parcela.'}
+                  : cadeia.motivo || 'Nenhuma entrada na trilha.'}
           </div>
         )}
         <TrilhaTable parcelaUuid={parcel.uuid || parcel.id} />

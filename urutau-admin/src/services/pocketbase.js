@@ -114,14 +114,20 @@ const buildUserSession = (model, authCollection = '') => {
   const collectionName = authCollection || model.collectionName || '';
   const isSuperuser = collectionName === '_superusers';
   const isAdmin = isSuperuser || model.isAdmin === true;
+  // Papel canônico: o servidor pode informar `role`/`papel`; quem não é admin
+  // é VERIFICADOR (read-only) — nunca 'user' com canEdit implícito.
+  const role = isAdmin
+    ? 'admin'
+    : (model.role || model.papel || 'verificador');
 
   return {
     ...model,
     authCollection: collectionName,
-    role: isAdmin ? 'admin' : 'user',
-    canEdit: isAdmin,
-    canDelete: isAdmin,
-    canExport: true,
+    role,
+    canEdit: role === 'admin',
+    canDelete: role === 'admin',
+    // Exportação em massa é privilégio de admin; verificador apenas consulta.
+    canExport: role === 'admin',
     canView: true,
   };
 };

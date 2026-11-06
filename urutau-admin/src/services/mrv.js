@@ -50,7 +50,10 @@ export const fetchCalculoByParcela = async (parcelaId) => {
   }
 };
 
-/** Trilha de auditoria de uma entidade (ordem cronológica da cadeia). */
+/**
+ * Trilha de auditoria de uma entidade (ordem cronológica da cadeia).
+ * Só para EXIBIÇÃO: a verificação é global (ver verificarCadeiaGlobal).
+ */
 export const fetchTrilhaByEntidade = async (entidadeUuid, limit = 200) => {
   try {
     const list = await pb.collection('trilha_auditoria').getFullList({
@@ -64,30 +67,99 @@ export const fetchTrilhaByEntidade = async (entidadeUuid, limit = 200) => {
   }
 };
 
+/** JSON canônico no formato do Dart (jsonEncode): double inteiro leva ".0". */
+const dartJson = (value) => {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return 'null';
+    return Number.isInteger(value) ? `${value.toFixed(1)}` : String(value);
+  }
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(dartJson).join(',')}]`;
+  if (typeof value === 'object') {
+    const parts = Object.entries(value)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => `${JSON.stringify(k)}:${dartJson(v)}`);
+    return `{${parts.join(',')}}`;
+  }
+  return 'null';
+};
+
+const sha256Hex = async (text) => {
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padLeft(2, '0')).join('');
+};
+
+/** ts_dispositivo normalizado como o Dart (DateTime.parse().toUtc().toIso8601String()). */
+const tsIso = (raw) => {
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+
 /**
- * Verifica a cadeia localmente: entry_hash[i] deve ser
- * sha256(prev_hash_i | acao | entidade | antes | depois | ts | origem).
- * O servidor guarda os hashes; o painel RECALCULA a partir dos campos —
- * "auditoria refaz a conta sozinho".
- * Retorna { ok, integra, quebradoEm } — quebradoEm é o id_seq do primeiro elo
- * divergente (null = cadeia íntegra).
+ * Monta o MESMO payload hasheado pelo app (database.dart logTrilha ~1779 e
+ * sync_service.dart verificarCadeiaServidor ~217). Ordem das chaves é
+ * contratual — mexer aqui quebra a verificação.
  */
-export const verificarCadeia = async (entidadeUuid) => {
-  const { ok, offline, error, data } = await fetchTrilhaByEntidade(entidadeUuid);
-  if (!ok) return { ok: false, offline, error, integra: null, quebradoEm: null };
-  if (data.length === 0) {
-    return { ok: true, offline: false, data: [], integra: null, quebradoEm: null };
+const canonicalPayload = (rec, prevHash) => {
+  const offset = rec.offset_relogio_ms;
+  return dartJson({
+    prev: prevHash,
+    acao: rec.acao ?? null,
+    entidade_tipo: rec.entidade_tipo ?? null,
+    entidade_uuid: rec.entidade_uuid ?? null,
+    usuario_uuid: rec.usuario_uuid ?? null,
+    antes: rec.antes ?? null,
+    depois: rec.depois ?? null,
+    ts_dispositivo: tsIso(rec.ts_dispositivo),
+    ...(offset != null ? { offset_relogio_ms: offset } : {}),
+    origem: rec.origem ?? null,
+  });
+};
+
+/**
+ * Verifica a cadeia GLOBAL no servidor — espelha verificarCadeiaServidor do
+ * app: baixa tudo em ordem, fecha os elos por prev_hash E RECALCULA
+ * sha256(payload) comparando com entry_hash. Detecta elo removido E payload
+ * adulterado. Retorna { ok, offline, integra, quebradoEm, motivo, total }.
+ */
+export const verificarCadeiaGlobal = async () => {
+  let data;
+  try {
+    data = await pb.collection('trilha_auditoria').getFullList({ sort: 'id', batch: 500 });
+  } catch (error) {
+    return fail(error, 'verificarCadeiaGlobal');
+  }
+  if (!data || data.length === 0) {
+    return { ok: true, offline: false, integra: null, quebradoEm: null, motivo: 'cadeia vazia', total: 0, data: [] };
   }
 
-  let prev = null;
-  for (const entry of data) {
-    const esperadoPrev = prev;
-    if (entry.prev_hash !== esperadoPrev) {
-      return { ok: true, offline: false, data, integra: false, quebradoEm: entry.id_seq };
+  let prev = 'GENESIS';
+  for (const rec of data) {
+    if ((rec.prev_hash ?? '') !== prev) {
+      return {
+        ok: true, offline: false, integra: false, quebradoEm: rec.id,
+        motivo: `elo rompido: prev_hash deveria ser ${prev.slice(0, 12)}…, veio ${String(rec.prev_hash).slice(0, 12)}…`,
+        total: data.length, data,
+      };
     }
-    prev = entry.entry_hash;
+    if (rec.entry_hash == null) {
+      return { ok: true, offline: false, integra: false, quebradoEm: rec.id, motivo: 'entry_hash ausente', total: data.length, data };
+    }
+    const esperado = await sha256Hex(canonicalPayload(rec, prev));
+    if (rec.entry_hash !== esperado) {
+      return {
+        ok: true, offline: false, integra: false, quebradoEm: rec.id,
+        motivo: `payload adulterado: sha256 recalculado ${esperado.slice(0, 12)}… ≠ entry_hash ${String(rec.entry_hash).slice(0, 12)}…`,
+        total: data.length, data,
+      };
+    }
+    prev = rec.entry_hash;
   }
-  return { ok: true, offline: false, data, integra: true, quebradoEm: null };
+  return { ok: true, offline: false, integra: true, quebradoEm: null, total: data.length, data };
 };
 
 /** Incidentes abertos (bloqueiam crédito enquanto resolvido_em for nulo). */

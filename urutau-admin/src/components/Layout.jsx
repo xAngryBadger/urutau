@@ -1,6 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import useServerHealth from '../hooks/useServerHealth';
+import ServerOfflineBanner from './ui/ServerOfflineBanner';
+import ReadOnlyBadge from './ui/ReadOnlyBadge';
 import {
   LayoutDashboard,
   TreePine,
@@ -14,11 +17,12 @@ import {
 } from 'lucide-react';
 
 const Layout = () => {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isReadOnly } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const health = useServerHealth();
 
   // Fecha o drawer mobile ao navegar (substitui o effect com setState —
   // o React não aceita efeito sincronizado disparando render em cascata).
@@ -36,7 +40,6 @@ const Layout = () => {
     { name: 'Relatórios', href: '/reports', icon: FileSpreadsheet },
     ...(isAdmin ? [{ name: 'Usuários', href: '/users', icon: Users }] : []),
   ];
-
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {mobileOpen && (
@@ -128,29 +131,35 @@ const Layout = () => {
             <button
               onClick={() => setMobileOpen(true)}
               className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+              aria-label="Abrir menu"
             >
               <Menu className="h-5 w-5" />
             </button>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="hidden md:block p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+              aria-label={sidebarOpen ? 'Recolher menu' : 'Expandir menu'}
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="flex items-center gap-3 text-sm text-gray-500">
             <span>Urutau</span>
             <ChevronRight className="h-4 w-4" />
             <span className="text-forest-700 font-medium">
               {navigation.find(n => n.href === location.pathname)?.name || 'Dashboard'}
             </span>
+            {isReadOnly && <ReadOnlyBadge role={user?.role} />}
           </div>
         </header>
 
         <main className="flex-1 overflow-auto p-6">
-          <div className="max-w-7xl mx-auto">
-            <Outlet />
+          <div className="max-w-7xl mx-auto space-y-6">
+            {health.status === 'offline' && (
+              <ServerOfflineBanner onRetry={health.recheck} retrying={false} />
+            )}
+            <Outlet context={{ health }} />
           </div>
         </main>
       </div>
