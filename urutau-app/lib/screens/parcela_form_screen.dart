@@ -84,6 +84,17 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   bool _prontaParaSync =
       false; // carregado ao editar; rascunho até marcar concluída
   bool _popGuard = false;
+  // BUG-FIX: depois de Concluir/Guardar rascunho o pop deve passar direto —
+  // o PopScope não pode sequestrar a saída com "Sair sem salvar?" (o dado
+  // JÁ foi salvo) nem oferecer reverter a parcela pra rascunho.
+  bool _canPop = false;
+
+  /// Sai da tela liberando o PopScope (chamar sempre após salvar).
+  void _popAposSalvar([Object? result]) {
+    if (!mounted) return;
+    setState(() => _canPop = true);
+    Navigator.of(context).pop(result);
+  }
 
   // RC-10: GPS da parcela (obrigatório ao concluir — MRV exige geo auditável)
   double? _latitude;
@@ -496,7 +507,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: _canPop,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         if (_popGuard) return;
@@ -536,7 +547,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                 await context.read<SyncService>().refreshPendingCount();
               }
             }
-            if (mounted) Navigator.of(context).pop(true);
+            if (mounted) _popAposSalvar(true);
           } else if (choice == 'discard') {
             if (_isEditing && _currentUuid != null) {
               await _limparDadosParcela(_currentUuid!);
@@ -563,7 +574,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                 _isEditing = false;
               });
             }
-            if (mounted) Navigator.of(context).pop(true);
+            if (mounted) _popAposSalvar(true);
           }
         } else {
           Navigator.of(context).pop(false);
@@ -1777,7 +1788,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             duration: Duration(seconds: 4),
           ),
         );
-        Navigator.of(context).pop(true);
+        _popAposSalvar(true);
       }
     } catch (e) {
       if (mounted) {
@@ -1854,7 +1865,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             duration: Duration(seconds: 4),
           ),
         );
-        Navigator.of(context).pop(true);
+        _popAposSalvar(true);
       }
     } catch (e) {
       if (mounted) {

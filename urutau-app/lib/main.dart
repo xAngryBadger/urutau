@@ -73,7 +73,7 @@ void main() async {
     FlutterError.onError = (details) {
       FlutterError.presentError(details);
       debugPrint('FlutterError: ${details.exceptionAsString()}');
-      _errorStateKey.currentState?.setError(details.exceptionAsString());
+      appErrorNotifier.value = details.exceptionAsString();
     };
 
     runApp(
@@ -88,7 +88,7 @@ void main() async {
     );
   }, (error, stack) {
     debugPrint('Unhandled error: $error\n$stack');
-    _errorStateKey.currentState?.setError(error.toString());
+    appErrorNotifier.value = error.toString();
   });
 }
 
@@ -116,7 +116,10 @@ void callbackDispatcher() {
   });
 }
 
-final GlobalKey<_ErrorBoundaryState> _errorStateKey = GlobalKey();
+/// Erro global da aplicação (fora da árvore de widgets). Um ValueNotifier
+/// substitui o antigo GlobalKey<_ErrorBoundaryState>, que era re-anexado em
+/// dois lugares durante rebuilds (assert "_children.contains(child)" no debug).
+final ValueNotifier<String?> appErrorNotifier = ValueNotifier(null);
 
 Future<void> _migratePlaintextPasswords(AppDatabase db) async {
   try {
@@ -164,7 +167,7 @@ class _UrutauAppState extends State<UrutauApp> {
         switch (settings.name) {
   case '/':
         return MaterialPageRoute(
-          builder: (_) => _ErrorBoundary(key: _errorStateKey),
+          builder: (_) => _ErrorBoundary(errorNotifier: appErrorNotifier),
         );
           case '/login':
             return MaterialPageRoute(
@@ -249,60 +252,65 @@ class _UrutauAppState extends State<UrutauApp> {
   }
 }
 
-class _ErrorBoundary extends StatefulWidget {
-  const _ErrorBoundary({super.key});
+class _ErrorBoundary extends StatelessWidget {
+  const _ErrorBoundary({required this.errorNotifier});
 
-  @override
-  State<_ErrorBoundary> createState() => _ErrorBoundaryState();
-}
-
-class _ErrorBoundaryState extends State<_ErrorBoundary> {
-  String? _errorMessage;
-
-  void setError(String message) {
-    if (mounted) {
-      setState(() => _errorMessage = message);
-    }
-  }
+  final ValueNotifier<String?> errorNotifier;
 
   @override
   Widget build(BuildContext context) {
-    if (_errorMessage != null) {
-      return Material(
-        color: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
-              const SizedBox(height: 24),
-              const Text(
-                'Algo deu errado',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _errorMessage!,
-                style: const TextStyle(fontSize: 14, color: Colors.grey),
-                textAlign: TextAlign.center,
-                maxLines: 5,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 32),
-              FilledButton.icon(
-                onPressed: () {
-                  setState(() => _errorMessage = null);
-                },
-                icon: const Icon(Icons.refresh),
-                label: const Text('Tentar novamente'),
-              ),
-            ],
-          ),
+    return ValueListenableBuilder<String?>(
+      valueListenable: errorNotifier,
+      builder: (context, errorMessage, _) {
+        if (errorMessage == null) return const SplashScreen();
+        return _AppErrorScreen(
+          errorMessage: errorMessage,
+          onRetry: () => errorNotifier.value = null,
+        );
+      },
+    );
+  }
+}
+
+class _AppErrorScreen extends StatelessWidget {
+  const _AppErrorScreen({required this.errorMessage, required this.onRetry});
+
+  final String errorMessage;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 24),
+            const Text(
+              'Algo deu errado',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              errorMessage,
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              textAlign: TextAlign.center,
+              maxLines: 5,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 32),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Tentar novamente'),
+            ),
+          ],
         ),
-      );
-    }
-    return const SplashScreen();
+      ),
+    );
   }
 }
