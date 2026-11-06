@@ -18,6 +18,7 @@ import 'screens/settings_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/explorer_screen.dart';
 import 'screens/storage_screen.dart';
+import 'screens/mrv_projeto_screen.dart';
 import 'screens/integrity_error_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -215,6 +216,17 @@ class _UrutauAppState extends State<UrutauApp> {
           case '/storage':
             return MaterialPageRoute(
               builder: (_) => const StorageScreen(),
+            );
+          case '/mrv-projeto':
+            final syncService = context.read<SyncService>();
+            if (!syncService.isAdmin) {
+              return MaterialPageRoute(
+                builder: (_) => HomeScreen(),
+                settings: const RouteSettings(arguments: {'showAdminDenied': true}),
+              );
+            }
+            return MaterialPageRoute(
+              builder: (_) => const MrvProjetoScreen(),
             );
           case '/admin':
             final syncService = context.read<SyncService>();

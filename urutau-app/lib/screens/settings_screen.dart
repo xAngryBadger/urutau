@@ -528,6 +528,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
 
+          // ────────── PROJETO MRV (admin) — RT-04/RS-04/RS-05/RT-02/RG-03/RG-06 ──────────
+          if (context.read<SyncService>().isAdmin) ...[
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.eco),
+                title: const Text('Projeto MRV'),
+                subtitle: const Text(
+                    'Baseline/adicionalidade, desenho amostral, campanhas, incidentes e verificação interna'),
+                onTap: () => Navigator.pushNamed(context, '/mrv-projeto'),
+              ),
+            ),
+          ],
+
           const SizedBox(height: 16),
 
           // ────────── MODO OFFLINE FORÇADO ──────────

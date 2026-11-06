@@ -80,7 +80,7 @@ class MrvMigration {
         "\"regra\":\"altura<50 => cat 1 (DAP ignorado); altura>=50 e dap<5 => cat 2; altura>=50 e dap>=5 => cat 3\","
         "\"fonte\":\"urutau-app/lib/data/categoria_helper.dart:1-17 (regra existente, agora versionada)\"}', "
         "'{\"dap\":\"cm\",\"altura\":\"cm\",\"area\":\"m2\",\"dap_referencia_m\":1.30}', "
-        "NULL, 'rascunho', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        "NULL, 'rascunho', strftime(\'%s\',\'now\'), strftime(\'%s\',\'now\'))",
   ];
 
   // ----------------------------------------------------------
@@ -106,14 +106,14 @@ class MrvMigration {
         '(uuid, codigo, nome, modalidade, area_total_ha, status, created_at, updated_at) '
         "VALUES ('LEGADO-PROJ-0000', 'LEGADO', "
         "'Backfill pre-MRV (migracao v20)', 'plantacao', NULL, 'rascunho', "
-        'CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
+        'strftime(\'%s\',\'now\'), strftime(\'%s\',\'now\'))',
 
     'INSERT OR IGNORE INTO periodos_monitoramento '
         '(uuid, projeto_uuid, codigo, data_inicio, data_fim, tipo, status, created_at, updated_at) '
         "VALUES ('LEGADO-PER-0000', 'LEGADO-PROJ-0000', 'P0', "
         "(SELECT datetime(MIN(created_at), 'unixepoch') FROM plantas), "
         "(SELECT datetime(MAX(created_at), 'unixepoch') FROM plantas), "
-        "'baseline', 'fechado', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        "'baseline', 'fechado', strftime(\'%s\',\'now\'), strftime(\'%s\',\'now\'))",
 
     'INSERT OR IGNORE INTO campanhas '
         '(uuid, projeto_uuid, periodo_uuid, nome, data_inicio, data_fim, status, created_at, updated_at) '
@@ -121,7 +121,7 @@ class MrvMigration {
         "'Campanha legado (dados pre-v20)', "
         "(SELECT datetime(MIN(created_at), 'unixepoch') FROM plantas), "
         "(SELECT datetime(MAX(created_at), 'unixepoch') FROM plantas), "
-        "'fechada', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        "'fechada', strftime(\'%s\',\'now\'), strftime(\'%s\',\'now\'))",
 
     // 20.2 parcelas.projeto_id = 'LEGADO'.
     // GUARD (t9): só atribui o placeholder enquanto LEGADO for o ÚNICO projeto.
@@ -142,7 +142,7 @@ class MrvMigration {
         '(uuid, parcela_uuid, campanha_uuid, protocolo_versao, medido_em_servidor, '
         ' relogio_dispositivo, offset_relogio_ms, status, versao, created_at, updated_at) '
         "SELECT 'legado-amostra-' || p.uuid, p.uuid, 'LEGADO-CAMP-0001', NULL, "
-        ' p.created_at, p.created_at, 0, \'aprovado\', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP '
+        ' p.created_at, p.created_at, 0, \'aprovado\', 1, strftime(\'%s\',\'now\'), strftime(\'%s\',\'now\') '
         'FROM parcelas p '
         'WHERE EXISTS (SELECT 1 FROM plantas pl WHERE pl.parcela_uuid = p.uuid) '
         '  AND NOT EXISTS (SELECT 1 FROM amostras_parcela a WHERE a.parcela_uuid = p.uuid)',
@@ -153,7 +153,7 @@ class MrvMigration {
     'INSERT INTO individuos '
         '(uuid, parcela_uuid, tag, especie_legado, origem, status, created_at, updated_at) '
         "SELECT 'legado-ind-' || pl.uuid, pl.parcela_uuid, 'L-' || pl.id, pl.especie, "
-        "'plantada', 'viva', pl.created_at, CURRENT_TIMESTAMP "
+        "'plantada', 'viva', pl.created_at, strftime(\'%s\',\'now\') "
         'FROM plantas pl '
         'WHERE NOT EXISTS (SELECT 1 FROM individuos i WHERE i.uuid = \'legado-ind-\' || pl.uuid)',
 
@@ -164,7 +164,7 @@ class MrvMigration {
         "SELECT 'legado-med-' || pl.uuid, "
         " (SELECT a.uuid FROM amostras_parcela a WHERE a.parcela_uuid = pl.parcela_uuid LIMIT 1), "
         " 'legado-ind-' || pl.uuid, pl.altura_cm, pl.dap_cm, pl.categoria, "
-        "'calculada', 'viva', 0, NULL, pl.created_at, CURRENT_TIMESTAMP "
+        "'calculada', 'viva', 0, NULL, pl.created_at, strftime(\'%s\',\'now\') "
         'FROM plantas pl '
         'WHERE NOT EXISTS (SELECT 1 FROM medicoes_individuo mi '
         "                 WHERE mi.uuid = 'legado-med-' || pl.uuid)",
@@ -193,9 +193,9 @@ class MrvMigration {
         ' caminho_logico, caminho_original, nome_original, capturado_em, ingerido_em, '
         ' status, created_at, updated_at) '
         "SELECT 'legado-ativo-' || f.uuid, 'parcela', f.parcela_uuid, 'bruto', "
-        "'image/jpeg', NULL, 0, NULL, f.file_path, NULL, f.created_at, CURRENT_TIMESTAMP, "
+        "'image/jpeg', NULL, 0, NULL, f.file_path, NULL, f.created_at, strftime(\'%s\',\'now\'), "
         "  CASE WHEN f.arquivo_ausente THEN 'ausente' ELSE 'pendente_hash' END, "
-        'CURRENT_TIMESTAMP, CURRENT_TIMESTAMP '
+        'strftime(\'%s\',\'now\'), strftime(\'%s\',\'now\') '
         'FROM fotos_parcela f '
         'WHERE NOT EXISTS (SELECT 1 FROM ativos_brutos at WHERE at.uuid = \'legado-ativo-\' || f.uuid)',
 
@@ -204,9 +204,9 @@ class MrvMigration {
         ' caminho_logico, caminho_original, capturado_em, ingerido_em, '
         ' status, created_at, updated_at) '
         "SELECT 'legado-ativo-' || pl.uuid, 'medicao', 'legado-med-' || pl.uuid, 'bruto', "
-        "'image/jpeg', NULL, 0, NULL, pl.foto_especie_path, pl.created_at, CURRENT_TIMESTAMP, "
+        "'image/jpeg', NULL, 0, NULL, pl.foto_especie_path, pl.created_at, strftime(\'%s\',\'now\'), "
         "  CASE WHEN pl.foto_ausente THEN 'ausente' ELSE 'pendente_hash' END, "
-        'CURRENT_TIMESTAMP, CURRENT_TIMESTAMP '
+        'strftime(\'%s\',\'now\'), strftime(\'%s\',\'now\') '
         'FROM plantas pl '
         'WHERE pl.foto_especie_path IS NOT NULL '
         '  AND NOT EXISTS (SELECT 1 FROM ativos_brutos at '
@@ -231,7 +231,7 @@ class MrvMigration {
         '(uuid, nome_cientifico, nome_popular, origem, densidade_basica, densidade_fonte, '
         ' status, created_at, updated_at) '
         "SELECT lower(hex(randomblob(16))), especie, especie, 'desconhecida', NULL, NULL, "
-        "'ativo', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP "
+        "'ativo', strftime(\'%s\',\'now\'), strftime(\'%s\',\'now\') "
         'FROM (SELECT DISTINCT especie FROM plantas '
         "      WHERE especie IS NOT NULL AND especie <> '') "
         "WHERE especie NOT IN (SELECT nome_cientifico FROM especies_catalogo)",
@@ -255,11 +255,11 @@ class MrvMigration {
     // atribuição de papel é decisão de governança (RG-01), não efeito colateral
     // de migração. is_admin continua existindo e mandando.
     'INSERT OR IGNORE INTO papeis (uuid, nome, escopo, descricao, created_at) VALUES '
-        "('PAPEL-COLETOR', 'coletor', NULL, 'Cria e edita amostra propria enquanto pendente', CURRENT_TIMESTAMP), "
-        "('PAPEL-REVISOR', 'revisor_interno', NULL, 'Revisa amostra; aprova ou rejeita', CURRENT_TIMESTAMP), "
-        "('PAPEL-RESP', 'responsavel_tecnico', NULL, 'Aprova calculo, fecha periodo, emite dossie', CURRENT_TIMESTAMP), "
-        "('PAPEL-VERIF', 'verificador', 'global', 'Somente leitura - papel do VVB/auditor externo', CURRENT_TIMESTAMP), "
-        "('PAPEL-ADM', 'administrador', 'global', 'Acesso total + gestao de usuarios', CURRENT_TIMESTAMP)",
+        "('PAPEL-COLETOR', 'coletor', NULL, 'Cria e edita amostra propria enquanto pendente', strftime(\'%s\',\'now\')), "
+        "('PAPEL-REVISOR', 'revisor_interno', NULL, 'Revisa amostra; aprova ou rejeita', strftime(\'%s\',\'now\')), "
+        "('PAPEL-RESP', 'responsavel_tecnico', NULL, 'Aprova calculo, fecha periodo, emite dossie', strftime(\'%s\',\'now\')), "
+        "('PAPEL-VERIF', 'verificador', 'global', 'Somente leitura - papel do VVB/auditor externo', strftime(\'%s\',\'now\')), "
+        "('PAPEL-ADM', 'administrador', 'global', 'Acesso total + gestao de usuarios', strftime(\'%s\',\'now\'))",
   ];
 
   // v24 — deprecação controlada. NENHUM DDL, NENHUM DROP, nenhum SQL.

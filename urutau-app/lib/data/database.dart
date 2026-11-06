@@ -231,7 +231,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 30; // v29 + RT-01: parcelas.projeto_uuid/periodo_uuid
+  int get schemaVersion => 31; // v30 + fix v31: seeds gravavam datas como texto
 
   @override
   MigrationStrategy get migration {
@@ -415,6 +415,47 @@ class AppDatabase extends _$AppDatabase {
         if (!temProj) {
           await m.addColumn(parcelas, parcelas.projetoUuid);
           await m.addColumn(parcelas, parcelas.periodoUuid);
+        }
+      }
+      // v31 — fix: seeds da v20+ gravaram CURRENT_TIMESTAMP (texto
+      // "YYYY-MM-DD HH:MM:SS") em colunas DateTime, que o drift le como
+      // inteiro (epoch s). Banco novo ja nasce correto (strftime('%s')),
+      // banco existente precisa normalizar texto -> epoch.
+      if (from < 31) {
+        const datetimeCols = <String, List<String>>{
+          // só colunas DateTime do drift (leem epoch int). Colunas TEXT de
+          // data ISO (vigencia_inicio, retencao_ate, data_inicio...) NAO entram.
+          'protocolos_medicao': ['created_at', 'updated_at', 'deleted_at'],
+          'equacoes_alometricas': ['created_at', 'updated_at', 'deleted_at'],
+          'projetos_mrv': ['created_at', 'updated_at', 'deleted_at'],
+          'periodos_monitoramento': ['plano_aprovado_em', 'created_at', 'updated_at', 'deleted_at'],
+          'campanhas': ['created_at', 'updated_at', 'deleted_at'],
+          'amostras_parcela': ['medido_em_servidor', 'relogio_dispositivo', 'revisado_em', 'created_at', 'updated_at', 'deleted_at'],
+          'individuos': ['created_at', 'updated_at', 'deleted_at'],
+          'medicoes_individuo': ['created_at', 'updated_at', 'deleted_at'],
+          'coberturas_amostra': ['created_at', 'updated_at', 'deleted_at'],
+          'ativos_brutos': ['capturado_em', 'ingerido_em', 'created_at', 'updated_at', 'deleted_at'],
+          'verificacoes_internas': ['verificado_em', 'created_at', 'updated_at', 'deleted_at'],
+          'calculos_mrv': ['executado_em', 'created_at', 'updated_at', 'deleted_at'],
+          'dispositivos': ['created_at', 'updated_at', 'deleted_at'],
+          'incidentes': ['detectado_em', 'resolvido_em', 'created_at', 'updated_at'],
+          'competencias': ['created_at', 'updated_at', 'deleted_at'],
+          'papeis': ['created_at'],
+          'usuario_papeis': ['atribuido_em', 'created_at'],
+        };
+        for (final entry in datetimeCols.entries) {
+          final cols = await m.database
+              .customSelect('PRAGMA table_info(${entry.key})')
+              .get();
+          final nomes = cols.map((r) => r.data['name'] as String).toSet();
+          for (final col in entry.value) {
+            if (!nomes.contains(col)) continue;
+            // so normaliza valores em texto; inteiros (epoch) ficam intactos
+            await m.database.customStatement(
+              "UPDATE ${entry.key} SET $col = CAST(strftime('%s', $col) AS INTEGER) "
+              "WHERE typeof($col) = 'text'",
+            );
+          }
         }
       }
       // <<< t9 patch: fim

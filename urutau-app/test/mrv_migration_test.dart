@@ -151,7 +151,7 @@ Future<int> _count(NativeDatabase e, String sql) async {
 }
 
 void main() {
-  group('migracao MRV v19 -> v30 (v24 + motor Fase 1 + v26 + D-1 v27 + foto/planta GPS/dono v28 + offset relogio v29 + projeto/periodo v30)', () {
+  group('migracao MRV v19 -> v31 (v24 + motor Fase 1 + v26 + D-1 v27 + foto/planta GPS/dono v28 + offset relogio v29 + projeto/periodo v30 + datas seed v31)', () {
     late NativeDatabase executor;
     late AppDatabase db;
 
@@ -163,12 +163,29 @@ void main() {
       await db.close();
     });
 
-    test('a migracao roda e o banco sai em v30', () async {
+    test('a migracao roda e o banco sai em v31', () async {
       db = AppDatabase.forTesting(executor);
       await db.customSelect('SELECT 1').get(); // forca abertura
       final v = await _count(executor, 'PRAGMA user_version');
-      expect(v, 30,
-          reason: 'schemaVersion tem de ser 30 (v29 + projeto_uuid/periodo_uuid em parcelas)');
+      expect(v, 31,
+          reason: 'schemaVersion tem de ser 31 (v30 + normalizacao de datas-texto das seeds)');
+    });
+
+    test('v31: seeds LEGADO nascem com created_at em epoch (drift le como DateTime)',
+        () async {
+      db = AppDatabase.forTesting(executor);
+      await db.customSelect('SELECT 1').get();
+      // regressao: seed gravava CURRENT_TIMESTAMP (texto) e o drift quebrava
+      // no int.parse ao ler — ler via drift tem de funcionar
+      final projetos = await db.select(db.projetosMrv).get();
+      expect(projetos, isNotEmpty);
+      expect(projetos.first.createdAt, isA<DateTime>());
+      final periodos = await db.select(db.periodosMonitoramento).get();
+      expect(periodos, isNotEmpty);
+      expect(periodos.first.createdAt, isA<DateTime>());
+      final camps = await db.select(db.campanhas).get();
+      expect(camps, isNotEmpty);
+      expect(camps.first.createdAt, isA<DateTime>());
     });
 
     test('v30: parcelas ganham projeto_uuid e periodo_uuid (RT-01)', () async {
