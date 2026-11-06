@@ -18,6 +18,7 @@
 
 import { pb } from './pocketbase';
 import safeError from './logger';
+import { USE_MOCK, mockCalculo, mockTrilha, mock } from './mock/demoData';
 
 const isOfflineError = (err) => {
   const msg = String(err?.message || '');
@@ -39,6 +40,9 @@ const fail = (error, label) => {
 
 /** Cálculo MRV persistido de uma parcela (resultado + incerteza). */
 export const fetchCalculoByParcela = async (parcelaId) => {
+  if (USE_MOCK) {
+    return { ok: true, offline: false, data: await mockCalculo(parcelaId) };
+  }
   try {
     const list = await pb.collection('calculos_mrv').getFullList({
       filter: `escopo_uuid = "${parcelaId}" && escopo_tipo = "parcela"`,
@@ -55,6 +59,10 @@ export const fetchCalculoByParcela = async (parcelaId) => {
  * Só para EXIBIÇÃO: a verificação é global (ver verificarCadeiaGlobal).
  */
 export const fetchTrilhaByEntidade = async (entidadeUuid, limit = 200) => {
+  if (USE_MOCK) {
+    const rows = (await mockTrilha()).filter((r) => r.entidade_uuid === entidadeUuid);
+    return { ok: true, offline: false, data: rows };
+  }
   try {
     const list = await pb.collection('trilha_auditoria').getFullList({
       filter: `entidade_uuid = "${entidadeUuid}"`,
@@ -89,7 +97,7 @@ const dartJson = (value) => {
 const sha256Hex = async (text) => {
   const bytes = new TextEncoder().encode(text);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padLeft(2, '0')).join('');
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 };
 
 /** ts_dispositivo normalizado como o Dart (DateTime.parse().toUtc().toIso8601String()). */
@@ -128,10 +136,14 @@ const canonicalPayload = (rec, prevHash) => {
  */
 export const verificarCadeiaGlobal = async () => {
   let data;
-  try {
-    data = await pb.collection('trilha_auditoria').getFullList({ sort: 'id', batch: 500 });
-  } catch (error) {
-    return fail(error, 'verificarCadeiaGlobal');
+  if (USE_MOCK) {
+    data = await mockTrilha();
+  } else {
+    try {
+      data = await pb.collection('trilha_auditoria').getFullList({ sort: 'id', batch: 500 });
+    } catch (error) {
+      return fail(error, 'verificarCadeiaGlobal');
+    }
   }
   if (!data || data.length === 0) {
     return { ok: true, offline: false, integra: null, quebradoEm: null, motivo: 'cadeia vazia', total: 0, data: [] };
@@ -164,6 +176,9 @@ export const verificarCadeiaGlobal = async () => {
 
 /** Incidentes abertos (bloqueiam crédito enquanto resolvido_em for nulo). */
 export const fetchIncidentesAbertos = async (parcelaUuid) => {
+  if (USE_MOCK) {
+    return { ok: true, offline: false, data: mock.incidentes[parcelaUuid] || [] };
+  }
   try {
     const conditions = ['resolvido_em = null || resolvido_em = ""'];
     if (parcelaUuid) {
@@ -185,6 +200,9 @@ export const fetchIncidentesAbertos = async (parcelaUuid) => {
  * dos arquivos contra o que o app registrou.
  */
 export const fetchAtivosByParcela = async (parcelaUuid) => {
+  if (USE_MOCK) {
+    return { ok: true, offline: false, data: mock.ativos[parcelaUuid] || [] };
+  }
   try {
     const list = await pb.collection('ativos_brutos').getFullList({
       filter: `entidade_uuid = "${parcelaUuid}"`,
@@ -224,6 +242,9 @@ export const checkServerHealth = async () => {
  * afirma verificação sem hash.
  */
 export const fetchFotosMeta = async (parcelId) => {
+  if (USE_MOCK) {
+    return { ok: true, offline: false, data: mock.fotosMeta[parcelId] || [] };
+  }
   try {
     const rec = await pb.collection('parcelas').getOne(parcelId, { fields: 'fotos_meta' });
     const raw = rec?.fotos_meta;

@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import useServerHealth from '../hooks/useServerHealth';
 import ServerOfflineBanner from './ui/ServerOfflineBanner';
 import ReadOnlyBadge from './ui/ReadOnlyBadge';
+import DemoBanner from './ui/DemoBanner';
+import { USE_MOCK } from '../services/mock/demoData';
 import {
   LayoutDashboard,
   TreePine,
@@ -156,6 +158,7 @@ const Layout = () => {
 
         <main className="flex-1 overflow-auto p-6">
           <div className="max-w-7xl mx-auto space-y-6">
+            {USE_MOCK && <DemoBanner />}
             {health.status === 'offline' && (
               <ServerOfflineBanner onRetry={health.recheck} retrying={false} />
             )}

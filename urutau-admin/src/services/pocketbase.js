@@ -1,5 +1,6 @@
 import PocketBase from 'pocketbase';
 import safeError from './logger';
+import { USE_MOCK, mock } from './mock/demoData';
 
 const sanitizeUrl = (url) => (url || '').trim().replace(/\/+$/, '');
 
@@ -166,6 +167,28 @@ const toAuthErrorMessage = (error) => {
 export const loginUser = async (identity, password, { remember = true } = {}) => {
   const normalizedIdentity = (identity || '').trim();
 
+  // Modo demonstração: sessão de verificador real (read-only) sem servidor.
+  if (USE_MOCK) {
+    if (!normalizedIdentity || !password) {
+      return { success: false, error: 'Informe usuario/email e senha.' };
+    }
+    const isAdmin = /^admin/i.test(normalizedIdentity);
+    return {
+      success: true,
+      user: {
+        id: 'demo-user',
+        email: normalizedIdentity,
+        name: isAdmin ? 'Admin (demo)' : 'Verificador (demo)',
+        authCollection: 'mock',
+        role: isAdmin ? 'admin' : 'verificador',
+        canEdit: isAdmin,
+        canDelete: isAdmin,
+        canExport: isAdmin,
+        canView: true,
+      },
+    };
+  }
+
   if (!normalizedIdentity || !password) {
     return {
       success: false,
@@ -295,6 +318,10 @@ export const fetchParcelsByIds = async (ids, usersById = null) => {
 };
 
 export const fetchParcelById = async (id, usersById = null) => {
+  if (USE_MOCK) {
+    const found = mock.parcels.find((p) => p.uuid === id || String(p.id_parcela) === String(id));
+    return found || null;
+  }
   try {
     const result = await pb.collection('parcelas').getOne(id, {
       expand: EXPAND_RELATIONS,
@@ -308,6 +335,9 @@ export const fetchParcelById = async (id, usersById = null) => {
 };
 
 export const fetchPlantsByParcel = async (parcelId) => {
+  if (USE_MOCK) {
+    return mock.plants[parcelId] || [];
+  }
   try {
     const result = await pb.collection('plantas').getFullList({
       filter: `parcela = "${parcelId}"`,
