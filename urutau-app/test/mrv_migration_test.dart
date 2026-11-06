@@ -151,7 +151,7 @@ Future<int> _count(NativeDatabase e, String sql) async {
 }
 
 void main() {
-  group('migracao MRV v19 -> v29 (v24 + motor Fase 1 + v26 + D-1 v27 + foto/planta GPS/dono v28 + offset relogio v29)', () {
+  group('migracao MRV v19 -> v30 (v24 + motor Fase 1 + v26 + D-1 v27 + foto/planta GPS/dono v28 + offset relogio v29 + projeto/periodo v30)', () {
     late NativeDatabase executor;
     late AppDatabase db;
 
@@ -163,12 +163,21 @@ void main() {
       await db.close();
     });
 
-    test('a migracao roda e o banco sai em v29', () async {
+    test('a migracao roda e o banco sai em v30', () async {
       db = AppDatabase.forTesting(executor);
       await db.customSelect('SELECT 1').get(); // forca abertura
       final v = await _count(executor, 'PRAGMA user_version');
-      expect(v, 29,
-          reason: 'schemaVersion tem de ser 29 (v28 + offset_relogio_ms na trilha)');
+      expect(v, 30,
+          reason: 'schemaVersion tem de ser 30 (v29 + projeto_uuid/periodo_uuid em parcelas)');
+    });
+
+    test('v30: parcelas ganham projeto_uuid e periodo_uuid (RT-01)', () async {
+      db = AppDatabase.forTesting(executor);
+      await db.customSelect('SELECT 1').get();
+      final cols = await executor
+          .runSelect('PRAGMA table_info(parcelas)', const []);
+      final nomes = cols.map((r) => r.values.elementAt(1) as String).toList();
+      expect(nomes, containsAll(['projeto_uuid', 'periodo_uuid']));
     });
 
     test('v29: trilha_auditoria tem offset_relogio_ms', () async {

@@ -621,6 +621,18 @@ class $ParcelasTable extends Parcelas with TableInfo<$ParcelasTable, Parcela> {
   late final GeneratedColumn<String> substitutaDe = GeneratedColumn<String>(
       'substituta_de', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _projetoUuidMeta =
+      const VerificationMeta('projetoUuid');
+  @override
+  late final GeneratedColumn<String> projetoUuid = GeneratedColumn<String>(
+      'projeto_uuid', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _periodoUuidMeta =
+      const VerificationMeta('periodoUuid');
+  @override
+  late final GeneratedColumn<String> periodoUuid = GeneratedColumn<String>(
+      'periodo_uuid', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -652,7 +664,9 @@ class $ParcelasTable extends Parcelas with TableInfo<$ParcelasTable, Parcela> {
         statusParcela,
         marcador,
         protocoloVersao,
-        substitutaDe
+        substitutaDe,
+        projetoUuid,
+        periodoUuid
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -814,6 +828,18 @@ class $ParcelasTable extends Parcelas with TableInfo<$ParcelasTable, Parcela> {
           substitutaDe.isAcceptableOrUnknown(
               data['substituta_de']!, _substitutaDeMeta));
     }
+    if (data.containsKey('projeto_uuid')) {
+      context.handle(
+          _projetoUuidMeta,
+          projetoUuid.isAcceptableOrUnknown(
+              data['projeto_uuid']!, _projetoUuidMeta));
+    }
+    if (data.containsKey('periodo_uuid')) {
+      context.handle(
+          _periodoUuidMeta,
+          periodoUuid.isAcceptableOrUnknown(
+              data['periodo_uuid']!, _periodoUuidMeta));
+    }
     return context;
   }
 
@@ -885,6 +911,10 @@ class $ParcelasTable extends Parcelas with TableInfo<$ParcelasTable, Parcela> {
           DriftSqlType.string, data['${effectivePrefix}protocolo_versao']),
       substitutaDe: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}substituta_de']),
+      projetoUuid: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}projeto_uuid']),
+      periodoUuid: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}periodo_uuid']),
     );
   }
 
@@ -934,6 +964,8 @@ class Parcela extends DataClass implements Insertable<Parcela> {
   final String? marcador;
   final String? protocoloVersao;
   final String? substitutaDe;
+  final String? projetoUuid;
+  final String? periodoUuid;
   const Parcela(
       {required this.id,
       required this.uuid,
@@ -964,7 +996,9 @@ class Parcela extends DataClass implements Insertable<Parcela> {
       this.statusParcela,
       this.marcador,
       this.protocoloVersao,
-      this.substitutaDe});
+      this.substitutaDe,
+      this.projetoUuid,
+      this.periodoUuid});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1034,6 +1068,12 @@ class Parcela extends DataClass implements Insertable<Parcela> {
     if (!nullToAbsent || substitutaDe != null) {
       map['substituta_de'] = Variable<String>(substitutaDe);
     }
+    if (!nullToAbsent || projetoUuid != null) {
+      map['projeto_uuid'] = Variable<String>(projetoUuid);
+    }
+    if (!nullToAbsent || periodoUuid != null) {
+      map['periodo_uuid'] = Variable<String>(periodoUuid);
+    }
     return map;
   }
 
@@ -1102,6 +1142,12 @@ class Parcela extends DataClass implements Insertable<Parcela> {
       substitutaDe: substitutaDe == null && nullToAbsent
           ? const Value.absent()
           : Value(substitutaDe),
+      projetoUuid: projetoUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projetoUuid),
+      periodoUuid: periodoUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(periodoUuid),
     );
   }
 
@@ -1141,6 +1187,8 @@ class Parcela extends DataClass implements Insertable<Parcela> {
       marcador: serializer.fromJson<String?>(json['marcador']),
       protocoloVersao: serializer.fromJson<String?>(json['protocoloVersao']),
       substitutaDe: serializer.fromJson<String?>(json['substitutaDe']),
+      projetoUuid: serializer.fromJson<String?>(json['projetoUuid']),
+      periodoUuid: serializer.fromJson<String?>(json['periodoUuid']),
     );
   }
   @override
@@ -1178,6 +1226,8 @@ class Parcela extends DataClass implements Insertable<Parcela> {
       'marcador': serializer.toJson<String?>(marcador),
       'protocoloVersao': serializer.toJson<String?>(protocoloVersao),
       'substitutaDe': serializer.toJson<String?>(substitutaDe),
+      'projetoUuid': serializer.toJson<String?>(projetoUuid),
+      'periodoUuid': serializer.toJson<String?>(periodoUuid),
     };
   }
 
@@ -1211,7 +1261,9 @@ class Parcela extends DataClass implements Insertable<Parcela> {
           Value<String?> statusParcela = const Value.absent(),
           Value<String?> marcador = const Value.absent(),
           Value<String?> protocoloVersao = const Value.absent(),
-          Value<String?> substitutaDe = const Value.absent()}) =>
+          Value<String?> substitutaDe = const Value.absent(),
+          Value<String?> projetoUuid = const Value.absent(),
+          Value<String?> periodoUuid = const Value.absent()}) =>
       Parcela(
         id: id ?? this.id,
         uuid: uuid ?? this.uuid,
@@ -1253,6 +1305,8 @@ class Parcela extends DataClass implements Insertable<Parcela> {
             : this.protocoloVersao,
         substitutaDe:
             substitutaDe.present ? substitutaDe.value : this.substitutaDe,
+        projetoUuid: projetoUuid.present ? projetoUuid.value : this.projetoUuid,
+        periodoUuid: periodoUuid.present ? periodoUuid.value : this.periodoUuid,
       );
   Parcela copyWithCompanion(ParcelasCompanion data) {
     return Parcela(
@@ -1306,6 +1360,10 @@ class Parcela extends DataClass implements Insertable<Parcela> {
       substitutaDe: data.substitutaDe.present
           ? data.substitutaDe.value
           : this.substitutaDe,
+      projetoUuid:
+          data.projetoUuid.present ? data.projetoUuid.value : this.projetoUuid,
+      periodoUuid:
+          data.periodoUuid.present ? data.periodoUuid.value : this.periodoUuid,
     );
   }
 
@@ -1341,7 +1399,9 @@ class Parcela extends DataClass implements Insertable<Parcela> {
           ..write('statusParcela: $statusParcela, ')
           ..write('marcador: $marcador, ')
           ..write('protocoloVersao: $protocoloVersao, ')
-          ..write('substitutaDe: $substitutaDe')
+          ..write('substitutaDe: $substitutaDe, ')
+          ..write('projetoUuid: $projetoUuid, ')
+          ..write('periodoUuid: $periodoUuid')
           ..write(')'))
         .toString();
   }
@@ -1377,7 +1437,9 @@ class Parcela extends DataClass implements Insertable<Parcela> {
         statusParcela,
         marcador,
         protocoloVersao,
-        substitutaDe
+        substitutaDe,
+        projetoUuid,
+        periodoUuid
       ]);
   @override
   bool operator ==(Object other) =>
@@ -1412,7 +1474,9 @@ class Parcela extends DataClass implements Insertable<Parcela> {
           other.statusParcela == this.statusParcela &&
           other.marcador == this.marcador &&
           other.protocoloVersao == this.protocoloVersao &&
-          other.substitutaDe == this.substitutaDe);
+          other.substitutaDe == this.substitutaDe &&
+          other.projetoUuid == this.projetoUuid &&
+          other.periodoUuid == this.periodoUuid);
 }
 
 class ParcelasCompanion extends UpdateCompanion<Parcela> {
@@ -1446,6 +1510,8 @@ class ParcelasCompanion extends UpdateCompanion<Parcela> {
   final Value<String?> marcador;
   final Value<String?> protocoloVersao;
   final Value<String?> substitutaDe;
+  final Value<String?> projetoUuid;
+  final Value<String?> periodoUuid;
   const ParcelasCompanion({
     this.id = const Value.absent(),
     this.uuid = const Value.absent(),
@@ -1477,6 +1543,8 @@ class ParcelasCompanion extends UpdateCompanion<Parcela> {
     this.marcador = const Value.absent(),
     this.protocoloVersao = const Value.absent(),
     this.substitutaDe = const Value.absent(),
+    this.projetoUuid = const Value.absent(),
+    this.periodoUuid = const Value.absent(),
   });
   ParcelasCompanion.insert({
     this.id = const Value.absent(),
@@ -1509,6 +1577,8 @@ class ParcelasCompanion extends UpdateCompanion<Parcela> {
     this.marcador = const Value.absent(),
     this.protocoloVersao = const Value.absent(),
     this.substitutaDe = const Value.absent(),
+    this.projetoUuid = const Value.absent(),
+    this.periodoUuid = const Value.absent(),
   })  : uuid = Value(uuid),
         propUt = Value(propUt),
         idParcela = Value(idParcela),
@@ -1544,6 +1614,8 @@ class ParcelasCompanion extends UpdateCompanion<Parcela> {
     Expression<String>? marcador,
     Expression<String>? protocoloVersao,
     Expression<String>? substitutaDe,
+    Expression<String>? projetoUuid,
+    Expression<String>? periodoUuid,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1578,6 +1650,8 @@ class ParcelasCompanion extends UpdateCompanion<Parcela> {
       if (marcador != null) 'marcador': marcador,
       if (protocoloVersao != null) 'protocolo_versao': protocoloVersao,
       if (substitutaDe != null) 'substituta_de': substitutaDe,
+      if (projetoUuid != null) 'projeto_uuid': projetoUuid,
+      if (periodoUuid != null) 'periodo_uuid': periodoUuid,
     });
   }
 
@@ -1611,7 +1685,9 @@ class ParcelasCompanion extends UpdateCompanion<Parcela> {
       Value<String?>? statusParcela,
       Value<String?>? marcador,
       Value<String?>? protocoloVersao,
-      Value<String?>? substitutaDe}) {
+      Value<String?>? substitutaDe,
+      Value<String?>? projetoUuid,
+      Value<String?>? periodoUuid}) {
     return ParcelasCompanion(
       id: id ?? this.id,
       uuid: uuid ?? this.uuid,
@@ -1644,6 +1720,8 @@ class ParcelasCompanion extends UpdateCompanion<Parcela> {
       marcador: marcador ?? this.marcador,
       protocoloVersao: protocoloVersao ?? this.protocoloVersao,
       substitutaDe: substitutaDe ?? this.substitutaDe,
+      projetoUuid: projetoUuid ?? this.projetoUuid,
+      periodoUuid: periodoUuid ?? this.periodoUuid,
     );
   }
 
@@ -1742,6 +1820,12 @@ class ParcelasCompanion extends UpdateCompanion<Parcela> {
     if (substitutaDe.present) {
       map['substituta_de'] = Variable<String>(substitutaDe.value);
     }
+    if (projetoUuid.present) {
+      map['projeto_uuid'] = Variable<String>(projetoUuid.value);
+    }
+    if (periodoUuid.present) {
+      map['periodo_uuid'] = Variable<String>(periodoUuid.value);
+    }
     return map;
   }
 
@@ -1777,7 +1861,9 @@ class ParcelasCompanion extends UpdateCompanion<Parcela> {
           ..write('statusParcela: $statusParcela, ')
           ..write('marcador: $marcador, ')
           ..write('protocoloVersao: $protocoloVersao, ')
-          ..write('substitutaDe: $substitutaDe')
+          ..write('substitutaDe: $substitutaDe, ')
+          ..write('projetoUuid: $projetoUuid, ')
+          ..write('periodoUuid: $periodoUuid')
           ..write(')'))
         .toString();
   }
@@ -22875,6 +22961,8 @@ typedef $$ParcelasTableCreateCompanionBuilder = ParcelasCompanion Function({
   Value<String?> marcador,
   Value<String?> protocoloVersao,
   Value<String?> substitutaDe,
+  Value<String?> projetoUuid,
+  Value<String?> periodoUuid,
 });
 typedef $$ParcelasTableUpdateCompanionBuilder = ParcelasCompanion Function({
   Value<int> id,
@@ -22907,6 +22995,8 @@ typedef $$ParcelasTableUpdateCompanionBuilder = ParcelasCompanion Function({
   Value<String?> marcador,
   Value<String?> protocoloVersao,
   Value<String?> substitutaDe,
+  Value<String?> projetoUuid,
+  Value<String?> periodoUuid,
 });
 
 final class $$ParcelasTableReferences
@@ -23047,6 +23137,12 @@ class $$ParcelasTableFilterComposer
 
   ColumnFilters<String> get substitutaDe => $composableBuilder(
       column: $table.substitutaDe, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get projetoUuid => $composableBuilder(
+      column: $table.projetoUuid, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get periodoUuid => $composableBuilder(
+      column: $table.periodoUuid, builder: (column) => ColumnFilters(column));
 
   Expression<bool> plantasRefs(
       Expression<bool> Function($$PlantasTableFilterComposer f) f) {
@@ -23198,6 +23294,12 @@ class $$ParcelasTableOrderingComposer
   ColumnOrderings<String> get substitutaDe => $composableBuilder(
       column: $table.substitutaDe,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get projetoUuid => $composableBuilder(
+      column: $table.projetoUuid, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get periodoUuid => $composableBuilder(
+      column: $table.periodoUuid, builder: (column) => ColumnOrderings(column));
 }
 
 class $$ParcelasTableAnnotationComposer
@@ -23299,6 +23401,12 @@ class $$ParcelasTableAnnotationComposer
   GeneratedColumn<String> get substitutaDe => $composableBuilder(
       column: $table.substitutaDe, builder: (column) => column);
 
+  GeneratedColumn<String> get projetoUuid => $composableBuilder(
+      column: $table.projetoUuid, builder: (column) => column);
+
+  GeneratedColumn<String> get periodoUuid => $composableBuilder(
+      column: $table.periodoUuid, builder: (column) => column);
+
   Expression<T> plantasRefs<T extends Object>(
       Expression<T> Function($$PlantasTableAnnotationComposer a) f) {
     final $$PlantasTableAnnotationComposer composer = $composerBuilder(
@@ -23395,6 +23503,8 @@ class $$ParcelasTableTableManager extends RootTableManager<
             Value<String?> marcador = const Value.absent(),
             Value<String?> protocoloVersao = const Value.absent(),
             Value<String?> substitutaDe = const Value.absent(),
+            Value<String?> projetoUuid = const Value.absent(),
+            Value<String?> periodoUuid = const Value.absent(),
           }) =>
               ParcelasCompanion(
             id: id,
@@ -23427,6 +23537,8 @@ class $$ParcelasTableTableManager extends RootTableManager<
             marcador: marcador,
             protocoloVersao: protocoloVersao,
             substitutaDe: substitutaDe,
+            projetoUuid: projetoUuid,
+            periodoUuid: periodoUuid,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -23459,6 +23571,8 @@ class $$ParcelasTableTableManager extends RootTableManager<
             Value<String?> marcador = const Value.absent(),
             Value<String?> protocoloVersao = const Value.absent(),
             Value<String?> substitutaDe = const Value.absent(),
+            Value<String?> projetoUuid = const Value.absent(),
+            Value<String?> periodoUuid = const Value.absent(),
           }) =>
               ParcelasCompanion.insert(
             id: id,
@@ -23491,6 +23605,8 @@ class $$ParcelasTableTableManager extends RootTableManager<
             marcador: marcador,
             protocoloVersao: protocoloVersao,
             substitutaDe: substitutaDe,
+            projetoUuid: projetoUuid,
+            periodoUuid: periodoUuid,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>

@@ -1143,6 +1143,17 @@ class SyncService extends ChangeNotifier {
                     ? rec.getStringValue('marcador')
                     : null),
                 statusParcela: Value(statusVer.isNotEmpty ? statusVer : null),
+                // RT-01/RC-11: devolve projeto/período/protocolo do servidor
+                projetoUuid: Value((rec.data['projeto_id'] as String?)?.isNotEmpty == true
+                    ? rec.data['projeto_id'] as String
+                    : null),
+                periodoUuid: Value((rec.data['periodo_id'] as String?)?.isNotEmpty == true
+                    ? rec.data['periodo_id'] as String
+                    : null),
+                protocoloVersao: Value(
+                    (rec.data['protocolo_versao'] as String?)?.isNotEmpty == true
+                        ? rec.data['protocolo_versao'] as String
+                        : null),
               ),
               parcelaUuid,
             );
@@ -1805,6 +1816,10 @@ class SyncService extends ChangeNotifier {
       // v28 MRV: metadados por foto (hash + GPS + timestamp + dono) —
       // promessa do pitch: "cada foto recebe hash SHA-256, GPS, timestamp e dono"
       'fotos_meta': await _fotosMetaJson(parcela.uuid),
+      // RT-01/RC-11: vínculo projeto/período + SOP aplicado nesta medição
+      'projeto_id': parcela.projetoUuid,
+      'periodo_id': parcela.periodoUuid,
+      'protocolo_versao': parcela.protocoloVersao,
     };
     if (utId != null) {
       parcelaBody = {

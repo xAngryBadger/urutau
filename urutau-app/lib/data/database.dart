@@ -92,6 +92,9 @@ class Parcelas extends Table {
   TextColumn get marcador => text().nullable()(); // estaca/plaqueta (RS-02)
   TextColumn get protocoloVersao => text().nullable()(); // SOP aplicado (RC-11)
   TextColumn get substitutaDe => text().nullable()(); // rastreio de substituição (RS-06)
+  // v30 — RT-01: vínculo da parcela ao projeto MRV e ao período de monitoramento
+  TextColumn get projetoUuid => text().nullable()();
+  TextColumn get periodoUuid => text().nullable()();
   // <<< t9 patch: fim
 }
 
@@ -227,7 +230,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 29; // v28 + RC-05: trilha_auditoria.offset_relogio_ms
+  int get schemaVersion => 30; // v29 + RT-01: parcelas.projeto_uuid/periodo_uuid
 
   @override
   MigrationStrategy get migration {
@@ -398,6 +401,19 @@ class AppDatabase extends _$AppDatabase {
         final tem = cols.any((r) => r.data['name'] == 'offset_relogio_ms');
         if (!tem) {
           await m.addColumn(trilhaAuditoria, trilhaAuditoria.offsetRelogioMs);
+        }
+      }
+      // v30 — RT-01: projeto/período na parcela. Em instalacao nova o DDL
+      // ja traz as colunas; so adiciona se faltar.
+      if (from < 30) {
+        final colsP = await m.database
+            .customSelect('PRAGMA table_info(parcelas)')
+            .get();
+        final temProj =
+            colsP.any((r) => r.data['name'] == 'projeto_uuid');
+        if (!temProj) {
+          await m.addColumn(parcelas, parcelas.projetoUuid);
+          await m.addColumn(parcelas, parcelas.periodoUuid);
         }
       }
       // <<< t9 patch: fim

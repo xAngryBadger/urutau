@@ -71,6 +71,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   bool _isEditing = false;
   bool _isExportandoDossie = false;
   String? _currentUuid;
+  // RT-01: vínculo projeto/período (RC-11: protocoloVersao é fixo no save)
+  List<ProjetosMrvData> _projetos = [];
+  List<PeriodosMonitoramentoData> _periodos = [];
+  String? _projetoUuid;
+  String? _periodoUuid;
   bool _prontaParaSync =
       false; // carregado ao editar; rascunho até marcar concluída
   bool _popGuard = false;
@@ -137,6 +142,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         _idParcelaController.text = widget.prefilledNextParcela.toString();
       }
     }
+    // RT-01: listas de projeto/período (sempre existem: há o LEGADO seed)
+    _projetos = await _db.select(_db.projetosMrv).get();
+    _periodos = await _db.select(_db.periodosMonitoramento).get();
+    _projetoUuid ??= _projetos.isNotEmpty ? _projetos.first.uuid : null;
+    _periodoUuid ??= _periodos.isNotEmpty ? _periodos.first.uuid : null;
     _loadSugestoes();
   }
 
@@ -191,6 +201,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         _areaController.text = parcela.areaM2!.toStringAsFixed(1);
       }
       if (parcela.marcador != null) _marcadorController.text = parcela.marcador!;
+      // RT-01: projeto/período gravados na parcela
+      _projetoUuid = parcela.projetoUuid;
+      _periodoUuid = parcela.periodoUuid;
       // RG-02: 'ativa' (legado) vira 'pendente' no fluxo de verificação
       final sv = parcela.statusParcela;
       if (sv == 'revisado' || sv == 'aprovado' || sv == 'pendente') {
@@ -885,6 +898,68 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                                   textCapitalization:
                                       TextCapitalization.sentences,
                                 ),
+                                // RT-01: projeto MRV + período de monitoramento
+                                if (_projetos.isNotEmpty || _periodos.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      if (_projetos.isNotEmpty)
+                                        Expanded(
+                                          child: DropdownButtonFormField<String>(
+                                            value: _projetoUuid,
+                                            isExpanded: true,
+                                            decoration: InputDecoration(
+                                              labelText: 'Projeto MRV',
+                                              prefixIcon: const Icon(Icons.folder),
+                                              border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12)),
+                                            ),
+                                            items: _projetos
+                                                .map((p) => DropdownMenuItem(
+                                                      value: p.uuid,
+                                                      child: Text(
+                                                          '${p.nome} (${p.codigo})',
+                                                          overflow: TextOverflow.ellipsis),
+                                                    ))
+                                                .toList(),
+                                            onChanged: widget.readOnly
+                                                ? null
+                                                : (v) => setState(
+                                                    () => _projetoUuid = v),
+                                          ),
+                                        ),
+                                      if (_projetos.isNotEmpty && _periodos.isNotEmpty)
+                                        const SizedBox(width: 8),
+                                      if (_periodos.isNotEmpty)
+                                        Expanded(
+                                          child: DropdownButtonFormField<String>(
+                                            value: _periodoUuid,
+                                            isExpanded: true,
+                                            decoration: InputDecoration(
+                                              labelText: 'Período',
+                                              prefixIcon: const Icon(Icons.calendar_month),
+                                              border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12)),
+                                            ),
+                                            items: _periodos
+                                                .map((p) => DropdownMenuItem(
+                                                      value: p.uuid,
+                                                      child: Text(
+                                                          p.codigo,
+                                                          overflow: TextOverflow.ellipsis),
+                                                    ))
+                                                .toList(),
+                                            onChanged: widget.readOnly
+                                                ? null
+                                                : (v) => setState(
+                                                    () => _periodoUuid = v),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
                             ],
                           ),
                         ),
@@ -1785,6 +1860,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       marcador: drift.Value(_marcadorController.text.trim().isEmpty
           ? null
           : _marcadorController.text.trim()),
+      // RC-11: SOP aplicado nesta medição (semeado como SOP-MRV-V1)
+      protocoloVersao: const drift.Value('SOP-MRV-V1'),
+      // RT-01: projeto + período de monitoramento
+      projetoUuid: drift.Value(_projetoUuid),
+      periodoUuid: drift.Value(_periodoUuid),
       // RG-02: ao concluir, parcela nasce 'pendente' de verificação;
       // admin avança para revisado/aprovado depois.
       statusParcela: drift.Value(prontaParaSync &&
