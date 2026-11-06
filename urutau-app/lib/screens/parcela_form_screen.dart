@@ -24,6 +24,7 @@ import '../theme/app_tokens.dart';
 import '../widgets/arquivo_ausente_badge.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/urutau_section_card.dart';
+import '../widgets/wizard/plantas_agrupadas.dart';
 import '../widgets/wizard/planta_card.dart';
 import '../widgets/wizard/wizard_stepper.dart';
 import '../widgets/wizard/wizard_step_page.dart';
@@ -85,6 +86,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   final _fonteSensoriamentoController = TextEditingController();
   // RQ-03: cache de densidades por espécie vindas do catálogo
   Map<String, double> _densidadesCache = {};
+  // Rastreia a última planta adicionada/editada (destaque na cascata).
+  String? _ultimaPlantaUuid;
   bool _prontaParaSync =
       false; // carregado ao editar; rascunho até marcar concluída
   bool _popGuard = false;
@@ -1222,8 +1225,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     );
   }
 
-  /// Lista de plantas + adicionar. [wizard] escolhe o card novo (UX-APP-CAMPO)
-  /// com itemExtent; o clássico mantém o card de sempre.
+  /// Lista de plantas + adicionar. Cascata por espécie com filtro rápido
+  /// (UX-APP-CAMPO) nos dois modos; o destaque vai pra última adicionada.
   Widget _plantasSecao({required bool wizard}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1231,35 +1234,13 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         _sectionTitle('Plantas (${_plantas.length})', Icons.grass),
         const SizedBox(height: 12),
         if (_plantas.isEmpty) _emptyPlantas(),
-        if (wizard)
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: EdgeInsets.zero,
-            itemCount: _plantas.length,
-            // UX-APP-CAMPO: card de altura fixa — itemExtent/cacheExtent
-            itemExtent: PlantaCard.alturaCard + 8,
-            cacheExtent: 400,
-            itemBuilder: (context, i) {
-              final p = _plantas[i];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: PlantaCard(
-                  planta: p,
-                  indice: i,
-                  nomePopular: _nomesPopulares[p.especie.trim()
-                      .toLowerCase()],
-                  onEditar: widget.readOnly ? null : () => _editPlanta(p),
-                  onRemover: widget.readOnly ? null : () => _removePlanta(p),
-                ),
-              );
-            },
-          )
-        else
-          ..._plantas
-              .asMap()
-              .entries
-              .map((entry) => _buildPlantaCard(entry.key, entry.value)),
+        PlantasAgrupadas(
+          plantas: _plantas,
+          nomesPopulares: _nomesPopulares,
+          ultimaUuid: _ultimaPlantaUuid,
+          onEditar: widget.readOnly ? null : (p) => _editPlanta(p),
+          onRemover: widget.readOnly ? null : (p) => _removePlanta(p),
+        ),
         const SizedBox(height: 12),
         Semantics(
           label: 'Adicionar planta',
@@ -2120,7 +2101,10 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     );
 
     if (result != null) {
-      setState(() => _plantas.add(result));
+      setState(() {
+        _plantas.add(result);
+        _ultimaPlantaUuid = result.uuid;
+      });
     }
   }
 
@@ -2139,6 +2123,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         final index = _plantas.indexWhere((p) => p.uuid == result.uuid);
         if (index != -1) {
           _plantas[index] = result;
+          _ultimaPlantaUuid = result.uuid;
         }
       });
     }

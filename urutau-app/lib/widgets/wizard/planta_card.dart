@@ -16,8 +16,11 @@ class PlantaCard extends StatelessWidget {
   final VoidCallback? onEditar;
   final VoidCallback? onRemover;
 
+  /// Destaque verde para a planta recém-adicionada/editada (cascata).
+  final bool destaque;
+
   /// Altura fixa do card (usada como itemExtent na lista de plantas).
-  static const double alturaCard = 104;
+  static const double alturaCard = 112;
 
   const PlantaCard({
     super.key,
@@ -26,6 +29,7 @@ class PlantaCard extends StatelessWidget {
     this.nomePopular,
     this.onEditar,
     this.onRemover,
+    this.destaque = false,
   });
 
   @override
@@ -33,9 +37,17 @@ class PlantaCard extends StatelessWidget {
     final popular = nomePopular;
 
     return Semantics(
-      label: 'Planta ${indice + 1}: ${planta.especie}',
-      child: Card(
-        margin: EdgeInsets.zero,
+      label: 'Planta ${indice + 1}: ${planta.especie}${destaque ? ' (nova)' : ''}',
+      child: Container(
+        decoration: destaque
+            ? BoxDecoration(
+                borderRadius: BorderRadius.circular(AppTokens.radiusM),
+                border: Border.all(color: AppTokens.mrvGreen, width: 1.5),
+              )
+            : null,
+        child: Card(
+          margin: EdgeInsets.zero,
+          color: destaque ? AppTokens.mrvGreenBg : null,
         child: SizedBox(
           height: alturaCard,
           child: Padding(
@@ -149,6 +161,7 @@ class PlantaCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }
