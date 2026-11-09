@@ -919,9 +919,26 @@ VGVG0069;UT04;0.0;1''';
 
   /// Atualiza o UUID de uma parcela e cascata para plantas e fotos.
   /// Usado para mapear UUID local → PocketBase record ID após push.
+  ///
+  /// BUG CORRIGIDO (regressão provada em test/remap_uuid_fk_test.dart): com
+  /// `PRAGMA foreign_keys = ON` (ver beforeOpen), o SQLite valida a chave
+  /// estrangeira a cada statement. Como `plantas.parcela_uuid` referencia
+  /// `parcelas.uuid`, NENHUMA ordem de updates passa:
+  ///   - filhos primeiro → o pai ainda não tem o UUID novo (recusa);
+  ///   - pai primeiro → os filhos ficam órfãos (recusa).
+  /// O sintoma em produção era silencioso: a parcela era marcada como
+  /// sincronizada mas mantinha o UUID local, e o sync seguinte criava um
+  /// registo DUPLICADO no servidor.
+  ///
+  /// `PRAGMA defer_foreign_keys = ON` adia a verificação para o COMMIT, e
+  /// dentro da transacção todos os apontadores ficam consistentes antes dele.
+  /// (O pragma `foreign_keys = OFF` NÃO serve: é no-op dentro de transacção.)
   Future<void> remapParcelaUuid(String oldUuid, String newUuid) async {
     if (oldUuid == newUuid) return;
     await transaction(() async {
+      // Adia a checagem de FK até ao commit desta transacção.
+      await customStatement('PRAGMA defer_foreign_keys = ON');
+
       await (update(plantas)..where((t) => t.parcelaUuid.equals(oldUuid)))
           .write(PlantasCompanion(parcelaUuid: Value(newUuid)));
       await (update(fotosParcela)..where((t) => t.parcelaUuid.equals(oldUuid)))
@@ -940,6 +957,7 @@ VGVG0069;UT04;0.0;1''';
                 t.entidadeUuid.equals(oldUuid)))
           .write(AtivosBrutosCompanion(entidadeUuid: Value(newUuid)));
       // <<< t9 patch: fim
+      // Pai por último: ao commit, filhos e pai já concordam no UUID novo.
       await (update(parcelas)..where((t) => t.uuid.equals(oldUuid)))
           .write(ParcelasCompanion(uuid: Value(newUuid)));
     });

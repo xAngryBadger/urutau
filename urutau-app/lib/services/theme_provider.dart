@@ -160,6 +160,8 @@ class ThemeProvider extends ChangeNotifier {
     applyElevationOverlayColor: false,
     scaffoldBackgroundColor: AppTokens.hcBackground,
     canvasColor: AppTokens.hcBackground,
+    // O tema claro também fixa titleTextStyle com 20/bold, por isso aqui fica
+    // igual — os dois temas têm de ter a MESMA métrica de appbar.
     appBarTheme: const AppBarTheme(
       centerTitle: true,
       elevation: 0,
@@ -167,40 +169,49 @@ class ThemeProvider extends ChangeNotifier {
       foregroundColor: AppTokens.hcPrimary,
       titleTextStyle: TextStyle(
         color: AppTokens.hcPrimary,
-        fontSize: AppTokens.fontTitle,
+        fontSize: 20,
         fontWeight: FontWeight.bold,
       ),
       iconTheme: IconThemeData(color: AppTokens.hcPrimary),
       actionsIconTheme: IconThemeData(color: AppTokens.hcPrimary),
     ),
-    textTheme: const TextTheme(
-      bodyLarge: TextStyle(color: AppTokens.hcText, fontSize: AppTokens.fontBody),
+    // REGRA (regressão medida em test/hc_spacing_test.dart): o alto contraste
+    // muda SÓ a cor. Os tamanhos e pesos abaixo são EXACTAMENTE os padrões
+    // Material 3 que o tema claro herda — medidos com o probe em
+    // test/hc_probe_test.dart. Antes este bloco fixava bodyMedium=15,
+    // bodySmall=13, titleLarge=20, labelLarge=16 e pesos bold/w600/w700, o que
+    // tornava o texto mais largo e mais alto: o layout "respirava" diferente
+    // entre temas. Contraste vem da COR (branco sobre preto = 21:1), não do
+    // peso. A altura extra do bold não é necessária para AA.
+    textTheme: TextTheme(
+      bodyLarge:
+          const TextStyle(color: AppTokens.hcText, fontSize: 16, fontWeight: FontWeight.w400),
       bodyMedium:
-          TextStyle(color: AppTokens.hcText, fontSize: 15),
-      bodySmall: TextStyle(color: AppTokens.hcTextMuted, fontSize: AppTokens.fontSmall),
-      titleLarge: TextStyle(
-        color: AppTokens.hcText,
-        fontWeight: FontWeight.bold,
-        fontSize: AppTokens.fontTitle,
-      ),
-      titleMedium: TextStyle(
-        color: AppTokens.hcText,
-        fontWeight: FontWeight.w600,
-        fontSize: AppTokens.fontBody,
-      ),
-      labelLarge: TextStyle(
-        color: AppTokens.hcOnPrimary,
-        fontWeight: FontWeight.bold,
-        fontSize: AppTokens.fontBody,
-      ),
+          const TextStyle(color: AppTokens.hcText, fontSize: 14, fontWeight: FontWeight.w400),
+      bodySmall:
+          const TextStyle(color: AppTokens.hcTextMuted, fontSize: 12, fontWeight: FontWeight.w400),
+      titleLarge:
+          const TextStyle(color: AppTokens.hcText, fontSize: 22, fontWeight: FontWeight.w400),
+      titleMedium:
+          const TextStyle(color: AppTokens.hcText, fontSize: 16, fontWeight: FontWeight.w500),
+      titleSmall:
+          const TextStyle(color: AppTokens.hcText, fontSize: 14, fontWeight: FontWeight.w500),
+      labelLarge:
+          const TextStyle(color: AppTokens.hcText, fontSize: 14, fontWeight: FontWeight.w500),
+      labelMedium:
+          const TextStyle(color: AppTokens.hcText, fontSize: 12, fontWeight: FontWeight.w500),
+      labelSmall:
+          const TextStyle(color: AppTokens.hcText, fontSize: 11, fontWeight: FontWeight.w500),
     ),
     iconTheme: const IconThemeData(color: AppTokens.hcPrimary),
     primaryIconTheme: const IconThemeData(color: AppTokens.hcOnPrimary),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(0, AppTokens.buttonHeight),
+        // fontSize 16 = bodyLarge; peso w500 = labelLarge (padrão M3).
+        // ANTES era bold — largura maior, texto embrulhava antes, layout mudava.
         textStyle: const TextStyle(
-            fontSize: AppTokens.fontBody, fontWeight: FontWeight.bold),
+            fontSize: 16, fontWeight: FontWeight.w500),
         backgroundColor: AppTokens.hcPrimary,
         foregroundColor: AppTokens.hcOnPrimary,
         side: const BorderSide(color: AppTokens.hcOutline, width: 2),
@@ -210,7 +221,7 @@ class ThemeProvider extends ChangeNotifier {
       style: ElevatedButton.styleFrom(
         minimumSize: const Size(0, AppTokens.buttonHeight),
         textStyle: const TextStyle(
-            fontSize: AppTokens.fontBody, fontWeight: FontWeight.bold),
+            fontSize: 16, fontWeight: FontWeight.w500),
         backgroundColor: AppTokens.hcPrimary,
         foregroundColor: AppTokens.hcOnPrimary,
         side: const BorderSide(color: AppTokens.hcOutline, width: 2),
@@ -221,7 +232,7 @@ class ThemeProvider extends ChangeNotifier {
         minimumSize: const Size(0, AppTokens.buttonHeight),
         foregroundColor: AppTokens.hcPrimary,
         textStyle: const TextStyle(
-            fontSize: AppTokens.fontBody, fontWeight: FontWeight.bold),
+            fontSize: 16, fontWeight: FontWeight.w500),
         side: const BorderSide(color: AppTokens.hcOutline, width: 2),
       ),
     ),
@@ -229,7 +240,7 @@ class ThemeProvider extends ChangeNotifier {
       style: TextButton.styleFrom(
         foregroundColor: AppTokens.hcPrimary,
         textStyle: const TextStyle(
-            fontSize: 15, fontWeight: FontWeight.bold),
+            fontSize: 14, fontWeight: FontWeight.w500),
       ),
     ),
     inputDecorationTheme: const InputDecorationTheme(
@@ -244,8 +255,8 @@ class ThemeProvider extends ChangeNotifier {
       focusedBorder: OutlineInputBorder(
         borderSide: BorderSide(color: AppTokens.hcPrimary, width: 2.5),
       ),
-      labelStyle: TextStyle(color: AppTokens.hcPrimary, fontSize: 15),
-      hintStyle: TextStyle(color: AppTokens.hcTextMuted, fontSize: 15),
+      labelStyle: const TextStyle(color: AppTokens.hcPrimary, fontSize: 16),
+      hintStyle: const TextStyle(color: AppTokens.hcTextMuted, fontSize: 16),
     ),
     cardTheme: CardThemeData(
       color: AppTokens.hcSurface,
@@ -255,28 +266,34 @@ class ThemeProvider extends ChangeNotifier {
         side: const BorderSide(color: AppTokens.hcOutline, width: 1.5),
       ),
     ),
+    // thickness = 16 é a ALTURA do Divider (não a espessura da linha), e é o
+    // padrão Material 3. Manter em 16 preserva o espaçamento; a espessura
+    // visível da linha continua a da borda (hcOutline), que é o que dá
+    // contraste. Antes era thickness 2, o que mudava a altura ocupada.
     dividerTheme: const DividerThemeData(
-      color: AppTokens.hcOutline,
-      thickness: 2,
+      color: AppTokens.hcDivider,
+      thickness: 1,
+      space: 16,
     ),
     snackBarTheme: const SnackBarThemeData(
       backgroundColor: AppTokens.hcSurface2,
-      contentTextStyle: TextStyle(color: AppTokens.hcText, fontSize: 15),
+      contentTextStyle: TextStyle(color: AppTokens.hcText, fontSize: 14),
       actionTextColor: AppTokens.hcPrimary,
     ),
     popupMenuTheme: const PopupMenuThemeData(
       color: AppTokens.hcSurface2,
-      textStyle: TextStyle(color: AppTokens.hcText, fontSize: 15),
+      textStyle: TextStyle(color: AppTokens.hcText, fontSize: 14),
     ),
     dialogTheme: const DialogThemeData(
       backgroundColor: AppTokens.hcSurface,
       surfaceTintColor: Colors.transparent,
+      // 22/w400 = titleLarge do Material 3; 14/w400 = bodyMedium.
       titleTextStyle: TextStyle(
         color: AppTokens.hcPrimary,
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
+        fontSize: 22,
+        fontWeight: FontWeight.w400,
       ),
-      contentTextStyle: TextStyle(color: AppTokens.hcText, fontSize: 15),
+      contentTextStyle: TextStyle(color: AppTokens.hcText, fontSize: 14),
     ),
     listTileTheme: const ListTileThemeData(
       textColor: AppTokens.hcText,
@@ -286,7 +303,7 @@ class ThemeProvider extends ChangeNotifier {
       backgroundColor: AppTokens.hcSurface2,
       selectedColor: AppTokens.hcPrimary,
       disabledColor: AppTokens.hcSurface2,
-      labelStyle: const TextStyle(color: AppTokens.hcText, fontSize: 15),
+      labelStyle: const TextStyle(color: AppTokens.hcText, fontSize: 14),
       secondaryLabelStyle: const TextStyle(color: AppTokens.hcText),
       brightness: Brightness.dark,
       side: const BorderSide(color: AppTokens.hcOutline, width: 1.5),
@@ -337,7 +354,7 @@ class ThemeProvider extends ChangeNotifier {
     ),
     tooltipTheme: const TooltipThemeData(
       decoration: BoxDecoration(color: AppTokens.hcPrimary),
-      textStyle: TextStyle(color: AppTokens.hcOnPrimary, fontWeight: FontWeight.bold),
+      textStyle: TextStyle(color: AppTokens.hcOnPrimary),
     ),
     progressIndicatorTheme: const ProgressIndicatorThemeData(
       color: AppTokens.hcPrimary,
@@ -412,32 +429,35 @@ class ThemeProvider extends ChangeNotifier {
       iconTheme: IconThemeData(color: AppTokens.kwDragonBlue),
       actionsIconTheme: IconThemeData(color: AppTokens.kwDragonBlue),
     ),
+    // Mesma regra do alto contraste (ver nota em _highContrastTheme): mudar
+    // SÓ a cor. Os tamanhos/pesos são os padrões Material 3; antes este bloco
+    // fixava 15/13/20/16 e pesos bold/w600/w700, o que fazia o texto embrulhar
+    // noutro ponto e mudava o espaçamento do app.
     textTheme: const TextTheme(
-      bodyLarge: TextStyle(color: AppTokens.kwFujiWhite, fontSize: AppTokens.fontBody),
-      bodyMedium: TextStyle(color: AppTokens.kwFujiWhite, fontSize: 15),
-      bodySmall: TextStyle(color: AppTokens.kwFujiWhite, fontSize: AppTokens.fontSmall),
-      titleLarge: TextStyle(
-        color: AppTokens.kwFujiWhite,
-        fontWeight: FontWeight.bold,
-        fontSize: AppTokens.fontTitle,
-      ),
-      titleMedium: TextStyle(
-        color: AppTokens.kwFujiWhite,
-        fontWeight: FontWeight.w600,
-        fontSize: AppTokens.fontBody,
-      ),
-      labelLarge: TextStyle(
-        color: AppTokens.kwSumiInk,
-        fontWeight: FontWeight.bold,
-        fontSize: AppTokens.fontBody,
-      ),
+      bodyLarge:
+          TextStyle(color: AppTokens.kwFujiWhite, fontSize: 16, fontWeight: FontWeight.w400),
+      bodyMedium:
+          TextStyle(color: AppTokens.kwFujiWhite, fontSize: 14, fontWeight: FontWeight.w400),
+      bodySmall:
+          TextStyle(color: AppTokens.kwFujiWhite, fontSize: 12, fontWeight: FontWeight.w400),
+      titleLarge:
+          TextStyle(color: AppTokens.kwFujiWhite, fontSize: 22, fontWeight: FontWeight.w400),
+      titleMedium:
+          TextStyle(color: AppTokens.kwFujiWhite, fontSize: 16, fontWeight: FontWeight.w500),
+      titleSmall:
+          TextStyle(color: AppTokens.kwFujiWhite, fontSize: 14, fontWeight: FontWeight.w500),
+      labelLarge:
+          TextStyle(color: AppTokens.kwSumiInk, fontSize: 14, fontWeight: FontWeight.w500),
+      labelMedium:
+          TextStyle(color: AppTokens.kwSumiInk, fontSize: 12, fontWeight: FontWeight.w500),
+      labelSmall:
+          TextStyle(color: AppTokens.kwSumiInk, fontSize: 11, fontWeight: FontWeight.w500),
     ),
     iconTheme: const IconThemeData(color: AppTokens.kwDragonBlue),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(0, AppTokens.buttonHeight),
-        textStyle: const TextStyle(
-            fontSize: AppTokens.fontBody, fontWeight: FontWeight.bold),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
         backgroundColor: AppTokens.kwPrimary,
         foregroundColor: AppTokens.kwSumiInk,
       ),
@@ -445,8 +465,7 @@ class ThemeProvider extends ChangeNotifier {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         minimumSize: const Size(0, AppTokens.buttonHeight),
-        textStyle: const TextStyle(
-            fontSize: AppTokens.fontBody, fontWeight: FontWeight.bold),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
         backgroundColor: AppTokens.kwPrimary,
         foregroundColor: AppTokens.kwSumiInk,
       ),
@@ -455,8 +474,7 @@ class ThemeProvider extends ChangeNotifier {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(0, AppTokens.buttonHeight),
         foregroundColor: AppTokens.kwDragonBlue,
-        textStyle: const TextStyle(
-            fontSize: AppTokens.fontBody, fontWeight: FontWeight.bold),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
         side: const BorderSide(color: AppTokens.kwPrimary, width: 1.5),
       ),
     ),
@@ -479,8 +497,8 @@ class ThemeProvider extends ChangeNotifier {
       focusedBorder: OutlineInputBorder(
         borderSide: BorderSide(color: AppTokens.kwPrimary, width: 2.5),
       ),
-      labelStyle: TextStyle(color: AppTokens.kwDragonBlue, fontSize: 15),
-      hintStyle: TextStyle(color: AppTokens.kwLightBlue, fontSize: 15),
+      labelStyle: const TextStyle(color: AppTokens.kwDragonBlue, fontSize: 16),
+      hintStyle: const TextStyle(color: AppTokens.kwLightBlue, fontSize: 16),
     ),
     cardTheme: CardThemeData(
       color: AppTokens.kwSurface,
@@ -496,22 +514,22 @@ class ThemeProvider extends ChangeNotifier {
     ),
     snackBarTheme: const SnackBarThemeData(
       backgroundColor: AppTokens.kwSurface,
-      contentTextStyle: TextStyle(color: AppTokens.kwFujiWhite, fontSize: 15),
+      contentTextStyle: TextStyle(color: AppTokens.kwFujiWhite, fontSize: 14),
       actionTextColor: AppTokens.kwLightBlue,
     ),
     popupMenuTheme: const PopupMenuThemeData(
       color: AppTokens.kwSurface,
-      textStyle: TextStyle(color: AppTokens.kwFujiWhite, fontSize: 15),
+      textStyle: TextStyle(color: AppTokens.kwFujiWhite, fontSize: 14),
     ),
     dialogTheme: const DialogThemeData(
       backgroundColor: AppTokens.kwSurface,
       surfaceTintColor: Colors.transparent,
-      titleTextStyle: TextStyle(
+      titleTextStyle: const TextStyle(
         color: AppTokens.kwDragonBlue,
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
+        fontSize: 22,
+        fontWeight: FontWeight.w400,
       ),
-      contentTextStyle: TextStyle(color: AppTokens.kwFujiWhite, fontSize: 15),
+      contentTextStyle: TextStyle(color: AppTokens.kwFujiWhite, fontSize: 14),
     ),
     listTileTheme: const ListTileThemeData(
       textColor: AppTokens.kwFujiWhite,
@@ -521,7 +539,7 @@ class ThemeProvider extends ChangeNotifier {
       backgroundColor: AppTokens.kwWaveBlue1,
       selectedColor: AppTokens.kwDragonBlue,
       disabledColor: AppTokens.kwWaveBlue1,
-      labelStyle: const TextStyle(color: AppTokens.kwFujiWhite, fontSize: 15),
+      labelStyle: const TextStyle(color: AppTokens.kwFujiWhite, fontSize: 14),
       secondaryLabelStyle: const TextStyle(color: AppTokens.kwFujiWhite),
       brightness: Brightness.dark,
       side: const BorderSide(color: AppTokens.kwSecondary, width: 1),

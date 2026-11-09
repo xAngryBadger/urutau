@@ -314,7 +314,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (syncService.isSyncing) {
       return Container(
         width: double.infinity,
-        color: Colors.blue[50],
+        // Deriva do tema activo (antes Colors.blue[50] fixo vazava nos escuros).
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
@@ -326,7 +327,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 12),
             Text(
               'Sincronizando dados...',
-              style: TextStyle(color: Colors.blue[800]),
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary),
             ),
           ],
         ),
@@ -559,7 +561,10 @@ class _HomeScreenState extends State<HomeScreen> {
           width: double.infinity,
           margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Material(
-            color: Colors.blue[50],
+            // ANTES: Colors.blue[50] fixo — um azul-claro do tema CLARO que
+            // vazava nos dois temas escuros (alto contraste e Kanagawa),
+            // deixando o banner "de outro app". Agora deriva do tema activo.
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
@@ -582,8 +587,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           ...list.map((p) => ListTile(
-                                leading: const Icon(Icons.edit_note,
-                                    color: Colors.blue),
+                                leading: Icon(Icons.edit_note,
+                                    color: Theme.of(context).colorScheme.primary),
                                 title: Text(
                                     '${p.propriedade} · ${p.propUt} · Parcela ${p.idParcela}'),
                                 onTap: () {
