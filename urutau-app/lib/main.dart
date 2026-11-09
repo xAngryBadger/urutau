@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+import 'package:drift/drift.dart' show Value;
 import 'data/database.dart';
 import 'services/backup_service.dart';
 import 'services/device_service.dart';
@@ -34,6 +37,11 @@ void main() async {
     await BackupService.runPendingRestore();
     await BackupService.cleanPreRestoreFiles();
     await _migratePlaintextPasswords(db);
+    // Perfil de demonstração: primeiro arranque sem conta nenhuma semeia um
+    // utilizador convidado LOCAL, para que quem instalou o app possa explorar
+    // (Home, propriedades, wizard de parcela) sem internet e sem login.
+    // Só semeia quando `usuarios` está VAZIA — nunca toca em conta real.
+    await semearConvidadoSeNecessario(db);
     // RC-13: registra o dispositivo (modelo/SO/versão app) na tabela Dispositivos
     try {
       await DeviceService.registrarDispositivo(db);
@@ -96,6 +104,55 @@ Future<void> _migratePlaintextPasswords(AppDatabase db) async {
       }
     }
   } catch (_) {}
+}
+
+/// Email do convidado semeado no primeiro arranque. Sintético (domínio .local
+/// reservado) para não colidir com nenhum email real.
+const String kConvidadoEmail = 'convidado@urutau.local';
+
+/// Semeia um utilizador convidado local quando o app arranca sem nenhuma conta.
+///
+/// Motivo: um instalador novo (ex.: demonstração para um usuário de campo)
+/// caía na tela de login, que parece exigir internet. O cadastro já funcionava
+/// offline, mas ninguém descobre isso. Com o convidado semeado, o SplashScreen
+/// vai direto para /home e a exploração é 100% offline.
+///
+/// Salvaguardas:
+///  - só semeia se `usuarios` estiver VAZIA (nunca sobrescreve conta real);
+///  - o sync NÃO está configurado neste estado (sem server_url), portanto o
+///    convidado não é enviado a nenhum servidor;
+///  - "Sair" continua disponível: quem quiser conta real faz logout e cria/
+///    entra normalmente. O convidado fica na lista e pode ser ignorado.
+Future<void> semearConvidadoSeNecessario(AppDatabase db) async {
+  try {
+    final usuarios = await db.getAllUsuarios();
+    if (usuarios.isNotEmpty) return;
+
+    // Insere PRIMEIRO: se a gravação de preferências falhar (ex.: plugin
+    // indisponível), a conta convidado já existe e o próximo arranque cai em
+    // /home normalmente. A ordem inversa perderia a conta sem se notar.
+    final uuid = const Uuid().v4();
+    await db.insertUsuario(UsuariosCompanion.insert(
+      uuid: uuid,
+      nome: 'Convidado',
+      email: kConvidadoEmail,
+      // Hash de uma string fixa: a senha do convidado não é segredo e não é
+      // usada (entra direto), mas o campo é NOT NULL e o login compara hash.
+      senha: PasswordService.hashPassword('convidado-local'),
+      isAdmin: const Value(false),
+    ));
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('current_user_uuid', uuid);
+    await prefs.setString('current_user_name', 'Convidado');
+    await prefs.setBool('current_user_is_admin', false);
+    // Não mostrar o wizard de boas-vindas a quem acabou de instalar.
+    await prefs.setBool('first_run_wizard_skipped', true);
+  } catch (e) {
+    // Semear convidado é conveniência, nunca bloqueia o arranque. Mas o erro
+    // tem de ser visível: já escondeu uma falha real durante o desenvolvimento.
+    debugPrint('semearConvidadoSeNecessario falhou: $e');
+  }
 }
 
 class UrutauApp extends StatefulWidget {
