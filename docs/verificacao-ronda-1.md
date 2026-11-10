@@ -107,7 +107,7 @@ Como foi disparado cada sync: no app (emulador), marquei 1 parcela local como `p
 Verificação de duplicados (sync 3): `GET /api/collections/parcelas/records?perPage=500` → 2 registos, **0 ids duplicados** (`Group-Object id` sem grupos > 1).
 → **PASS** — sync 3× não duplica no servidor; o re-push da mesma identidade faz upsert (parcelas estaciona em 2, plantas em 53). A trilha_auditoria cresce por desenho (é um log), não é duplicação de dados de negócio.
 
-Nota informativa (não é falha deste check): durante os syncs o pull reconciliou UUIDs locais e as parcelas locais passaram de 74 para 72 (0 com deleted_at). O check 3 (install -r) mediu 74→74; a variação 74→72 aconteceu no pull do sync. Vale olhar na ronda 2.
+RETRATAÇÃO (verificador, após o desafio do capitão — confirmado com comandos): a menção anterior a "74→72 no pull" era **artefacto de medição meu**, não perda de dados. O "72" foi lido numa cópia restaurada do DB durante o teste de modo avião (ficheiro guest de 446464 bytes, antes do segundo `cp` do backup), comparando estados diferentes. No DB live atual (pós-sync, pós-restore): `SELECT COUNT(*) FROM parcelas` = **74** (72 com `user_id=''` — as seed-* de fábrica, sem dono — + 2 com `user_id='fdw8ib4v9xcltnk'`), `deleted_at IS NOT NULL` = 0, `COUNT(DISTINCT uuid)` = 74, e `trilha_auditoria` só tem `sync_push`/`update` — **nenhuma ação de delete/purge**. Nada se perdeu no pull; o check 3 (install -r) mediu 74→74 no DB live.
 
 ## 5 — Temas: layout idêntico nos 3 temas
 
@@ -151,7 +151,7 @@ Print: [evidencias-emulador/modo-aviao-primeira-abertura.png](evidencias-emulado
 ## Achados laterais (não bloqueiam esta ronda)
 
 1. **dist/ contém também o APK antigo** `urutau-2.0.0-release.apk` (71.2 MB, 09/11 14:09) ao lado do `urutau-2.0.1-release.apk` correcto. O APK de distribuição correcto está lá e assinado certo; o antigo pode confundir — candidato a remover na ronda 2.
-2. **Pull do sync reduziu parcelas locais de 74 → 72** (reconciliação de UUID no pull; 0 soft-deleted). Não duplica no servidor, mas worth investigar se alguma parcela local foi descartada indevidamente.
+2. **RETRATADO** — a suspeita de "pull reduziu parcelas locais de 74 → 72" era artefacto de medição do verificador (leu 72 numa cópia restaurada do DB durante o teste de modo avião, não no DB live). DB live pós-sync: 74 parcelas (72 seed com `user_id=''` + 2 do admin), 0 deleted, trilha só com `sync_push`/`update`. Nada perdido. Ver a RETRATAÇÃO na secção 4.
 3. analyze com 54 warnings / 149 infos (0 erros) — dentro do gate, mas a limpeza pode entrar na ronda 2.
 
 ## Comandos corridos (resumo)
