@@ -420,7 +420,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     label: Text('${syncService.pendingCount}'),
                     child: IconButton(
                       icon: syncService.isSyncing
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 24,
                               height: 24,
                               child: CircularProgressIndicator(
