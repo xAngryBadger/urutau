@@ -1376,7 +1376,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.errorContainer,
-              foregroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('LIMPAR TUDO'),
