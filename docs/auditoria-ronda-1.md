@@ -60,3 +60,36 @@ Vazam do tema claro para os escuros. Os padrões perigosos:
 1. **Comparar tema compara o mesmo ecrã.** Ver B4.
 2. **Trocar fundo obriga a rever o texto do mesmo bloco.** Ver B6. Um fix de cor é sempre de par: fundo + texto + ícone.
 3. **Cor medida, não cor lida.** Um teste de contraste por tema apanha B6 automaticamente.
+4. **`catch (_) {}` esconde blockers.** Todos os 7 bugs de contrato desta semana morreram num `catch` vazio. Onde um erro for possível, tem de ser visível.
+5. **Erro do teste também se engole.** Escrevi um teste de contrato rede↔servidor com `catch { return null }` e ele saltava em silêncio. Com o erro exposto, viu-se que era o sandbox a bloquear a rede do Dart VM.
+
+## O que NÃO consegui fazer, e porquê (honesto)
+
+**Guarda de contrato rede↔servidor.** Escrevi `test/contrato_servidor_test.dart`: lia o schema
+real de `http://127.0.0.1:8090/api/collections/*` e falhava se o app enviasse um campo
+inexistente, se um campo obrigatório sumisse, ou se `status_verificacao` ganhasse/perdesse
+valores. **Não corre neste ambiente:** o Dart VM do `flutter test` está debaixo do sandbox do
+DSH e não consegue sair para `127.0.0.1:8090`, ao passo que o `pwsh` consegue (mesma máquina,
+mesmo URL). Apaguei o ficheiro em vez de deixar um teste que só salta.
+
+**Para o correr fora do sandbox**, o comando é:
+```
+dart test/test_contrato_manual.dart   # ou flutter test, fora do sandbox
+```
+e a lógica é: login em `_superusers/auth-with-password`, depois
+`GET /api/collections/<coleção>` com o token, e comparar com a lista que o app envia
+(`parcelas`, `propriedades`, `uts`, `plantas`). A lista está na descrição da task t11.
+Isto é a peça que faltava para tornar a classe de bug impossível, e não uma correcção.
+
+## Resto da B5 ainda aberto (ronda 2)
+
+Feito: wizard (planta_card, plantas_agrupadas, wizard_stepper), banner da home.
+Falta: `home_screen.dart` (linhas 338–380 banners de erro/pendente, 688–701 estado vazio,
+817/821 cinzas), `explorer_screen.dart` (1519–1556, 1333–1336), `admin_screen.dart`
+(786–805, 1602, 1615, 1639, 1652), `settings_screen.dart` (163–189, 233–245),
+`login_screen.dart` (269–280), `conflict_resolution_dialog.dart` (57, 122–136),
+`low_space_banner.dart` (45–57), `audit_log_screen.dart` (122–131), `storage_screen.dart`.
+Padrão de substituição: `colorScheme.onSurfaceVariant` para texto secundário,
+`colorScheme.surfaceContainerHighest` para fundos de aviso, `colorScheme.error` para erro,
+`colorScheme.primary` para realce. Todos os pares são cobertos por
+`test/theme_legibilidade_test.dart` (4.5:1 texto, 3:1 não-texto).
