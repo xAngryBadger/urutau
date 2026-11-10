@@ -609,7 +609,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
-                    Icon(Icons.edit_note, color: Colors.blue[700], size: 24),
+                    // Cor do tema, não fixa: `primary` é escolhido por tema para
+                    // contrastar com a superfície (amarelo no alto contraste,
+                    // dragonBlue no Kanagawa, verde-sálvia no claro). Fixar
+                    // Colors.blue[900] aqui deixaria o texto invisível nos
+                    // temas escuros — regressão introduzida pela própria
+                    // correcção do fundo do banner.
+                    Icon(Icons.edit_note,
+                        color: Theme.of(context).colorScheme.primary, size: 24),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -617,13 +624,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             ? '1 parcela incompleta — toque para retomar'
                             : '${list.length} parcelas incompletas — toque para retomar',
                         style: TextStyle(
-                          color: Colors.blue[900],
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
                         ),
                       ),
                     ),
-                    Icon(Icons.chevron_right, color: Colors.blue[700]),
+                    Icon(Icons.chevron_right,
+                        color: Theme.of(context).colorScheme.primary),
                   ],
                 ),
               ),
