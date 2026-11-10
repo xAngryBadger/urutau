@@ -408,7 +408,21 @@ class SyncService extends ChangeNotifier {
             .getFullList(filter: 'email = "$safeEmail"'),
       );
       if (records.isNotEmpty) {
-        return records.first.id;
+        // Política de colisão de identidade (auditoria servidor §7): NUNCA
+        // devolver o id de um registro existente só por email — a senha
+        // precisa ser verificada PELO SERVIDOR (authWithPassword) antes de
+        // adotar o id. Se o email existe mas a senha não confere, recusa.
+        final existing = records.first;
+        try {
+          await _withRetry(
+            () => _pb!.collection('users').authWithPassword(email, senha),
+          );
+          return existing.id;
+        } catch (_) {
+          debugPrint(
+              'registrarUsuarioNoServidor: email já existe no servidor e a senha não confere — id NÃO adotado.');
+          return null;
+        }
       }
     } catch (_) {}
 
