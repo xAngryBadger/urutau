@@ -77,9 +77,9 @@ class _PlantasAgrupadasState extends State<PlantasAgrupadas> {
         // resumo enxuto: total + quantas espécies diferentes
         Text(
           '${widget.plantas.length} plantas · $nEspecies espécies',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: AppTokens.fontCaption,
-            color: Colors.black54,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
         if (nEspecies > 1) ...[
@@ -166,9 +166,9 @@ class _GrupoWidget extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: AppTokens.spaceS),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(AppTokens.radiusM),
-        border: Border.all(color: Colors.grey.withAlpha(40)),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

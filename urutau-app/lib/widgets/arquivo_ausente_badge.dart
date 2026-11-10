@@ -10,22 +10,24 @@ class ArquivoAusenteBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Cores do tema (antes laranja fixo + branco: vazava nos temas escuros).
+    final cs = Theme.of(context).colorScheme;
     return Positioned(
       left: 4,
       top: 4,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.orange.shade800,
+          color: cs.tertiary,
           borderRadius: BorderRadius.circular(4),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.warning_amber_rounded, size: 12, color: Colors.white),
-            SizedBox(width: 4),
+            Icon(Icons.warning_amber_rounded, size: 12, color: cs.onTertiary),
+            const SizedBox(width: 4),
             Text('arquivo ausente',
-                style: TextStyle(color: Colors.white, fontSize: 10)),
+                style: TextStyle(color: cs.onTertiary, fontSize: 10)),
           ],
         ),
       ),

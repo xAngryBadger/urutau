@@ -101,12 +101,10 @@ class _StepDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    final cor = concluida
-        ? AppTokens.success
-        : atual
-            ? primary
-            : Theme.of(context).colorScheme.onSurfaceVariant;
+    final cs = Theme.of(context).colorScheme;
+    final primary = cs.primary;
+    // Concluída e atual usam a cor primária do tema; pendente, onSurfaceVariant.
+    final cor = concluida || atual ? primary : cs.onSurfaceVariant;
     return Semantics(
       label: 'Etapa ${indice + 1}: $nome',
       button: true,
@@ -123,11 +121,7 @@ class _StepDot extends StatelessWidget {
                 height: 30,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: concluida
-                      ? AppTokens.success
-                      : atual
-                          ? primary
-                          : Colors.transparent,
+                  color: concluida || atual ? primary : Colors.transparent,
                   border: Border.all(
                     color: cor,
                     width: atual || concluida ? 0 : 2,
@@ -135,14 +129,13 @@ class _StepDot extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: concluida
-                    ? const Icon(Icons.check,
-                        size: 16, color: Colors.white)
+                    ? Icon(Icons.check, size: 16, color: cs.onPrimary)
                     : Text(
                         '${indice + 1}',
                         style: TextStyle(
                           fontSize: AppTokens.fontSmall,
                           fontWeight: FontWeight.bold,
-                          color: atual ? Colors.white : cor,
+                          color: atual ? cs.onPrimary : cor,
                         ),
                       ),
               ),
@@ -154,7 +147,7 @@ class _StepDot extends StatelessWidget {
                 style: TextStyle(
                   fontSize: AppTokens.fontCaption,
                   fontWeight: atual ? FontWeight.bold : FontWeight.normal,
-                  color: atual ? primary : Colors.black54,
+                  color: atual ? primary : cs.onSurfaceVariant,
                 ),
               ),
             ],

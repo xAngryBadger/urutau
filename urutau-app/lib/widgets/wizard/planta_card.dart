@@ -85,7 +85,7 @@ class PlantaCard extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: AppTokens.fontSmall,
                                   // Cor do tema: onSurfaceVariant garante >=4.5:1
-                                  // sobre o card nos TRES temas. Colors.grey[600]
+                                  // sobre o card nos TRES temas (um cinza fixo
                                   // dava ~2.4:1 no alto contraste e no Kanagawa.
                                   color: Theme.of(context)
                                       .colorScheme
@@ -115,9 +115,9 @@ class PlantaCard extends StatelessWidget {
                                   .onSurfaceVariant,
                             ),
                           if (planta.fotoEspeciePath != null)
-                            const _MiniChip(
+                            _MiniChip(
                               rotulo: 'Foto',
-                              cor: AppTokens.mrvGreen,
+                              cor: Theme.of(context).colorScheme.primary,
                               icone: Icons.photo_camera,
                             ),
                         ],
@@ -161,7 +161,7 @@ class PlantaCard extends StatelessWidget {
                         button: true,
                         child: IconButton(
                           icon: Icon(Icons.delete,
-                              size: 18, color: Colors.red[300]),
+                              size: 18, color: Theme.of(context).colorScheme.error),
                           onPressed: onRemover,
                           visualDensity: VisualDensity.compact,
                         ),

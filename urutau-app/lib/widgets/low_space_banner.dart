@@ -39,22 +39,28 @@ class _LowSpaceBannerState extends State<LowSpaceBanner> {
       valueListenable: _freeSpaceNotifier,
       builder: (context, freeGB, _) {
         if (freeGB < 0 || freeGB >= 1.0) return const SizedBox.shrink();
+        // Pares do tema: container + on-container (antes red[100]/amber[100]
+        // com texto [900] — invisível nos temas escuros).
+        final cs = Theme.of(context).colorScheme;
+        final critico = freeGB < 0.2;
+        final bg = critico ? cs.errorContainer : cs.tertiaryContainer;
+        final fg = critico ? cs.onErrorContainer : cs.onTertiaryContainer;
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: freeGB < 0.2 ? Colors.red.shade100 : Colors.amber.shade100,
+          color: bg,
           child: Row(
             children: [
-              Icon(freeGB < 0.2 ? Icons.error_outline : Icons.warning_amber,
-                  size: 18, color: freeGB < 0.2 ? Colors.red : Colors.amber.shade800),
+              Icon(critico ? Icons.error_outline : Icons.warning_amber,
+                  size: 18, color: fg),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '${freeGB.toStringAsFixed(1)} GB livres — '
-                  '${freeGB < 0.2 ? 'crítico' : 'pouco espaço'}',
+                  '${critico ? 'crítico' : 'pouco espaço'}',
                   style: TextStyle(
                     fontSize: 13,
-                    color: freeGB < 0.2 ? Colors.red.shade900 : Colors.amber.shade900,
+                    color: fg,
                   ),
                 ),
               ),
