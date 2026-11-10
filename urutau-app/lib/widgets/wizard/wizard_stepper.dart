@@ -63,7 +63,9 @@ class WizardStepper extends StatelessWidget {
                     child: Container(
                       height: 2,
                       margin: const EdgeInsets.only(bottom: 22),
-                      color: i <= etapaAtual ? primary : Colors.grey[300],
+                      color: i <= etapaAtual
+                          ? primary
+                          : Theme.of(context).colorScheme.outlineVariant,
                     ),
                   ),
                 _StepDot(
@@ -104,7 +106,7 @@ class _StepDot extends StatelessWidget {
         ? AppTokens.success
         : atual
             ? primary
-            : Colors.grey[400]!;
+            : Theme.of(context).colorScheme.onSurfaceVariant;
     return Semantics(
       label: 'Etapa ${indice + 1}: $nome',
       button: true,

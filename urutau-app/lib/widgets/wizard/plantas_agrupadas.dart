@@ -201,7 +201,11 @@ class _GrupoWidget extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: AppTokens.fontCaption,
-                            color: Colors.grey[600],
+                            // onSurfaceVariant: >=4.5:1 sobre o card nos 3 temas
+                            // (grey[600] dava ~2.4:1 nos escuros).
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                         ),
                     ],
@@ -212,12 +216,16 @@ class _GrupoWidget extends StatelessWidget {
                     style: TextStyle(
                       fontSize: AppTokens.fontSmall,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey[700],
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant,
                     ),
                   ),
                   Icon(
                     aberto ? Icons.expand_less : Icons.expand_more,
-                    color: Colors.grey[600],
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurfaceVariant,
                   ),
                 ],
               ),

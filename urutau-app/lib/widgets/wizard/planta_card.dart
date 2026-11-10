@@ -84,7 +84,12 @@ class PlantaCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: AppTokens.fontSmall,
-                                  color: Colors.grey[600],
+                                  // Cor do tema: onSurfaceVariant garante >=4.5:1
+                                  // sobre o card nos TRES temas. Colors.grey[600]
+                                  // dava ~2.4:1 no alto contraste e no Kanagawa.
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               )
                             : null,
@@ -97,13 +102,17 @@ class PlantaCard extends StatelessWidget {
                           _MiniChip(
                             rotulo:
                                 'Alt ${planta.alturaCm.toStringAsFixed(0)} cm',
-                            cor: Colors.grey[700]!,
+                            cor: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                           if (planta.dapCm != null)
                             _MiniChip(
                               rotulo:
                                   'DAP ${planta.dapCm!.toStringAsFixed(1)} cm',
-                              cor: Colors.grey[700]!,
+                              cor: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                           if (planta.fotoEspeciePath != null)
                             const _MiniChip(
@@ -124,7 +133,9 @@ class PlantaCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: AppTokens.fontCaption,
-                            color: Colors.grey[500],
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                         ),
                       ),
