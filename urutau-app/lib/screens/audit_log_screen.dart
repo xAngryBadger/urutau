@@ -117,27 +117,30 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
           ),
         ),
         if (_error.isNotEmpty)
-          Container(
-            width: double.infinity,
-            color: Colors.red[50],
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(Icons.error_outline, color: Colors.red[700], size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _error,
-                    style: TextStyle(color: Colors.red[700], fontSize: 13),
+          Builder(builder: (context) {
+            final cs = Theme.of(context).colorScheme;
+            return Container(
+              width: double.infinity,
+              color: cs.errorContainer,
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: cs.onErrorContainer, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _error,
+                      style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+                    ),
                   ),
-                ),
-                TextButton(
-                  onPressed: () => _loadLogs(),
-                  child: const Text('Tentar novamente', style: TextStyle(fontSize: 12)),
-                ),
-              ],
-            ),
-          ),
+                  TextButton(
+                    onPressed: () => _loadLogs(),
+                    child: const Text('Tentar novamente', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            );
+          }),
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())

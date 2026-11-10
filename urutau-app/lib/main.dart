@@ -302,14 +302,15 @@ class _AppErrorScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Material(
-      color: Colors.white,
+      color: cs.surface,
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            Icon(Icons.error_outline, size: 64, color: cs.error),
             const SizedBox(height: 24),
             const Text(
               'Algo deu errado',
@@ -319,7 +320,7 @@ class _AppErrorScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               errorMessage,
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
               textAlign: TextAlign.center,
               maxLines: 5,
               overflow: TextOverflow.ellipsis,

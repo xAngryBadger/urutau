@@ -21,8 +21,8 @@ class IntegrityErrorScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.warning_amber_rounded,
-                size: 72, color: Colors.amber),
+            Icon(Icons.warning_amber_rounded,
+                size: 72, color: theme.colorScheme.tertiary),
             const SizedBox(height: 24),
             Text(
               'Problema detectado no banco de dados',
@@ -33,8 +33,8 @@ class IntegrityErrorScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               error,
-              style:
-                  theme.textTheme.bodyMedium?.copyWith(color: Colors.grey),
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               textAlign: TextAlign.center,
               maxLines: 5,
               overflow: TextOverflow.ellipsis,
