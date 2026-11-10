@@ -1,6 +1,7 @@
 import 'dart:io' if (dart.library.html) 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
@@ -307,10 +308,12 @@ class _BrokenImagePlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
-      color: const Color(0xFFE0E0E0),
-      child: const Center(
-        child: Icon(IconData(0xe09a, fontFamily: 'MaterialIcons'), size: 40),
+      color: cs.surfaceContainerHighest,
+      child: Center(
+        child: Icon(IconData(0xe09a, fontFamily: 'MaterialIcons'),
+            size: 40, color: cs.onSurfaceVariant),
       ),
     );
   }
