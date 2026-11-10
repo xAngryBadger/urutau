@@ -66,8 +66,8 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red[700],
-              foregroundColor: Colors.white,
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Deletar'),
@@ -82,8 +82,10 @@ class _AdminScreenState extends State<AdminScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('"${usuario.nome}" deletado com sucesso.'),
-        backgroundColor: Colors.green[700],
+        content: Text('"${usuario.nome}" deletado com sucesso.',
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onPrimaryContainer)),
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         duration: const Duration(seconds: 3),
       ),
           );
@@ -93,8 +95,10 @@ class _AdminScreenState extends State<AdminScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Erro ao deletar: $e'),
-        backgroundColor: Colors.red[700],
+        content: Text('Erro ao deletar: $e',
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onErrorContainer)),
+        backgroundColor: Theme.of(context).colorScheme.errorContainer,
         duration: const Duration(seconds: 5),
       ),
           );
@@ -142,8 +146,10 @@ class _AdminScreenState extends State<AdminScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('"${usuario.nome}" ${novoStatus ? "agora é admin" : "não é mais admin"}.'),
-        backgroundColor: Colors.green[700],
+        content: Text('"${usuario.nome}" ${novoStatus ? "agora é admin" : "não é mais admin"}.',
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onPrimaryContainer)),
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         duration: const Duration(seconds: 3),
       ),
           );
@@ -152,7 +158,12 @@ class _AdminScreenState extends State<AdminScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red[700], duration: const Duration(seconds: 5)),
+            SnackBar(
+              content: Text('Erro: $e',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onErrorContainer)),
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
+              duration: const Duration(seconds: 5)),
           );
         }
       }
@@ -164,7 +175,7 @@ class _AdminScreenState extends State<AdminScreen> {
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Servidor não configurado.'), duration: Duration(seconds: 5)),
+        SnackBar(content: Text('Servidor não configurado.'), duration: Duration(seconds: 5)),
       );
       return;
     }
@@ -172,9 +183,9 @@ class _AdminScreenState extends State<AdminScreen> {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning, color: Colors.red),
+            Icon(Icons.warning, color: Theme.of(ctx).colorScheme.error),
             SizedBox(width: 8),
             Expanded(child: Text('Deletar do Servidor')),
           ],
@@ -190,8 +201,8 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Deletar do Servidor'),
@@ -214,8 +225,14 @@ class _AdminScreenState extends State<AdminScreen> {
           SnackBar(
             content: Text(deleted
                 ? '"${usuario.nome}" removido do servidor!'
-                : 'Usuário não encontrado no servidor.'),
-            backgroundColor: deleted ? Colors.green : Colors.orange,
+                : 'Usuário não encontrado no servidor.',
+                style: TextStyle(
+                    color: deleted
+                        ? Theme.of(context).colorScheme.onPrimaryContainer
+                        : Theme.of(context).colorScheme.onTertiaryContainer)),
+            backgroundColor: deleted
+                ? Theme.of(context).colorScheme.primaryContainer
+                : Theme.of(context).colorScheme.tertiaryContainer,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -227,7 +244,12 @@ class _AdminScreenState extends State<AdminScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red, duration: const Duration(seconds: 5)),
+          SnackBar(
+            content: Text('Erro: $e',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer)),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+            duration: const Duration(seconds: 5)),
         );
       }
     }
@@ -352,6 +374,9 @@ class _AdminScreenState extends State<AdminScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final appBarFg =
+        Theme.of(context).appBarTheme.foregroundColor ?? cs.onPrimary;
     final syncService = context.watch<SyncService>();
 
     return Scaffold(
@@ -364,23 +389,18 @@ class _AdminScreenState extends State<AdminScreen> {
               future: syncService.getLastSyncTime(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData || snapshot.data == null) {
-                  return const Text('Nunca sincronizado',
-                      style: TextStyle(fontSize: 10, color: Colors.grey));
+                  return Text('Nunca sincronizado',
+                      style: TextStyle(fontSize: 10, color: appBarFg.withValues(alpha: 0.8)));
                 }
                 final lastSync = snapshot.data!;
                 final diff = DateTime.now().difference(lastSync);
-                final color = diff.inHours < 1
-                    ? Colors.green
-                    : diff.inHours < 24
-                        ? Colors.amber
-                        : Colors.red;
                 final text = diff.inDays > 0
                     ? '${diff.inDays}d ${diff.inHours % 24}h atrás'
                     : diff.inHours > 0
                         ? '${diff.inHours}h ${diff.inMinutes % 60}min atrás'
                         : '${diff.inMinutes}min atrás';
                 return Text('Última sync: $text',
-                    style: TextStyle(fontSize: 10, color: color));
+                    style: TextStyle(fontSize: 10, color: appBarFg.withValues(alpha: 0.8)));
               },
             ),
           ],
@@ -476,12 +496,12 @@ class _AdminScreenState extends State<AdminScreen> {
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'limpar_tudo',
                 child: ListTile(
-                  leading: Icon(Icons.delete_forever, color: Colors.red),
+                  leading: Icon(Icons.delete_forever, color: Theme.of(context).colorScheme.error),
                   title: Text('Limpar TUDO',
-                      style: TextStyle(color: Colors.red)),
+                      style: TextStyle(color: Theme.of(context).colorScheme.error)),
                   subtitle: Text('Remove todos os dados exceto admin'),
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -518,15 +538,15 @@ class _AdminScreenState extends State<AdminScreen> {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    color: Colors.orange[100],
+                    color: Theme.of(context).colorScheme.tertiaryContainer,
                     child: Row(
                       children: [
-                        Icon(Icons.wifi_off, color: Colors.orange[800], size: 18),
+                        Icon(Icons.wifi_off, color: Theme.of(context).colorScheme.onTertiaryContainer, size: 18),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Sem internet — dados podem estar desatualizados',
-                            style: TextStyle(color: Colors.orange[800], fontSize: 13),
+                            style: TextStyle(color: Theme.of(context).colorScheme.onTertiaryContainer, fontSize: 13),
                           ),
                         ),
                       ],
@@ -547,9 +567,10 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildResumo() {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      color: const Color(0xFF304d36).withValues(alpha: 0.08),
+      color: cs.primary.withValues(alpha: 0.08),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -579,21 +600,22 @@ class _AdminScreenState extends State<AdminScreen> {
     required String label,
     required String value,
   }) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       children: [
-        Icon(icon, color: const Color(0xFF304d36), size: 24),
+        Icon(icon, color: cs.primary, size: 24),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF304d36),
+            color: cs.primary,
           ),
         ),
         Text(
           label,
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
         ),
       ],
     );
@@ -666,7 +688,7 @@ class _AdminScreenState extends State<AdminScreen> {
             DropdownButtonFormField<String>(
               decoration: InputDecoration(
                 labelText: 'Talhão / Propriedade',
-                prefixIcon: const Icon(Icons.forest, size: 18),
+                prefixIcon: Icon(Icons.forest, size: 18),
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 border: OutlineInputBorder(
@@ -696,7 +718,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     _filterDataInicio != null
                         ? 'De: ${dateFmt.format(_filterDataInicio!)}'
                         : 'Data início',
-                    style: const TextStyle(fontSize: 13),
+                    style: TextStyle(fontSize: 13),
                   ),
                   onPressed: () async {
                     final picked = await showDatePicker(
@@ -720,7 +742,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     _filterDataFim != null
                         ? 'Até: ${dateFmt.format(_filterDataFim!)}'
                         : 'Data fim',
-                    style: const TextStyle(fontSize: 13),
+                    style: TextStyle(fontSize: 13),
                   ),
                   onPressed: () async {
                     final picked = await showDatePicker(
@@ -755,6 +777,7 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildAdminFilterTag() {
+    final cs = Theme.of(context).colorScheme;
     final parts = <String>[];
     if (_filterUsuarioUuid != null) {
        final nome = _usuarios
@@ -783,17 +806,17 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
 
     return Container(
       width: double.infinity,
-      color: Colors.amber[50],
+      color: cs.tertiaryContainer,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(
         children: [
-          const Icon(Icons.filter_alt, size: 16, color: Colors.amber),
+          Icon(Icons.filter_alt, size: 16, color: cs.onTertiaryContainer),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               label,
               style: TextStyle(
-                  color: Colors.amber[900],
+                  color: cs.onTertiaryContainer,
                   fontSize: 13,
                   fontWeight: FontWeight.w500),
             ),
@@ -802,7 +825,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
             onTap: _clearAdminFilter,
             child: Text('Limpar',
                 style: TextStyle(
-                    color: Colors.amber[800],
+                    color: cs.onTertiaryContainer,
                     fontSize: 12,
                     fontWeight: FontWeight.bold)),
           ),
@@ -829,7 +852,11 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao filtrar: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Erro ao filtrar: $e',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer)),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer),
         );
       }
     }
@@ -910,7 +937,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(_filterActive ? Icons.filter_alt_off : Icons.person_off, size: 64, color: Colors.grey[300]),
+            Icon(_filterActive ? Icons.filter_alt_off : Icons.person_off, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
             const SizedBox(height: 16),
             Text(
               _filterActive
@@ -918,7 +945,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
                   : _searchQuery.isEmpty
                       ? 'Nenhum usu\u00e1rio encontrado'
                       : 'Nenhum resultado para \"$_searchQuery\"',
-              style: TextStyle(color: Colors.grey[600]),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ],
         ),
@@ -929,6 +956,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
       itemCount: usuarios.length,
       itemBuilder: (context, index) {
+        final cs = Theme.of(context).colorScheme;
         final usuario = usuarios[index];
        final parcelas = parcelasMostradas[usuario.uuid] ?? [];
          final totalPlantas = plantasMostradas[usuario.uuid] ?? 0;
@@ -947,11 +975,11 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundColor: const Color(0xFF304d36),
+                      backgroundColor: cs.primary,
                       child: Text(
                         usuario.nome.substring(0, 1).toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: cs.onPrimary,
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
                         ),
@@ -967,7 +995,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
                               Flexible(
                                 child: Text(
                                   usuario.nome,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 16,
                                   ),
@@ -982,13 +1010,13 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.amber[700],
+                                    color: cs.tertiary,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: const Text(
+                                  child: Text(
                                     'ADMIN',
                                     style: TextStyle(
-                                      color: Colors.white,
+                                      color: cs.onTertiary,
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -1001,7 +1029,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
                           Text(
                             usuario.email,
                             style: TextStyle(
-                              color: Colors.grey[600],
+                              color: cs.onSurfaceVariant,
                               fontSize: 13,
                             ),
                           ),
@@ -1010,7 +1038,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
                              children: [
                                _infoChip(Icons.map, '${parcelas.length} parcelas'),
                                if (unsyncedCount > 0)
-                                 _infoChip(Icons.pending, '$unsyncedCount pendentes', Colors.orange),
+                                 _infoChip(Icons.pending, '$unsyncedCount pendentes', Theme.of(context).colorScheme.tertiary),
                                const SizedBox(width: 12),
                                _infoChip(Icons.grass, '$totalPlantas plantas'),
                              ],
@@ -1018,11 +1046,11 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right, color: Colors.grey[400]),
+                    Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
                     // Ações por usuário (não mostra para admin-principal)
                     if (usuario.uuid != 'admin-principal')
                       PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert, color: Colors.grey[500], size: 20),
+                        icon: Icon(Icons.more_vert, color: cs.onSurfaceVariant, size: 20),
                         padding: EdgeInsets.zero,
                         onSelected: (action) {
                           switch (action) {
@@ -1043,7 +1071,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
                               child: ListTile(
                                 leading: Icon(
                                   usuario.isAdmin ? Icons.person : Icons.admin_panel_settings,
-                                  color: usuario.isAdmin ? Colors.orange : Colors.blue,
+                                  color: usuario.isAdmin ? cs.tertiary : cs.primary,
                                 ),
                                 title: Text(usuario.isAdmin ? 'Remover Admin' : 'Tornar Admin'),
                                 contentPadding: EdgeInsets.zero,
@@ -1056,7 +1084,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
                               label: 'Deletar ${usuario.nome} do servidor',
                               button: true,
                               child: ListTile(
-                                leading: Icon(Icons.cloud_off, color: Colors.red),
+                                leading: Icon(Icons.cloud_off, color: cs.error),
                                 title: Text('Deletar do Servidor'),
                                 subtitle: Text('Remove do PocketBase'),
                                 contentPadding: EdgeInsets.zero,
@@ -1076,14 +1104,15 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
   }
   
   Widget _infoChip(IconData icon, String text, [Color? color]) {
+    final cs = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: color ?? Colors.grey[600]),
+        Icon(icon, size: 14, color: color ?? cs.onSurfaceVariant),
         const SizedBox(width: 4),
         Text(
           text,
-          style: TextStyle(fontSize: 12, color: color ?? Colors.grey[600]),
+          style: TextStyle(fontSize: 12, color: color ?? cs.onSurfaceVariant),
         ),
       ],
     );
@@ -1105,7 +1134,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
+    SnackBar(
       content: Text('Configure o servidor primeiro nas configurações.'),
       duration: Duration(seconds: 5),
     ),
@@ -1149,9 +1178,11 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
     if (mounted) {
       if (syncService.lastError == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sincronização concluída!'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text('Sincronização concluída!',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: Duration(seconds: 3),
           ),
         );
@@ -1162,8 +1193,10 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
               syncService.lastError!.length > 80
                   ? '${syncService.lastError!.substring(0, 80)}...'
                   : syncService.lastError!,
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer),
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -1212,7 +1245,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
+        SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
       );
       return;
     }
@@ -1231,16 +1264,20 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
       if (path != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fotos salvas em:\n$path'),
-            backgroundColor: Colors.green,
+            content: Text('Fotos salvas em:\n$path',
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: const Duration(seconds: 5),
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Nenhuma foto encontrada no servidor ou erro na conexão.'),
-        backgroundColor: Colors.orange,
+      SnackBar(
+        content: Text('Nenhuma foto encontrada no servidor ou erro na conexão.',
+          style: TextStyle(
+              color: Theme.of(context).colorScheme.onTertiaryContainer)),
+        backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
         duration: Duration(seconds: 5),
       ),
         );
@@ -1250,7 +1287,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
 
   Future<void> _exportarXlsx() async {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Gerando planilha completa...'), duration: Duration(seconds: 3)),
+      SnackBar(content: Text('Gerando planilha completa...'), duration: Duration(seconds: 3)),
     );
 
     final exportService = ExportService(_db);
@@ -1264,8 +1301,12 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
         SnackBar(
           content: Text(ok
               ? 'Planilha exportada com sucesso!'
-              : 'Nenhuma parcela para exportar.'),
-          backgroundColor: ok ? Colors.green : Colors.orange,
+              : 'Nenhuma parcela para exportar.',
+              style: TextStyle(
+                  color: ok
+                      ? Theme.of(context).colorScheme.onPrimaryContainer
+                      : Theme.of(context).colorScheme.onTertiaryContainer)),
+          backgroundColor: ok ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.tertiaryContainer,
           duration: const Duration(seconds: 3),
         ),
       );
@@ -1276,13 +1317,13 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
+        SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
       );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Puxando dados do servidor...'), duration: Duration(seconds: 3)),
+      SnackBar(content: Text('Puxando dados do servidor...'), duration: Duration(seconds: 3)),
     );
 
     final importados = await syncService.pullDadosDoServidor();
@@ -1292,8 +1333,10 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
       if (importados > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$importados parcelas importadas do servidor. Gerando planilha...'),
-            backgroundColor: Colors.blue,
+            content: Text('$importados parcelas importadas do servidor. Gerando planilha...',
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1309,9 +1352,9 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning, color: Colors.red),
+            Icon(Icons.warning, color: Theme.of(ctx).colorScheme.error),
             SizedBox(width: 8),
             Text('LIMPAR TUDO'),
           ],
@@ -1332,7 +1375,7 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -1348,9 +1391,11 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
       await _db.limparTodosDadosExcetoAdmin();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('Todos os dados locais foram limpos! Apenas o admin foi mantido.'),
-      backgroundColor: Colors.green,
+    SnackBar(
+      content: Text('Todos os dados locais foram limpos! Apenas o admin foi mantido.',
+      style: TextStyle(
+          color: Theme.of(context).colorScheme.onPrimaryContainer)),
+      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
       duration: Duration(seconds: 3),
     ),
         );
@@ -1360,8 +1405,10 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erro ao limpar dados: $e'),
-          backgroundColor: Colors.red,
+          content: Text('Erro ao limpar dados: $e',
+          style: TextStyle(
+              color: Theme.of(context).colorScheme.onErrorContainer)),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
           duration: const Duration(seconds: 5),
         ),
         );
@@ -1460,13 +1507,13 @@ class _AdminUserParcelasScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.forest, size: 80, color: Colors.grey[300]),
+                  Icon(Icons.forest, size: 80, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   const SizedBox(height: 16),
                   Text(
                     'Nenhuma parcela registrada',
                     style: TextStyle(
                       fontSize: 16,
-                      color: Colors.grey[600],
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -1492,13 +1539,13 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF304d36).withValues(alpha: 0.12),
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.forest,
-                              color: Color(0xFF304d36), size: 20),
+                          Icon(Icons.forest,
+                              color: Theme.of(context).colorScheme.primary, size: 20),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Column(
@@ -1506,17 +1553,17 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                               children: [
                                 Text(
                                   ut,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 15,
-                                    color: Color(0xFF304d36),
+                                    color: Theme.of(context).colorScheme.primary,
                                   ),
                                 ),
                                 Text(
                                   '$totalParcelasUT parcela(s) · ${dias.length} dia(s)',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey[600],
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -1546,14 +1593,14 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                             child: Row(
                               children: [
                                 Icon(Icons.calendar_today,
-                                    size: 14, color: Colors.grey[600]),
+                                    size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
                                 const SizedBox(width: 6),
                                 Text(
                                   dia,
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.grey[700],
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                                 const SizedBox(width: 6),
@@ -1561,7 +1608,7 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                                   '(${parcelasDia.length})',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey[500],
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -1599,20 +1646,20 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                 children: [
                   Icon(
                     parcela.synced ? Icons.cloud_done : Icons.cloud_off,
-                    color: parcela.synced ? Colors.green : Colors.orange,
+                    color: parcela.synced ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.tertiary,
                     size: 18,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '${parcela.propriedade.isNotEmpty ? "${parcela.propriedade} › " : ""}${parcela.propUt} — P${parcela.idParcela}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
+                  Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 20),
                 ],
               ),
               const SizedBox(height: 8),
@@ -1622,13 +1669,14 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                   final count = snap.data ?? 0;
                   return Row(
                     children: [
-                      _infoChip(Icons.grass, '$count plantas'),
+                      _infoChip(context, Icons.grass, '$count plantas'),
                       const SizedBox(width: 12),
                       FutureBuilder<int>(
                         future: _fotoCountCache.putIfAbsent(parcela.uuid, () => db.getFotosByParcela(parcela.uuid).then((l) => l.length)),
                         builder: (context, fotoSnap) {
                           final fotoCount = fotoSnap.data ?? 0;
                           return _infoChip(
+                              context,
                               Icons.photo_camera, '$fotoCount fotos');
                         },
                       ),
@@ -1636,7 +1684,7 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                       Text(
                         '${parcela.createdAt.hour.toString().padLeft(2, '0')}:${parcela.createdAt.minute.toString().padLeft(2, '0')}',
                         style: TextStyle(
-                          color: Colors.grey[500],
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       ),
@@ -1649,7 +1697,7 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   parcela.observacoes!,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1687,8 +1735,8 @@ class _AdminUserParcelasScreen extends StatelessWidget {
                             : Container(
                                 width: 64,
                                 height: 64,
-                                color: Colors.grey[200],
-                                child: Icon(Icons.image, color: Colors.grey[400]),
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                child: Icon(Icons.image, color: Theme.of(context).colorScheme.onSurfaceVariant),
                               ),
                       ),
                       // >>> t9 S1: badge de arquivo ausente no thumbnail
@@ -1709,15 +1757,16 @@ class _AdminUserParcelasScreen extends StatelessWidget {
     );
   }
 
-  Widget _infoChip(IconData icon, String text) {
+  Widget _infoChip(BuildContext context, IconData icon, String text) {
+    final cs = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: Colors.grey[600]),
+        Icon(icon, size: 14, color: cs.onSurfaceVariant),
         const SizedBox(width: 4),
         Text(
           text,
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
         ),
       ],
     );
@@ -1740,7 +1789,7 @@ class _AdminUserParcelasScreen extends StatelessWidget {
     final syncService = Provider.of<SyncService>(context, listen: false);
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
+        SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
       );
       return;
     }
@@ -1760,16 +1809,20 @@ class _AdminUserParcelasScreen extends StatelessWidget {
       if (path != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fotos da UT "$propUt" salvas em:\n$path'),
-            backgroundColor: Colors.green,
+            content: Text('Fotos da UT "$propUt" salvas em:\n$path',
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: const Duration(seconds: 5),
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nenhuma foto encontrada para esta UT.'),
-          backgroundColor: Colors.orange,
+        SnackBar(
+          content: Text('Nenhuma foto encontrada para esta UT.',
+          style: TextStyle(
+              color: Theme.of(context).colorScheme.onTertiaryContainer)),
+          backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
           duration: Duration(seconds: 5),
         ),
         );
@@ -1781,7 +1834,7 @@ class _AdminUserParcelasScreen extends StatelessWidget {
     final syncService = Provider.of<SyncService>(context, listen: false);
     if (!syncService.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
+        SnackBar(content: Text('Configure o servidor primeiro.'), duration: Duration(seconds: 5)),
       );
       return;
     }
@@ -1800,16 +1853,20 @@ class _AdminUserParcelasScreen extends StatelessWidget {
       if (path != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fotos salvas em:\n$path'),
-            backgroundColor: Colors.green,
+            content: Text('Fotos salvas em:\n$path',
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: const Duration(seconds: 5),
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nenhuma foto encontrada no servidor.'),
-          backgroundColor: Colors.orange,
+        SnackBar(
+          content: Text('Nenhuma foto encontrada no servidor.',
+          style: TextStyle(
+              color: Theme.of(context).colorScheme.onTertiaryContainer)),
+          backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
           duration: Duration(seconds: 5),
         ),
         );
@@ -1835,8 +1892,12 @@ class _AdminUserParcelasScreen extends StatelessWidget {
         SnackBar(
           content: Text(ok
               ? 'Planilha exportada com sucesso!'
-              : 'Nenhuma parcela para exportar.'),
-          backgroundColor: ok ? Colors.green : Colors.orange,
+              : 'Nenhuma parcela para exportar.',
+              style: TextStyle(
+                  color: ok
+                      ? Theme.of(context).colorScheme.onPrimaryContainer
+                      : Theme.of(context).colorScheme.onTertiaryContainer)),
+          backgroundColor: ok ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.tertiaryContainer,
           duration: const Duration(seconds: 3),
         ),
       );
@@ -1884,7 +1945,7 @@ class _FullscreenImageViewerState extends State<_FullscreenImageViewer> {
         foregroundColor: Colors.white,
         title: Text(
           '${_currentIndex + 1} / ${widget.fotos.length}',
-          style: const TextStyle(fontSize: 16),
+          style: TextStyle(fontSize: 16),
         ),
         centerTitle: true,
       ),
