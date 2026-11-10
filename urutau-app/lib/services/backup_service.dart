@@ -12,12 +12,15 @@ import 'image_service.dart';
 
 class BackupService {
   static const String _dbName = 'urutau';
-  // t9: alinhado ao schemaVersion real de database.dart (24).
-  // ANTES estava 16 enquanto o banco real ja estava em 18: o manifesto do
-  // backup mentia sobre a versao. Consequencia real: restaurar um backup de
-  // app mais novo seria REJEITADO ("Backup requer schema v24 mas o app usa
-  // v16. Atualize o app.") — ver _validateManifest.
-  static const int _currentSchemaVersion = 25;
+  // t19 F-3a: tem de ser o MESMO schemaVersion de AppDatabase (database.dart:234,
+  // hoje 32). Se ficar para trás, um backup feito num app real (manifest
+  // v26..v32) é rejeitado com "Atualize o app" num app que JÁ é novo o
+  // suficiente — medido no teste 6 antigo. O teste 8 de backup_roundtrip_test
+  // trava esta constante ao schema real do AppDatabase.
+  static const int _currentSchemaVersion = 32;
+
+  /// Expõe a constante para o teste de regressão (F-3a).
+  static int get currentSchemaVersion => _currentSchemaVersion;
   static const String _pendingRestoreKey = 'pending_restore';
   static const String _pendingRestorePathKey = 'pending_restore_path';
   static const String _pendingRestoreFotosKey = 'pending_restore_fotos_path';
@@ -30,8 +33,17 @@ class BackupService {
     return p.join(dir.path, '$_dbName.sqlite');
   }
 
+  /// Caminho do banco, exposto para o AutoBackupService (t19 fase 2).
+  static Future<String> get dbFilePath async => _dbPath;
+
   static bool _isZipFile(List<int> bytes) {
     return bytes.length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B;
+  }
+
+  // t19 F-3b: cabeçalho SQLite ("SQLite format 3\0") — 16 bytes.
+  static bool _looksLikeSqlite(List<int> bytes) {
+    if (bytes.length < 100) return false;
+    return String.fromCharCodes(bytes.sublist(0, 16)) == 'SQLite format 3\u0000';
   }
 
   static ({bool ok, String? error}) _validateManifest(String manifestJson) {
@@ -203,76 +215,90 @@ class BackupService {
     return bytes;
   }
 
+  /// Constrói o ZIP de backup: banco (WAL-safe via dumpWalsafe) + fotos em
+  /// `fotos/` + manifesto. Usado por [exportBackup] (share) e pelo backup
+  /// automático antes de update (t19 fase 2, via [exportBackupToFile]).
+  static Future<List<int>> buildBackupZip() async {
+    final sourcePath = await _dbPath;
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      throw Exception('Base de dados não encontrada.');
+    }
+
+    final archive = Archive();
+
+    final dbBytes = await dumpWalsafe(sourcePath);
+    final dbFile = ArchiveFile('urutau.sqlite', dbBytes.length, dbBytes);
+    dbFile.compress = true;
+    archive.addFile(dbFile);
+
+    final photosDir = await ImageService.getPhotosDir();
+    int photoCount = 0;
+    if (await photosDir.exists()) {
+      await for (final entity in photosDir.list(recursive: true)) {
+        if (entity is File) {
+          final relative = p.relative(entity.path, from: photosDir.path);
+          final archivePath = 'fotos/$relative';
+          final photoBytes = await entity.readAsBytes();
+          final photoFile = ArchiveFile(archivePath, photoBytes.length, photoBytes);
+          final ext = p.extension(entity.path).toLowerCase();
+          photoFile.compress = !(ext == '.jpg' || ext == '.jpeg');
+          archive.addFile(photoFile);
+          photoCount++;
+        }
+      }
+    }
+
+    int parcelaCount = 0;
+    int plantaCount = 0;
+    try {
+      final db = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
+      final parcelaResult = db.select('SELECT COUNT(*) AS cnt FROM parcelas WHERE deleted_at IS NULL');
+      parcelaCount = parcelaResult.first['cnt'] as int;
+      final plantaResult = db.select('SELECT COUNT(*) AS cnt FROM plantas WHERE deleted_at IS NULL');
+      plantaCount = plantaResult.first['cnt'] as int;
+      db.dispose();
+    } catch (e) {
+      debugPrint('BackupService: erro ao contar registros: $e');
+    }
+
+    final manifest = jsonEncode({
+      'schemaVersion': _currentSchemaVersion,
+      'appVersion': '2.0.1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'photoCount': photoCount,
+      'parcelaCount': parcelaCount,
+      'plantaCount': plantaCount,
+    });
+    final manifestBytes = utf8.encode(manifest);
+    final manifestFile = ArchiveFile('manifest.json', manifestBytes.length, manifestBytes);
+    manifestFile.compress = true;
+    archive.addFile(manifestFile);
+
+    final zipBytes = ZipEncoder().encode(archive);
+    if (zipBytes == null) {
+      throw Exception('Erro ao criar ZIP.');
+    }
+    return zipBytes;
+  }
+
+  /// Grava o ZIP de backup num diretório (padrão: documentos do app) e
+  /// devolve o ficheiro. Sem share sheet — é o caminho do backup automático.
+  static Future<File> exportBackupToFile({Directory? targetDir, String? fileName}) async {
+    final zipBytes = await buildBackupZip();
+    final dir = targetDir ?? await getApplicationDocumentsDirectory();
+    await dir.create(recursive: true);
+    final now = DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now());
+    final name = fileName ?? 'urutau_backup_$now.zip';
+    final dest = File(p.join(dir.path, name));
+    await dest.writeAsBytes(zipBytes);
+    return dest;
+  }
+
   static Future<String> exportBackup() async {
     if (kIsWeb) return 'Backup não disponível na versão web.';
     try {
-      final sourcePath = await _dbPath;
-      final source = File(sourcePath);
-      if (!await source.exists()) {
-        return 'Base de dados não encontrada.';
-      }
-
-      final archive = Archive();
-
-      final dbBytes = await dumpWalsafe(sourcePath);
-      final dbFile = ArchiveFile('urutau.sqlite', dbBytes.length, dbBytes);
-      dbFile.compress = true;
-      archive.addFile(dbFile);
-
-      final photosDir = await ImageService.getPhotosDir();
-      int photoCount = 0;
-      if (await photosDir.exists()) {
-        await for (final entity in photosDir.list(recursive: true)) {
-          if (entity is File) {
-            final relative = p.relative(entity.path, from: photosDir.path);
-            final archivePath = 'fotos/$relative';
-            final photoBytes = await entity.readAsBytes();
-            final photoFile = ArchiveFile(archivePath, photoBytes.length, photoBytes);
-            final ext = p.extension(entity.path).toLowerCase();
-            photoFile.compress = !(ext == '.jpg' || ext == '.jpeg');
-            archive.addFile(photoFile);
-            photoCount++;
-          }
-        }
-      }
-
-      int parcelaCount = 0;
-      int plantaCount = 0;
-      try {
-        final db = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
-        final parcelaResult = db.select('SELECT COUNT(*) AS cnt FROM parcelas WHERE deleted_at IS NULL');
-        parcelaCount = parcelaResult.first['cnt'] as int;
-        final plantaResult = db.select('SELECT COUNT(*) AS cnt FROM plantas WHERE deleted_at IS NULL');
-        plantaCount = plantaResult.first['cnt'] as int;
-        db.dispose();
-      } catch (e) {
-        debugPrint('BackupService: erro ao contar registros: $e');
-      }
-
-      final manifest = jsonEncode({
-        'schemaVersion': _currentSchemaVersion,
-        'appVersion': '2.0.0',
-        'timestamp': DateTime.now().toUtc().toIso8601String(),
-        'photoCount': photoCount,
-        'parcelaCount': parcelaCount,
-        'plantaCount': plantaCount,
-      });
-      final manifestBytes = utf8.encode(manifest);
-      final manifestFile = ArchiveFile('manifest.json', manifestBytes.length, manifestBytes);
-      manifestFile.compress = true;
-      archive.addFile(manifestFile);
-
-      final zipBytes = ZipEncoder().encode(archive);
-      if (zipBytes == null) {
-        return 'Erro ao criar ZIP.';
-      }
-
-      final dir = await getApplicationDocumentsDirectory();
-      final now = DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now());
-      final fileName = 'urutau_backup_$now.zip';
-      final destPath = p.join(dir.path, fileName);
-      final dest = File(destPath);
-      await dest.writeAsBytes(zipBytes);
+      final dest = await exportBackupToFile();
 
       await Share.shareXFiles(
         [XFile(dest.path)],
@@ -316,16 +342,10 @@ class BackupService {
         return await _prepareRestoreFromZip(bytes);
       }
 
-      final dir = await getApplicationDocumentsDirectory();
-      const pendingName = 'restore_pending.sqlite';
-      final pendingPath = p.join(dir.path, pendingName);
-      final pending = File(pendingPath);
-      if (await pending.exists()) await pending.delete();
-      await pending.writeAsBytes(bytes);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_pendingRestorePathKey, pendingPath);
-      await prefs.setBool(_pendingRestoreKey, true);
-      return 'Restauração marcada. Feche o app completamente e reabra para aplicar (os dados atuais serão substituídos pelo backup).';
+      // t19 F-3b: caminho raw (banco SQLite solto) passa por validação ANTES
+      // de ser aceite — antes, qualquer ficheiro de texto era gravado no
+      // pending e corrompia o banco no runPendingRestore.
+      return await _stagePendingDb(bytes);
     } catch (e) {
       return 'Erro ao preparar restauração: $e';
     }
@@ -453,16 +473,45 @@ class BackupService {
     }
   }
 
-  static Future<String> _writePendingAndSetFlag(File backup) async {
+  /// t19 F-3b: grava os bytes como banco pendente SOMENTE se forem um SQLite
+  /// válido (cabeçalho + integrity_check ok + pelo menos uma tabela no schema).
+  /// Se falhar, nada fica pendente e o banco atual não é tocado.
+  static Future<String> _stagePendingDb(List<int> bytes) async {
+    if (!_looksLikeSqlite(bytes)) {
+      return 'Ficheiro não é um backup válido (nem ZIP nem banco SQLite). Nada foi alterado.';
+    }
     final dir = await getApplicationDocumentsDirectory();
     const pendingName = 'restore_pending.sqlite';
     final pendingPath = p.join(dir.path, pendingName);
     final pending = File(pendingPath);
     if (await pending.exists()) await pending.delete();
-    await backup.copy(pendingPath);
+    await pending.writeAsBytes(bytes);
+
+    try {
+      final db = sqlite3.open(pendingPath, mode: OpenMode.readOnly);
+      final integrity = db.select('PRAGMA integrity_check').first.values.first.toString();
+      final objetos = db.select('SELECT COUNT(*) AS c FROM sqlite_master').first['c'] as int;
+      db.dispose();
+      if (integrity != 'ok') {
+        try { await pending.delete(); } catch (_) {}
+        return 'Integridade do banco de dados falhou: $integrity. Nada foi alterado.';
+      }
+      if (objetos <= 0) {
+        try { await pending.delete(); } catch (_) {}
+        return 'Backup inválido: banco sem tabelas. Nada foi alterado.';
+      }
+    } catch (e) {
+      try { await pending.delete(); } catch (_) {}
+      return 'Erro ao validar banco: $e. Nada foi alterado.';
+    }
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_pendingRestorePathKey, pendingPath);
     await prefs.setBool(_pendingRestoreKey, true);
     return 'Restauração marcada. Feche o app completamente e reabra para aplicar (os dados atuais serão substituídos pelo backup).';
+  }
+
+  static Future<String> _writePendingAndSetFlag(File backup) async {
+    return await _stagePendingDb(await backup.readAsBytes());
   }
 }

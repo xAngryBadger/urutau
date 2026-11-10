@@ -6,13 +6,15 @@
 // SharedPreferences mockados para um diretório temporário):
 //   1. round-trip: export -> wipe -> restore -> COUNT(*) bate e fotos voltam
 //   2. ZIP corrompido (truncado) -> falha limpa, banco intacto
-//   3. ACHADO F-3b (comportamento ATUAL, a corrigir em task nova):
-//      ficheiro raw que não é ZIP é aceite sem validação no caminho
-//      prepareRestoreFromBytes (backup_service.dart:319-328) e corrompe
-//      o banco no runPendingRestore. A asserção documenta o buraco;
-//      quando o fix entrar, este teste deve ser invertido.
+//   3. F-3b CORRIGIDO (t19): ficheiro raw que não é ZIP nem SQLite é
+//      REJEITADO limpo em prepareRestoreFromBytes (backup_service.dart
+//      _stagePendingDb: cabeçalho + integrity_check + tabelas) — banco intacto
 //   4. manifesto com schemaVersion futuro -> rejeitado limpo
 //   5. schema antigo (v31) -> restaura, migra para v32 no reabrir
+//   6. F-3a CORRIGIDO (t19): manifesto v31 (<= schema real 32) é ACEITE
+//   7. restaurar com o app ABERTO: prepareRestore enquanto a conexão drift
+//      está viva não corrompe nada; a aplicação só acontece no boot
+//   8. trava F-3a: BackupService.currentSchemaVersion == AppDatabase.schemaVersion
 // ============================================================
 
 import 'dart:convert';
@@ -224,18 +226,33 @@ void main() {
       expect(counts(dbPath), antes, reason: 'o banco atual tem de continuar intacto');
     });
 
-    test('3. ACHADO F-3b (comportamento atual): raw que não é ZIP é aceite sem validação',
-        () async {
-      // backup_service.dart:319-328 — o caminho não-ZIP grava os bytes no
-      // pending SEM nenhuma validação (não é ZIP, não é SQLite). Fix = task nova;
-      // este teste DOCUMENTA o buraco e deve ser invertido pelo fix.
+    test('3. F-3b corrigido (t19): raw que não é ZIP nem SQLite é rejeitado limpo', () async {
+      final antes = counts(dbPath);
+      // backup_service.dart _stagePendingDb: valida cabeçalho SQLite +
+      // integrity_check + tabelas ANTES de gravar o pending.
       final bytes = utf8.encode('isto nao e um zip nem um banco sqlite');
       final msg = await BackupService.prepareRestoreFromBytes(bytes);
-      expect(msg, contains('Restauração marcada'),
-          reason: 'F-3b: hoje o caminho raw aceita qualquer coisa (buraco documentado)');
-      await BackupService.runPendingRestore();
-      expect(() => counts(dbPath), throwsA(anything),
-          reason: 'F-3b: o banco fica corrompido — prova do buraco (a corrigir)');
+      expect(msg, contains('não é um backup válido'),
+          reason: 'F-3b fix: raw inválido tem de ser rejeitado');
+      expect(msg, isNot(contains('Restauração marcada')));
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('pending_restore'), isNot(true));
+      expect(File(p.join(dir.path, 'restore_pending.sqlite')).existsSync(), isFalse,
+          reason: 'nada pode ficar pendente depois de falhar');
+      expect(counts(dbPath), antes, reason: 'o banco atual tem de continuar intacto');
+    });
+
+    test('3b. F-3b: SQLite válido mas corrompido (integrity falha) também é rejeitado', () async {
+      final antes = counts(dbPath);
+      final zipBytes = await exportaZip();
+      final arch = ZipDecoder().decodeBytes(zipBytes);
+      final raw = (arch.findFile('urutau.sqlite')!.content as List<int>);
+      // corrompe o meio do arquivo: cabeçalho OK, conteúdo quebrado
+      final corrompido = raw.sublist(0, raw.length ~/ 2);
+      final msg = await BackupService.prepareRestoreFromBytes(corrompido);
+      expect(msg, isNot(contains('Restauração marcada')));
+      expect(counts(dbPath), antes);
     });
 
     test('4. manifesto com schemaVersion futuro (99) é rejeitado limpo', () async {
@@ -278,24 +295,56 @@ void main() {
       expect(uv, 32, reason: 'depois de reabrir, user_version tem de ser 32');
     });
 
-    test('6. ACHADO F-3a (comportamento atual): manifesto v31 rejeitado pela constante 25',
-        () async {
-      // _currentSchemaVersion = 25 em backup_service.dart:20, mas o schema
-      // real de AppDatabase é 32 (database.dart:234). Consequência medida:
-      // um backup cujo manifesto diga v26..v32 é REJEITADO ("Atualize o app")
-      // mesmo num app v32. Fix = alinhar a constante (task nova); este teste
-      // documenta o buraco e deve ser invertido pelo fix.
+    test('6. F-3a corrigido (t19): manifesto v31 (<= schema real) é aceite', () async {
+      // _currentSchemaVersion agora é 32 (database.dart:234). Um backup de
+      // app real (manifest v31) tem de ser aceite neste app.
       final antes = counts(dbPath);
       final zipBytes = await exportaZip();
-      final futuroProximo = rebuildZip(zipBytes, schemaVersion: 31);
+      final antigo = rebuildZip(zipBytes, schemaVersion: 31);
 
-      final msg = await BackupService.prepareRestoreFromBytes(futuroProximo);
-      expect(msg, contains('Atualize o app'),
-          reason: 'F-3a: v31 rejeitado porque a constante é 25 (buraco documentado)');
+      final msg = await BackupService.prepareRestoreFromBytes(antigo);
+      expect(msg, contains('Restauração marcada'),
+          reason: 'F-3a fix: v31 <= 32 tem de passar na validação');
 
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool('pending_restore'), isNot(true));
+      expect(prefs.getBool('pending_restore'), true);
+      await BackupService.runPendingRestore();
+      expect(counts(dbPath), antes, reason: 'restore aplicado e banco bate');
+    });
+
+    test('7. restaurar com o app ABERTO: prepare com conexão viva não corrompe; aplica só no boot',
+        () async {
+      final antes = counts(dbPath);
+      final zipBytes = await exportaZip();
+
+      // app "aberto": conexão drift viva sobre o banco atual
+      final dbAberto = AppDatabase.forTesting(NativeDatabase(File(dbPath)));
+      await dbAberto.customSelect('SELECT 1').get();
+
+      final msg = await BackupService.prepareRestoreFromBytes(zipBytes);
+      expect(msg, contains('Restauração marcada'));
+      // banco atual continua são e legível com a conexão aberta
       expect(counts(dbPath), antes);
+      await dbAberto.customSelect('SELECT 1').get();
+      await dbAberto.close();
+
+      // boot seguinte: runPendingRestore aplica o pendente (wipe manual sem
+      // tocar no restore_pending.sqlite que acabou de ser preparado)
+      for (final sufixo in ['', '-wal', '-shm']) {
+        final f = File(dbPath + sufixo);
+        if (await f.exists()) await f.delete();
+      }
+      final fotos = Directory(fotosPath);
+      if (fotos.existsSync()) await fotos.delete(recursive: true);
+      await BackupService.runPendingRestore();
+      expect(counts(dbPath), antes);
+    });
+
+    test('8. trava F-3a: constante do manifesto == schemaVersion real do AppDatabase', () async {
+      final db = AppDatabase.forTesting(NativeDatabase(File(p.join(dir.path, 'verifica.sqlite'))));
+      expect(BackupService.currentSchemaVersion, db.schemaVersion,
+          reason: 'se alguém subir o schema e esquecer a constante, este teste falha');
+      await db.close();
     });
   });
 }
