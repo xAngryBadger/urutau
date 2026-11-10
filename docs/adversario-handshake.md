@@ -59,3 +59,40 @@ TOTAL: 66 checks | PASS: 66 | FALHAS: 0
 **Veredicto §1: PASS.** Nenhum ataque devolve "todos" — no máximo 0, ou exactamente o registo cujo nome é literalmente o ataque. Filtro malformado (barra no fim) dá 400 limpo, não 500 nem vazamento.
 
 Nota de auditoria (sem buraco hoje): além do sítio escapado, há filtros montados com valores não controlados pelo utilizador ou validados pelo servidor — `entry_hash = '${e.entryHash}'` (:169, hash hex), `user != ""` (:1354), `parcela = "${record.id}"` (:2009/:2195/:2279, id de registo do servidor), `email = "$email"` (:2359/:2400/:2446, e-mail validado pelo PB — não aceita aspas), `user = "$uid"` (:2413, id). Nenhum recebe texto livre de utilizador sem escape; o único texto livre (`prop_ut` em :1435) provou aguentar.
+
+---
+
+## §2 — BURACO 2: ficheiros hostis no upload de fotos (`fotos_parcela`)
+
+Superfície: campo `fotos_parcela` na coleção `parcelas` com `maxSize=10485760` (10 MB), `mimeTypes=[image/jpeg, image/png, image/webp]`, `maxSelect=10` (migration `1776864000_updated_rules_and_limits.js`). No emulador atual o banco está vazio (`fotos_parcela = 0`), por isso a superfície foi exercida direto no servidor, exactamente como o app sobe (`sync_service.dart:1972-1988`, multipart `PATCH /api/collections/parcelas/records/{id}` com `-F fotos_parcela=@file;filename=...` — o PATCH precisa de `status_verificacao` no body por causa do updateRule).
+
+Comando: `pwsh -NoProfile -File D:\urutau-devtools\probe-adv2.ps1` (gera os ficheiros em `D:\urutau-devtools\hostis`, sobe via `curl.exe -F`, e depois de cada caso lê o registo para contar `fotos_parcela`).
+
+Saída (resumo; completo em `probe-adv2-out.txt`):
+
+```
+controle positivo jpeg 2KB                HTTP 200 | fotos na parcela depois: 1   PASS
+jpeg 9MB (abaixo do limite 10MB)          HTTP 200 | fotos depois: 1                PASS
+jpeg 11MB (acima do limite)               HTTP 400 validation_file_size_limit  PASS
+500MB com magic de jpeg                   HTTP 413 Request entity too large    PASS
+corrompido com .jpg (lixo aleatório)      HTTP 400 validation_invalid_mime_type PASS
+PNG renomeado para .jpg                   HTTP 200 (mime é detetado pelo CONTEÚDO; png está na whitelist) PASS
+0 bytes .jpg                              HTTP 400 validation_invalid_mime_type PASS
+ZIP renomeado para .jpg                   HTTP 400 validation_invalid_mime_type PASS
+nome com ../ (path traversal)             HTTP 200, gravado sanitizado (sem ../) PASS
+nome unicode (foto-é✨.jpg)               HTTP 200                            PASS
+nome 255 chars                            HTTP 200                            PASS
+nome com newline                          HTTP 200, gravado como foto_0_aquebrada_7ymi9rwrsl.jpg (sanitizado) PASS
+20 ficheiros numa parcela                 HTTP 400 (maxSelect=10 no servidor) PASS
+estado do storage depois de tudo: 2 ficheiros, 2284 bytes — só o que foi aceite ficou no disco
+TOTAL: 14 checks | PASS: 14 | FALHAS: 0
+```
+
+Pontos medidos:
+- **Tamanho:** >10 MB → 400 `validation_file_size_limit`; 500 MB → 413 no limite do pedido. Estado consistente (o registo não muda).
+- **MIME por conteúdo, não por extensão:** lixo/0-bytes/ZIP com `.jpg` → 400 `validation_invalid_mime_type`; PNG renomeado `.jpg` → 200 porque `image/png` está na whitelist. Ou seja, o servidor valida o que entra, não confia na extensão.
+- **Nomes:** `../`, newline, unicode e 255 chars são aceitos mas **sanitizados no storage** (sem path traversal — `nomes gravados não têm path traversal: PASS`).
+- **Quantidade:** 20 ficheiros numa parcela → 400 (maxSelect=10). O limite de 10 é do servidor, não só do app.
+- **Hash divergente (RC-04):** bloqueio do lado do cliente, antes do upload — `sync_service.dart:1957-1969` recalcula `sha256De` e, se não bate com o catálogo, loga `hash_divergente_upload` na auditoria e aborta o envio. O servidor não conoce o hash — essa defesa é só do app (documentado; não é buraco do servidor).
+
+**Veredicto §2: PASS** — nenhum ficheiro hostil deixa estado inconsistente ou crash no servidor; os aceites são sanitizados; os rejeitados são 400/413 limpos. No app, `ImageService.metadadosDe` devolve sempre `mime: image/jpeg` (não fareja conteúdo — `image_service.dart:50`); quem barra o conteúdo inválido é o servidor, como provado acima.
