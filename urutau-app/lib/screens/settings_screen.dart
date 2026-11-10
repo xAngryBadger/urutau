@@ -62,6 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final syncService = context.watch<SyncService>();
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -117,12 +118,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: FilledButton.icon(
                             onPressed: _isSaving ? null : _saveServerUrl,
                             icon: _isSaving
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 18,
                                     height: 18,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: Colors.white,
+                                      color: cs.onPrimary,
                                     ),
                                   )
                                 : const Icon(Icons.save),
@@ -159,22 +160,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color:
-                            _testOk == true ? Colors.green[50] : Colors.red[50],
+                        color: _testOk == true
+                            ? cs.primaryContainer
+                            : cs.errorContainer,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: _testOk == true
-                              ? Colors.green[300]!
-                              : Colors.red[300]!,
+                          color: _testOk == true ? cs.primary : cs.error,
                         ),
                       ),
                       child: Row(
                         children: [
                           Icon(
                             _testOk == true ? Icons.check_circle : Icons.error,
-                            color: _testOk == true
-                                ? Colors.green[700]
-                                : Colors.red[700],
+                            color: _testOk == true ? cs.primary : cs.error,
                             size: 20,
                           ),
                           const SizedBox(width: 8),
@@ -185,8 +183,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   : _testResult!,
                               style: TextStyle(
                                 color: _testOk == true
-                                    ? Colors.green[800]
-                                    : Colors.red[800],
+                                    ? cs.onPrimaryContainer
+                                    : cs.onErrorContainer,
                                 fontSize: 13,
                               ),
                             ),
@@ -230,8 +228,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ? Icons.cloud_off
                           : Icons.cloud_done,
                       color: syncService.pendingCount > 0
-                          ? Colors.orange
-                          : Colors.green,
+                          ? cs.tertiary
+                          : cs.primary,
                     ),
                     title: Text(
                       syncService.pendingCount > 0
@@ -241,8 +239,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: syncService.lastError != null
                         ? Text(
                             syncService.lastError!,
-                            style: const TextStyle(
-                              color: Colors.red,
+                            style: TextStyle(
+                              color: cs.error,
                               fontSize: 12,
                             ),
                           )
@@ -297,13 +295,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Backup LOCAL = ficheiro ZIP com o banco (SQLite) e as fotos. '
                     'Use "Exportar backup local" e GUARDE o ficheiro fora do celular '
                     '(Downloads/Drive): uma cópia que fica só no aparelho desaparece '
                     'se ele for perdido, quebrado ou o app desinstalado. '
                     'Para voltar, use "Restaurar" e escolha o ficheiro — substitui os dados atuais.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
@@ -458,12 +456,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 await themeProvider.setMode(sel.first),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             'Claro = tema padrão. Alto contraste = preto/amarelo/'
                             'branco com contraste AA, para uso sob sol. '
                             'Kanagawa = paleta escura do kanagawa.nvim. '
                             'A escolha fica guardada.',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                           ),
                         ],
                       );
@@ -541,13 +539,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'As fotos são guardadas e enviadas como o ORIGINAL capturado, '
                     'sem compressão. O hash SHA-256 é calculado sobre exatamente '
                     'o arquivo que sobe — a evidência não é alterada. '
                     'Não há opção de comprimir: comprimir mudaria os bytes e o '
                     'hash deixaria de ser do original.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -618,11 +616,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       setState(() => _forcedOffline = val);
                     },
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       'Reinicie o app para aplicar completamente.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                     ),
                   ),
                 ],
@@ -725,20 +723,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await context.read<SyncService>().setServerUrl(url);
 
       if (mounted) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('URL do servidor salva!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
+          SnackBar(
+            content: Text('URL do servidor salva!',
+                style: TextStyle(color: cs.onPrimaryContainer)),
+            backgroundColor: cs.primaryContainer,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Erro: $e', style: TextStyle(color: cs.onErrorContainer)),
+            backgroundColor: cs.errorContainer,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -753,18 +754,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) {
       final syncService = context.read<SyncService>();
       if (syncService.lastError == null) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sincronização concluída!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
+          SnackBar(
+            content: Text('Sincronização concluída!',
+                style: TextStyle(color: cs.onPrimaryContainer)),
+            backgroundColor: cs.primaryContainer,
+            duration: const Duration(seconds: 3),
           ),
         );
       } else if (syncService.lastError != null && syncService.lastError!.contains('planta(s) falharam')) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(syncService.lastError!),
-            backgroundColor: Colors.orange,
+            content: Text(syncService.lastError!,
+                style: TextStyle(color: cs.onTertiaryContainer)),
+            backgroundColor: cs.tertiaryContainer,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -830,11 +835,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (mounted) {
+      final cs = Theme.of(context).colorScheme;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text('${missing.length} referência(s) ausente(s) removida(s)'),
-          backgroundColor: Colors.green,
+          content: Text('${missing.length} referência(s) ausente(s) removida(s)',
+              style: TextStyle(color: cs.onPrimaryContainer)),
+          backgroundColor: cs.primaryContainer,
           duration: const Duration(seconds: 3),
         ),
       );
