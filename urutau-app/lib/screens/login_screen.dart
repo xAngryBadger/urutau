@@ -79,13 +79,18 @@ class _LoginScreenState extends State<LoginScreen> {
         _senhaController.text,
       );
 
-      // ── Cross-device login: se falhou local, busca no servidor ──
+      // ── Cross-device login: se falhou local, autentica no servidor ──
+      // H-3 (segurança): buscarUsuarioNoServidor exige senha e só devolve
+      // dados se o SERVIDOR verificou a senha (authWithPassword). O fallback
+      // antigo por email sem senha foi removido — serverUser != null aqui
+      // implica senha provada, logo criar/atualizar a conta local com ela é
+      // seguro (é o caso de reset de senha feito no painel do PocketBase).
       if (usuario == null) {
         final syncService = context.read<SyncService>();
         if (syncService.isConfigured && await syncService.hasInternet()) {
           final serverUser = await syncService.buscarUsuarioNoServidor(
             _emailController.text.trim(),
-            password: _senhaController.text,
+            _senhaController.text,
           );
           if (serverUser != null) {
             final pbId = serverUser['id'] as String;

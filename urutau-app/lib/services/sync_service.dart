@@ -392,9 +392,11 @@ class SyncService extends ChangeNotifier {
 
   /// Registra usuário no servidor PocketBase (cadastro online-first).
   /// Retorna o ID do registro criado, ou null se falhar.
+  ///
+  /// H-1 (segurança): o cliente NUNCA envia `isAdmin` — a regra do servidor
+  /// rejeita isAdmin=true no create, e o default do campo é false.
   Future<String?> registrarUsuarioNoServidor(
-      String nome, String email, String senha,
-      {bool isAdmin = false}) async {
+      String nome, String email, String senha) async {
     if (_pb == null || _serverUrl == null) return null;
 
     // Verifica se já existe no servidor
@@ -418,7 +420,6 @@ class SyncService extends ChangeNotifier {
           'password': senha,
           'passwordConfirm': senha,
           'name': nome,
-          'isAdmin': isAdmin,
         }),
       );
       return record.id;
@@ -438,7 +439,6 @@ class SyncService extends ChangeNotifier {
           'password': senha,
           'passwordConfirm': senha,
           'name': nome,
-          'isAdmin': isAdmin,
         }),
       );
       client.close();
@@ -455,49 +455,36 @@ class SyncService extends ChangeNotifier {
     return null;
   }
 
-  /// Busca e autentica usuário no servidor PocketBase por email+senha.
-  /// Retorna dados do usuário se autenticou com sucesso, null caso contrário.
-  Future<Map<String, dynamic>?> buscarUsuarioNoServidor(String email,
-      {String? password}) async {
+  /// Autentica usuário no servidor PocketBase por email+senha.
+  ///
+  /// H-3 (segurança, blocker): a senha é OBRIGATÓRIA e SEMPRE verificada pelo
+  /// servidor via authWithPassword. O fallback antigo devolvia o utilizador
+  /// só por email (listagem sem senha) — quem soubesse um email entrava na
+  /// conta de outra pessoa. Esse caminho foi REMOVIDO: sem verificação de
+  /// senha no servidor, esta função devolve null.
+  ///
+  /// Retorna os dados do usuário se a senha foi verificada, null caso contrário.
+  Future<Map<String, dynamic>?> buscarUsuarioNoServidor(
+      String email, String password) async {
     if (_pb == null) return null;
+    if (password.isEmpty) return null;
 
-    // 1. Se temos senha, tenta auth direta (mais confiável, não precisa de admin auth)
-    if (password != null && password.isNotEmpty) {
-      try {
-        final authData = await _withRetry(
-          () => _pb!.collection('users').authWithPassword(email, password),
-        );
-        final r = authData.record;
-        debugPrint('Auth PocketBase OK para $email (id: ${r.id})');
-        return {
-          'id': r.id,
-          'name': r.getStringValue('name'),
-          'email': r.getStringValue('email'),
-        };
-      } catch (e) {
-        debugPrint('Auth PocketBase falhou para $email: $e');
-        // Se auth falhou, pode ser senha errada ou user não existe
-        // Tenta listagem como fallback abaixo
-      }
-    }
-
-    // 2. Fallback: tenta buscar por listagem (requer admin auth)
     try {
-      final records = await _withRetry(
-        () => _pb!.collection('users').getFullList(filter: 'email = "$email"'),
+      final authData = await _withRetry(
+        () => _pb!.collection('users').authWithPassword(email, password),
       );
-      if (records.isNotEmpty) {
-        final r = records.first;
-        return {
-          'id': r.id,
-          'name': r.getStringValue('name'),
-          'email': r.getStringValue('email'),
-        };
-      }
+      final r = authData.record;
+      debugPrint('Auth PocketBase OK para $email (id: ${r.id})');
+      return {
+        'id': r.id,
+        'name': r.getStringValue('name'),
+        'email': r.getStringValue('email'),
+      };
     } catch (e) {
-      debugPrint('Erro ao buscar usuário no servidor (listagem): $e');
+      // Senha errada ou usuário inexistente: ambos são "não autenticado".
+      debugPrint('Auth PocketBase falhou para $email: $e');
+      return null;
     }
-    return null;
   }
 
   /// Atualiza contagem de itens pendentes.
