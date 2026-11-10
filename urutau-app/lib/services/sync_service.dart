@@ -2156,13 +2156,14 @@ class SyncService extends ChangeNotifier {
         }
         await _db.marcarParcelaSynced(parcela.uuid);
 
-        // 5. Remapear UUID local para 'pb-{recordId}' (só para parcelas criadas localmente)
+        // 5. Remapear UUID local para 'pb-{recordId}' (só para parcelas criadas localmente).
+        // SEM try/catch: se falhar, a transacção aborta e nada fica marcado
+        // como sincronizado. Com o catch, uma falha silenciosa deixava a
+        // parcela marcada synced mas com o UUID local — e no sync seguinte
+        // `existingServerId` seria null, criando UM SEGUNDO registo no
+        // servidor. Duplicação silenciosa de dados.
         if (existingServerId == null) {
-          try {
-            await _db.remapParcelaUuid(parcela.uuid, 'pb-${record.id}');
-          } catch (e) {
-            debugPrint('Aviso: não foi possível remapear UUID da parcela: $e');
-          }
+          await _db.remapParcelaUuid(parcela.uuid, 'pb-${record.id}');
         }
 
         // Audita sync bem-sucedido
