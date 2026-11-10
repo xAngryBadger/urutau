@@ -163,9 +163,9 @@ Wrap(
         runSpacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Icon(Icons.eco, color: Colors.grey[700]),
+          Icon(Icons.eco, color: Theme.of(context).colorScheme.onSurfaceVariant),
           Text('Tipo de nome:',
-              style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+              style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ChoiceChip(
             label: const Text('Nome popular'),
             selected: _useNomePopular,
@@ -213,7 +213,7 @@ Semantics(
                         ? Tooltip(
                             message: 'Foto obrigatória para NI',
                             child: Icon(Icons.warning_amber,
-                                color: Colors.orange[700]),
+                                color: Theme.of(context).colorScheme.tertiary),
                           )
                         : null,
                   ),
@@ -277,10 +277,10 @@ Semantics(
                   // ListTiles: o ink/splash do toque fica visível e o
                   // debugCheckHasMaterial do ListTile passa.
                   child: Material(
-                    color: Colors.grey[50],
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: Colors.grey[300]!),
+                      side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: ConstrainedBox(
@@ -308,7 +308,7 @@ Semantics(
                                 ? Text(
                                     e.nomePopular,
                                     style: TextStyle(
-                                        fontSize: 12, color: Colors.grey[600]),
+                                        fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                                     overflow: TextOverflow.ellipsis,
                                   )
                                 : null,
@@ -333,20 +333,20 @@ Semantics(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.orange[50],
+                    color: Theme.of(context).colorScheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange[200]!),
+                    border: Border.all(color: Theme.of(context).colorScheme.tertiary),
                   ),
                   child: Row(
                     children: [
                       Icon(Icons.info_outline,
-                          color: Colors.orange[700], size: 18),
+                          color: Theme.of(context).colorScheme.onTertiaryContainer, size: 18),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Atenção: Foto obrigatória para identificação posterior.',
                           style: TextStyle(
-                            color: Colors.orange[800],
+                            color: Theme.of(context).colorScheme.onTertiaryContainer,
                             fontSize: 13,
                           ),
                         ),
@@ -443,7 +443,7 @@ Semantics(
                         : 'Categoria: calculada pela altura/DAP'),
                 style: TextStyle(
                   fontSize: AppTokens.fontCaption,
-                  color: Colors.grey[600],
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               Semantics(
@@ -523,7 +523,7 @@ Semantics(
                       top: 8,
                       right: 8,
                       child: IconButton(
-                        icon: const Icon(Icons.cancel, color: Colors.red),
+                        icon: Icon(Icons.cancel, color: Theme.of(context).colorScheme.error),
                         onPressed: () {
                           setState(() => _fotoPath = null);
                         },
@@ -546,14 +546,14 @@ Semantics(
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: _fotoObrigatoria
-                              ? Colors.orange[300]!
-                              : Colors.grey[300]!,
+                              ? Theme.of(context).colorScheme.tertiary
+                              : Theme.of(context).colorScheme.outlineVariant,
                           width: 2,
                         ),
                         borderRadius: BorderRadius.circular(12),
                         color: _fotoObrigatoria
-                            ? Colors.orange[50]
-                            : Colors.grey[50],
+                            ? Theme.of(context).colorScheme.tertiaryContainer
+                            : Theme.of(context).colorScheme.surfaceContainerHighest,
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -562,16 +562,16 @@ Semantics(
                             Icons.add_a_photo,
                             size: 40,
                             color: _fotoObrigatoria
-                                ? Colors.orange[400]
-                                : Colors.grey[400],
+                                ? Theme.of(context).colorScheme.tertiary
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Tirar foto da planta',
                             style: TextStyle(
                               color: _fotoObrigatoria
-                                  ? Colors.orange[600]
-                                  : Colors.grey[500],
+                                  ? Theme.of(context).colorScheme.onTertiaryContainer
+                                  : Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -586,11 +586,11 @@ Semantics(
       child: FilledButton.icon(
         onPressed: _isSaving ? null : _salvarPlanta,
         icon: _isSaving
-            ? const SizedBox(
+            ? SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white))
+                    strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary))
             : const Icon(Icons.check),
                   label: FittedBox(
                     fit: BoxFit.scaleDown,
@@ -660,11 +660,10 @@ Semantics(
 
     if (_fotoObrigatoria && _fotoPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Foto obrigatória para espécie NI (não identificada)',
-          ),
-          backgroundColor: Colors.red,
+        SnackBar(
+          content: Text('Foto obrigatória para espécie NI (não identificada)',
+              style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
           duration: Duration(seconds: 5),
         ),
       );
@@ -676,11 +675,11 @@ Semantics(
     try {
       if (_fotoObrigatoria && _fotoPath == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
               'Foto obrigatória para espécie NI (não identificada)',
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
             duration: Duration(seconds: 5),
           ),
         );
@@ -768,12 +767,13 @@ Semantics(
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao salvar: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Erro ao salvar: $e',
+            style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
               label: 'Tentar novamente',
-              textColor: Colors.white,
+              textColor: Theme.of(context).colorScheme.onErrorContainer,
               onPressed: () => _salvarPlanta(),
             ),
           ),
