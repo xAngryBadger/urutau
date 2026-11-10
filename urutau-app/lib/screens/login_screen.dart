@@ -170,10 +170,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final cs = Theme.of(context).colorScheme;
+    final primaryColor = cs.primary;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
-    final onBg = const Color(0xFF2C3E2E);
-    final fieldFill = const Color(0xFFF9F6F0);
+    // Antes eram hex fixos (0xFF2C3E2E / 0xFFF9F6F0) — vazavam nos temas escuros.
+    final onBg = cs.onSurface;
+    final fieldFill = cs.surfaceContainerHighest;
 
     return Scaffold(
       body: SafeArea(
@@ -184,7 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
               top: 8,
               right: 8,
               child: IconButton(
-                icon: Icon(Icons.settings, color: Colors.grey[600]),
+                icon: Icon(Icons.settings, color: cs.onSurfaceVariant),
                 tooltip: 'Configurar servidor',
                 onPressed: () => _showServerConfigDialog(),
               ),
@@ -206,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
           errorBuilder: (ctx, err, st) => Icon(
             Icons.forest,
             size: 64,
-            color: const Color(0xFF5A6B5C),
+            color: primaryColor,
           ),
         ),
         const SizedBox(height: 24),
@@ -271,18 +273,18 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: double.infinity,
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.red[50],
+                              color: cs.errorContainer,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.red[200]!),
+                              border: Border.all(color: cs.error),
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.error_outline, color: Colors.red[700]),
+                                Icon(Icons.error_outline, color: cs.onErrorContainer),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     _errorMessage!,
-                                    style: TextStyle(color: Colors.red[700]),
+                                    style: TextStyle(color: cs.onErrorContainer),
                                   ),
                                 ),
                               ],
@@ -301,12 +303,12 @@ class _LoginScreenState extends State<LoginScreen> {
             child: ElevatedButton.icon(
               onPressed: _isLoading ? null : _login,
               icon: _isLoading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: cs.onPrimary,
                       ),
                     )
                   : const Icon(Icons.login),
@@ -531,8 +533,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             // Verifica se email já existe
                             final allUsers = await _db.getAllUsuarios();
                             if (allUsers.any((u) => u.email == emailCtrl.text.trim())) {
+                               final cs = Theme.of(ctx).colorScheme;
                                scaffoldMsg.showSnackBar(
-                                 const SnackBar(content: Text('Email já cadastrado!'), backgroundColor: Colors.red, duration: Duration(seconds: 5)),
+                                 SnackBar(
+                                   content: Text('Email já cadastrado!',
+                                       style: TextStyle(color: cs.onErrorContainer)),
+                                   backgroundColor: cs.errorContainer,
+                                   duration: const Duration(seconds: 5),
+                                 ),
                                );
                                return;
                             }
@@ -567,8 +575,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             }
                             
                             Navigator.pop(ctx);
+                            final cs = Theme.of(ctx).colorScheme;
                             scaffoldMsg.showSnackBar(
-                              const SnackBar(content: Text('Cadastro realizado! Faça login.'), backgroundColor: Colors.green, duration: Duration(seconds: 3)),
+                              SnackBar(
+                                content: Text('Cadastro realizado! Faça login.',
+                                    style: TextStyle(color: cs.onPrimaryContainer)),
+                                backgroundColor: cs.primaryContainer,
+                                duration: const Duration(seconds: 3),
+                              ),
                             );
                           } catch (e) {
                              scaffoldMsg.showSnackBar(
