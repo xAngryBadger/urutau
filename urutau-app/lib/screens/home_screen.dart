@@ -43,8 +43,10 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Acesso restrito a administradores'),
-              backgroundColor: Colors.red,
+              content: Text('Acesso restrito a administradores',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onErrorContainer)),
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
               duration: const Duration(seconds: 5),
             ),
           );
@@ -64,7 +66,12 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao carregar talhões: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Erro ao carregar talhões: $e',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer)),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+          ),
         );
       }
     }
@@ -90,7 +97,12 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao filtrar: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Erro ao filtrar: $e',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer)),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+          ),
         );
       }
     }
@@ -110,6 +122,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final syncService = context.watch<SyncService>();
+    final cs = Theme.of(context).colorScheme;
+    // Texto/ícone sobre a appbar seguem o foreground dela em cada tema.
+    final appBarFg =
+        Theme.of(context).appBarTheme.foregroundColor ?? cs.onPrimary;
 
     return Scaffold(
       appBar: AppBar(
@@ -131,23 +147,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 future: syncService.getLastSyncTime(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData || snapshot.data == null) {
-                    return const Text('Nunca sincronizado',
-                        style: TextStyle(fontSize: 10, color: Colors.grey));
+                    return Text('Nunca sincronizado',
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: appBarFg.withValues(alpha: 0.8)));
                   }
                   final lastSync = snapshot.data!;
                   final diff = DateTime.now().difference(lastSync);
-                  final color = diff.inHours < 1
-                      ? Colors.green
-                      : diff.inHours < 24
-                          ? Colors.amber
-                          : Colors.red;
                   final text = diff.inDays > 0
                       ? '${diff.inDays}d ${diff.inHours % 24}h atrás'
                       : diff.inHours > 0
                           ? '${diff.inHours}h ${diff.inMinutes % 60}min atrás'
                           : '${diff.inMinutes}min atrás';
                   return Text('Última sync: $text',
-                      style: TextStyle(fontSize: 10, color: color));
+                      style: TextStyle(
+                          fontSize: 10, color: appBarFg.withValues(alpha: 0.8)));
                 },
               ),
             ],
@@ -165,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     : (_filterActive
                         ? Icons.filter_alt
                         : Icons.filter_alt_outlined),
-                color: _filterActive ? Colors.amber : null,
+                color: _filterActive ? appBarFg : null,
               ),
               tooltip: 'Filtrar por data ou talhão',
               onPressed: () => setState(() => _showFilterBar = !_showFilterBar),
@@ -183,12 +197,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           label: Text('${syncService.pendingCount}'),
                           child: IconButton(
                             icon: syncService.isSyncing
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 24,
                                     height: 24,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: Colors.white,
+                                      color: appBarFg,
                                     ),
                                   )
                                 : const Icon(Icons.cloud_upload),
@@ -200,7 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           icon: const Icon(Icons.cloud_done),
                           onPressed: null,
                           tooltip: 'Tudo sincronizado',
-                          color: Colors.green[200],
+                          color: appBarFg,
                         ),
                 );
               },
@@ -336,18 +350,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (syncService.lastError != null) {
+      final cs = Theme.of(context).colorScheme;
       return Container(
         width: double.infinity,
-        color: Colors.red[50],
+        color: cs.errorContainer,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            Icon(Icons.error_outline, color: Colors.red[700], size: 18),
+            Icon(Icons.error_outline, color: cs.onErrorContainer, size: 18),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 syncService.lastError!,
-                style: TextStyle(color: Colors.red[700], fontSize: 13),
+                style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
               ),
             ),
             IconButton(
@@ -361,17 +376,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (syncService.pendingCount > 0) {
+      final cs = Theme.of(context).colorScheme;
       return Container(
         width: double.infinity,
-        color: Colors.orange[50],
+        color: cs.tertiaryContainer,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            Icon(Icons.cloud_off, color: Colors.orange[800], size: 18),
+            Icon(Icons.cloud_off, color: cs.onTertiaryContainer, size: 18),
             const SizedBox(width: 8),
             Text(
               '${syncService.pendingCount} parcela(s) pendente(s)',
-              style: TextStyle(color: Colors.orange[800]),
+              style: TextStyle(color: cs.onTertiaryContainer),
             ),
             const Spacer(),
             TextButton(
@@ -506,19 +522,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final label = parts.isEmpty ? 'Filtro ativo' : parts.join(' • ');
 
+    final cs = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      color: Colors.amber[50],
+      color: cs.tertiaryContainer,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(
         children: [
-          const Icon(Icons.filter_alt, size: 16, color: Colors.amber),
+          Icon(Icons.filter_alt, size: 16, color: cs.onTertiaryContainer),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               label,
               style: TextStyle(
-                color: Colors.amber[900],
+                color: cs.onTertiaryContainer,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -529,7 +546,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Text(
               'Limpar',
               style: TextStyle(
-                color: Colors.amber[800],
+                color: cs.onTertiaryContainer,
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),
@@ -643,6 +660,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildEmptyState({bool filterActive = false}) {
+    final cs = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -650,7 +668,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Icon(
             filterActive ? Icons.search_off : Icons.forest,
             size: 100,
-            color: Colors.grey[300],
+            color: cs.onSurfaceVariant,
           ),
           const SizedBox(height: 24),
           Text(
@@ -659,7 +677,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 : 'Nenhuma parcela cadastrada',
             style: TextStyle(
               fontSize: 18,
-              color: Colors.grey[600],
+              color: cs.onSurface,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -670,7 +688,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 : 'Toque em "Nova Parcela" para começar',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[500],
+              color: cs.onSurfaceVariant,
             ),
           ),
           if (filterActive) ...[
@@ -687,26 +705,27 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildErrorState({required String message, required VoidCallback onRetry}) {
+    final cs = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red[700]),
+            Icon(Icons.error_outline, size: 64, color: cs.error),
             const SizedBox(height: 16),
             Text(
               'Erro ao carregar dados',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: Colors.red[700],
+                color: cs.error,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               message,
-              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -722,6 +741,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildParcelaCard(Parcela parcela) {
+    final cs = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -740,7 +760,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   // Ícone de sincronização
                   Icon(
                     parcela.synced ? Icons.cloud_done : Icons.cloud_off,
-                    color: parcela.synced ? Colors.green : Colors.orange,
+                    color: parcela.synced ? cs.primary : cs.tertiary,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
@@ -755,7 +775,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   Icon(
                     Icons.chevron_right,
-                    color: Colors.grey[400],
+                    color: cs.onSurfaceVariant,
                   ),
                 ],
               ),
@@ -796,7 +816,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   parcela.observacoes!,
                   style: TextStyle(
-                    color: Colors.grey[600],
+                    color: cs.onSurfaceVariant,
                     fontSize: 13,
                   ),
                   maxLines: 2,
@@ -807,7 +827,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 _formatDate(parcela.createdAt),
                 style: TextStyle(
-                  color: Colors.grey[400],
+                  color: cs.onSurfaceVariant,
                   fontSize: 12,
                 ),
               ),
@@ -819,14 +839,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _infoChip(IconData icon, String text) {
+    final cs = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: Colors.grey[600]),
+        Icon(icon, size: 14, color: cs.onSurfaceVariant),
         const SizedBox(width: 4),
         Text(
           text,
-          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
         ),
       ],
     );
@@ -859,9 +880,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.cloud_upload, color: Color(0xFF304d36)),
+            Icon(Icons.cloud_upload, color: Theme.of(ctx).colorScheme.primary),
             SizedBox(width: 8),
             Expanded(child: Text('Sincronizar parcelas?')),
           ],
@@ -881,24 +902,24 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.save_as, size: 18, color: Colors.blue[700]),
+                  Icon(Icons.save_as, size: 18, color: Theme.of(ctx).colorScheme.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Você tem ${incompletas.length} parcela(s) incompleta(s). '
                       'Só são enviadas parcelas que você marcou como "Concluir parcela". '
                       'As incompletas ficam só no dispositivo até concluir.',
-                      style: TextStyle(fontSize: 13, color: Colors.blue[900]),
+                      style: TextStyle(fontSize: 13, color: Theme.of(ctx).colorScheme.primary),
                     ),
                   ),
                 ],
               ),
             ],
             const SizedBox(height: 12),
-            const Row(
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.edit_note, size: 18, color: Colors.orange),
+                Icon(Icons.edit_note, size: 18, color: Theme.of(ctx).colorScheme.tertiary),
                 SizedBox(width: 8),
                 Expanded(
                     child: Text(
@@ -908,10 +929,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            const Row(
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.wifi, size: 18, color: Colors.blue),
+                Icon(Icons.wifi, size: 18, color: Theme.of(ctx).colorScheme.primary),
                 SizedBox(width: 8),
                 Expanded(
                     child: Text(
@@ -989,8 +1010,10 @@ class _HomeScreenState extends State<HomeScreen> {
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(msg),
-            backgroundColor: Colors.green,
+            content: Text(msg,
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: const Duration(seconds: 4),
           ),
         );
@@ -1001,8 +1024,10 @@ class _HomeScreenState extends State<HomeScreen> {
               syncService.lastError!.length > 80
                   ? '${syncService.lastError!.substring(0, 80)}...'
                   : syncService.lastError!,
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer),
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -1060,8 +1085,10 @@ class _HomeScreenState extends State<HomeScreen> {
         SnackBar(
           content: Text(importados > 0
               ? '$importados parcela(s) importada(s) do servidor.'
-              : 'Nenhuma parcela nova encontrada.'),
-          backgroundColor: importados > 0 ? Colors.green : Colors.blue,
+              : 'Nenhuma parcela nova encontrada.',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer)),
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
           duration: const Duration(seconds: 3),
         ),
         );
@@ -1071,7 +1098,13 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red, duration: const Duration(seconds: 5)),
+          SnackBar(
+            content: Text('Erro: $e',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer)),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+            duration: const Duration(seconds: 5),
+          ),
         );
       }
     }
@@ -1100,8 +1133,10 @@ class _HomeScreenState extends State<HomeScreen> {
       if (path != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fotos salvas em:\n$path'),
-            backgroundColor: Colors.green,
+            content: Text('Fotos salvas em:\n$path',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -1109,7 +1144,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Nenhuma foto encontrada ou erro na conexão.'),
-        backgroundColor: Colors.orange,
         duration: Duration(seconds: 5),
       ),
         );
