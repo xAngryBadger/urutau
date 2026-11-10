@@ -96,3 +96,73 @@ Pontos medidos:
 - **Hash divergente (RC-04):** bloqueio do lado do cliente, antes do upload — `sync_service.dart:1957-1969` recalcula `sha256De` e, se não bate com o catálogo, loga `hash_divergente_upload` na auditoria e aborta o envio. O servidor não conoce o hash — essa defesa é só do app (documentado; não é buraco do servidor).
 
 **Veredicto §2: PASS** — nenhum ficheiro hostil deixa estado inconsistente ou crash no servidor; os aceites são sanitizados; os rejeitados são 400/413 limpos. No app, `ImageService.metadadosDe` devolve sempre `mime: image/jpeg` (não fareja conteúdo — `image_service.dart:50`); quem barra o conteúdo inválido é o servidor, como provado acima.
+
+---
+
+## §3 — BURACO 3: round-trip do backup (exportar → apagar → restaurar)
+
+### 3a. Round-trip real em teste — `test/backup_roundtrip_test.dart` (BackupService real, só path_provider/SharedPreferences mockados para diretório temporário)
+
+```
+$ flutter test test/backup_roundtrip_test.dart
+00:01 +6: All tests passed!
+  1. export -> wipe -> restore: COUNT(*) bate e as fotos voltam
+  2. ZIP corrompido (truncado a meio) falha limpo e não toca no banco
+  3. ACHADO F-3b (comportamento atual): raw que não é ZIP é aceite sem validação
+  4. manifesto com schemaVersion futuro (99) é rejeitado limpo
+  5. schema antigo restaura e o drift migra no reabrir (manifest v24, banco v31)
+  6. ACHADO F-3a (comportamento atual): manifesto v31 rejeitado pela constante 25
+```
+
+**1. ROUND-TRIP (ponto 1 e 2 do capitão):** semeado 1 utilizador + 2 parcelas + 3 plantas + 2 fotos_parcela + 2 ficheiros em `fotos/` (além do catálogo seed de 72 parcelas). `exportBackup()` → ZIP contém `urutau.sqlite` + `manifest.json` (com `parcelaCount=74`, `photoCount=2`) + `fotos/foto1.jpg`, `fotos/foto2.jpg`. Depois de apagar banco (`urutau.sqlite`/`-wal`/`-shm`) e a pasta `fotos/`: `prepareRestoreFromBytes(zip)` → "Restauração marcada" → `runPendingRestore()` → **COUNT(*) idêntico em usuarios/parcelas/plantas/fotos_parcela e os 2 ficheiros voltam byte a byte** (`[1,2,3,4]` e `[5,6,7,8]`). O banco restaurado reabre com o drift sem erro. **As fotos VÃO dentro do ZIP e voltam para o disco — o backup não é pela metade.** PASS.
+
+**3. ZIP corrompido (truncado a meio):** `ZipDecoder` falha → mensagem de erro, `pending_restore` não fica marcada, nenhum `restore_pending.sqlite` fica no disco e o banco atual continua intacto (COUNT inalterado). PASS.
+
+**4. ZIP que não é ZIP:** ver ACHADO F-3b abaixo — o caminho ZIP (extensão `.zip` / magic `PK`) valida; o caminho **raw** (bytes sem magic PK) não. FAIL documentado como achado.
+
+**5. App aberto vs fechado:** por construção, `prepareRestore*` só grava `restore_pending.sqlite` + flag nas SharedPreferences — **nunca toca no banco vivo**; `runPendingRestore()` corre no boot (`main.dart:37`). Ou seja, com o app aberto a restauração fica pendente e aplica no próximo arranque — não corrompe. PASS (design adiado). Cenário real coberto.
+
+**6. Schema antigo:** manifest v24 + banco com `user_version=31` → aceite com "Migrações serão aplicadas", restore aplica, e ao reabrir com o drift o `onUpgrade` 31→32 corre (a parte v32 é idempotente — verifica a coluna antes de adicionar) e `PRAGMA user_version` chega a 32 com os dados intactos. PASS.
+
+### 3b. Evidência no emulador (adb root, só em cópia — dados reais intocados)
+
+Comando: `adb -s emulator-5554 shell 'sh /data/local/tmp/adv3-emulador.sh'` (script em `D:\urutau-devtools\adv3-emulador.sh`, saída em `adv3-emulador-out.txt`):
+
+```
+=== 1. estado REAL do banco do app neste emulador (somente leitura) ===
+urutau.sqlite 0 bytes; sqlite_master COUNT = 0; fotos no disco: 0
+(banco vazio neste aparelho: fotos_parcela=0)
+=== 2. round-trip a nível de ficheiro numa CÓPIA populada ===
+-- ANTES --            parcelas|3 plantas|2 usuarios|1 fotos_parcela|2  user_version=32
+-- APAGA --           parcelas|0 plantas|0
+-- RESTAURA (cp pending -> alvo, o que runPendingRestore faz) --
+                      parcelas|3 plantas|2 usuarios|1 fotos_parcela|2  user_version=32  integrity_check=ok
+=== 3. F-3b a nível de SO ===
+cp de ficheiro falso sobre o banco -> sqlite3: "file is not a database (26)"
+```
+
+### 3c. ACHADOS (viram tasks de fix novas — não corrigidos aqui por ordem do capitão)
+
+- **F-3a — constante de schema desatualizada:** `BackupService._currentSchemaVersion = 25` (`backup_service.dart:20`) mas o schema real é **32** (`database.dart:234`). Prova viva (teste 6): um manifesto com `schemaVersion: 31` é **rejeitado** com "Backup requer schema v31 mas o app usa v25. Atualize o app." — num app v32. Hoje não morde porque o manifesto é sempre escrito como 25, mas a guarda de versão futura está errada e um backup de app futuro (v26+) seria rejeitado indevidamente. Fix: alinhar a constante ao `AppDatabase.schemaVersion` (ou ler o banco).
+- **F-3b — caminho raw de restore sem validação:** `prepareRestoreFromBytes`/`prepareRestore` (`backup_service.dart:299-304, 319-328, 456-467`): bytes sem magic `PK` são gravados em `restore_pending.sqlite` **sem nenhuma validação** e `runPendingRestore` copia-os cegamente sobre o banco no próximo arranque → banco corrompido, app crasharia no open. Provas: teste 3 (`counts()` passa a lançar depois do restore) e emulador §3b.3 ("file is not a database"). O caminho ZIP está blindado (manifesto + `integrity_check` no pending); o raw não. Fix: no caminho raw, exigir que os bytes abrem como SQLite e passam `PRAGMA integrity_check` antes de marcar o pending (mesma validação do caminho ZIP).
+
+### 3d. Pergunta de produto — backup automático antes de actualizar?
+
+**Recomendação: SIM, backup automático local antes de cada update** (decisão do utilizador já tomada; isto é a justificação, não implementação). Porquê:
+1. A rede de segurança existe e agora está **provada**: export→wipe→restore bate os números incluindo fotos (§3a.1), e o caminho ZIP valida integridade + manifesto e guarda cópia pre-restore (`urutau_pre_restore.sqlite`).
+2. Fica **no aparelho** (`getApplicationDocumentsDirectory`), sem rede — cobre exactamente o incidente da semana passada (update mal assinado apagou dados e não havia rede para recuperar nada).
+3. Pré-condição: corrigir **F-3b** primeiro (raw sem validação) — automatizar backup não toca nesse caminho, mas o restore automático deve usar só o caminho ZIP validado.
+
+**Veredicto §3: PASS no round-trip (banco + fotos), com 2 achados (F-3a, F-3b) registados para tasks de fix.**
+
+---
+
+## Gates desta bateria
+
+```
+flutter analyze  -> 0 erros (issues só info/warning dentro do esperado)
+flutter test     -> 172/172 pass (166 + 6 do backup_roundtrip_test)
+commits atómicos por buraco: 2ee0315 (escape público), 457e622 (guarda §1),
+c0be063 (doc §1), c638fb6 (doc §2), + commit deste §3 com o teste do buraco 3.
+```
+
