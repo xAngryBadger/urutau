@@ -1,7 +1,7 @@
 import 'dart:io' if (dart.library.html) 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' show Theme;
+import 'package:flutter/material.dart' show Theme, Icons;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
@@ -312,8 +312,14 @@ class _BrokenImagePlaceholder extends StatelessWidget {
     return Container(
       color: cs.surfaceContainerHighest,
       child: Center(
-        child: Icon(IconData(0xe09a, fontFamily: 'MaterialIcons'),
-            size: 40, color: cs.onSurfaceVariant),
+        // ÍCONE CONSTANTE, obrigatório. A versão anterior usava
+        // Icon(IconData(0xe09a, fontFamily: 'MaterialIcons')) — não-const —
+        // o que quebra o tree-shaking de ícones e faz `flutter build apk
+        // --release` falhar com "Avoid non-constant invocations of IconData".
+        // Regressão introduzida pela própria correcção da fuga de cor
+        // (commit f73c151) e apanhada pela verificação independente da
+        // ronda 2. A cor vem do tema via IconTheme, não do Icon.
+        child: const Icon(Icons.broken_image, size: 40),
       ),
     );
   }
