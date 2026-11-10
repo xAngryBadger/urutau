@@ -319,7 +319,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.info_outline, color: Colors.orange[700], size: 32),
+        icon: Icon(Icons.info_outline, color: Theme.of(ctx).colorScheme.tertiary, size: 32),
         title: const Text('Parcela já sincronizada'),
         content: const Text(
           'Esta parcela já foi concluída e sincronizada com o servidor.\n\n'
@@ -382,7 +382,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         final confirm = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            icon: const Icon(Icons.person_add, color: Colors.blue, size: 32),
+            icon: Icon(Icons.person_add, color: Theme.of(ctx).colorScheme.primary, size: 32),
             title: const Text('Parcela Disponível'),
             content: Text(
               'Parcela ${nextToOpen!.idParcela} está livre.\n'
@@ -550,8 +550,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           final choice = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              icon: const Icon(Icons.warning_amber,
-                  color: Colors.orange, size: 32),
+              icon: Icon(Icons.warning_amber,
+                  color: Theme.of(ctx).colorScheme.tertiary, size: 32),
               title: const Text('Sair sem salvar?'),
               content: const Text(
                 'Você tem dados não salvos nesta parcela.\n\n'
@@ -568,8 +568,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(ctx, 'discard'),
-                  child: const Text('Descartar',
-                      style: TextStyle(color: Colors.red)),
+                  child: Text('Descartar',
+                      style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
                 ),
               ],
             ),
@@ -641,7 +641,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                 label: 'Excluir parcela',
                 button: true,
                 child: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
+                  icon: Icon(Icons.delete, color: Theme.of(context).colorScheme.error),
                   onPressed: _confirmDelete,
                   tooltip: 'Excluir parcela',
                 ),
@@ -775,7 +775,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       // Sem "(obrigatória ao concluir)" no título: quem tentar concluir sem
       // GPS já é travado com o aviso explícito (MRV exige geo auditável).
       title: 'Localização GPS',
-      accent: _latitude != null ? AppTokens.success : Colors.grey,
+      accent: _latitude != null ? AppTokens.success : Theme.of(context).colorScheme.onSurfaceVariant,
       background:
           _latitude != null ? AppTokens.successBg : AppTokens.neutralBg,
       headerTrailing: [
@@ -803,21 +803,25 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
               style: const TextStyle(
                   fontFamily: 'monospace', fontSize: AppTokens.fontSmall),
             ),
-            const Text(
+            Text(
               'WGS84 · GPS do aparelho',
               style: TextStyle(
-                  fontSize: AppTokens.fontCaption, color: Colors.black54),
+                  fontSize: AppTokens.fontCaption,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ] else ...[
-            const Text(
+            Text(
               'Nenhum ponto capturado.',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ],
           if (_gpsErro != null) ...[
             const SizedBox(height: 4),
             Text(_gpsErro!,
-                style: const TextStyle(fontSize: 12, color: Colors.red)),
+                style: TextStyle(
+                    fontSize: 12, color: Theme.of(context).colorScheme.error)),
           ],
         ],
       ),
@@ -1205,17 +1209,17 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [
-          Icon(Icons.grass, size: 48, color: Colors.grey[300]),
+          Icon(Icons.grass, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(height: 8),
           Text(
             'Nenhuma planta adicionada',
-            style: TextStyle(color: Colors.grey[500]),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -1280,10 +1284,10 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             builder: (_) {
               final pct = _estimativaMrv!['incerteza_pct'];
               if (pct is! double) {
-                return const Text(
+                return Text(
                   'Incerteza: n < 2 — não calculável',
                   style: TextStyle(
-                      fontSize: AppTokens.fontSmall, color: Colors.black54),
+                      fontSize: AppTokens.fontSmall, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 );
               }
               return Text(
@@ -1296,20 +1300,20 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
               );
             },
           ),
-          const Text(
+          Text(
             'Equação: Chave et al. 2014 (pantropical) · '
             'FC 0,47 · 44/12 · AGB aérea apenas',
             style: TextStyle(
-                fontSize: AppTokens.fontCaption, color: Colors.black54),
+                fontSize: AppTokens.fontCaption, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           // RQ-04: rastro do cálculo (hash do resultado)
           if (_estimativaMrv!['resultado_hash'] is String)
             Text(
               'Rastro do cálculo: #${(_estimativaMrv!['resultado_hash'] as String).substring(0, 12)}…',
-              style: const TextStyle(
+              style: TextStyle(
                   fontFamily: 'monospace',
                   fontSize: AppTokens.fontCaption,
-                  color: Colors.black54),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
         ],
       ),
@@ -1331,19 +1335,22 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
+        color: Theme.of(context).colorScheme.tertiaryContainer,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.shade200),
+        border: Border.all(color: Theme.of(context).colorScheme.tertiary),
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline, color: Colors.orange.shade700, size: 20),
+          Icon(Icons.info_outline,
+              color: Theme.of(context).colorScheme.onTertiaryContainer,
+              size: 20),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Esta parcela não será sincronizada até marcar como concluída.',
-              style:
-                  TextStyle(fontSize: 12, color: Colors.orange.shade900),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onTertiaryContainer),
             ),
           ),
         ],
@@ -1362,7 +1369,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           child: OutlinedButton.icon(
             onPressed: _isLoading ? null : _salvarRascunho,
             icon: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2))
@@ -1388,11 +1395,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           child: FilledButton.icon(
             onPressed: _isLoading ? null : _salvar,
             icon: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
+                        strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary))
                 : const Icon(Icons.check_circle),
             label: FittedBox(
               fit: BoxFit.scaleDown,
@@ -1478,11 +1485,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         const SizedBox(height: AppTokens.spaceL),
         _addFotoButtonPlural(),
         const SizedBox(height: AppTokens.spaceS),
-        const Text(
+        Text(
           'Você pode adicionar várias fotos — câmera ou galeria '
           '(seleção múltipla).',
           style: TextStyle(
-              fontSize: AppTokens.fontCaption, color: Colors.black54),
+              fontSize: AppTokens.fontCaption, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ]),
     );
@@ -1520,11 +1527,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           child: FilledButton.icon(
             onPressed: _isLoading ? null : _salvar,
             icon: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
+                        strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary))
                 : const Icon(Icons.check_circle),
             label: FittedBox(
               fit: BoxFit.scaleDown,
@@ -1584,7 +1591,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           AppTokens.spaceM),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        border: Border(top: BorderSide(color: Colors.grey[300]!)),
+        border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
       ),
       child: Row(
         children: [
@@ -1703,8 +1710,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             width: 122,
             child: Text(
               label,
-              style: const TextStyle(
-                  fontSize: AppTokens.fontSmall, color: Colors.black54),
+              style: TextStyle(
+                  fontSize: AppTokens.fontSmall, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ),
           const SizedBox(width: AppTokens.spaceS),
@@ -1862,7 +1869,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     final uuid = _currentUuid;
     if (uuid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Salve a parcela antes de gerar o dossiê.')),
+        SnackBar(content: Text('Salve a parcela antes de gerar o dossiê.')),
       );
       return;
     }
@@ -1893,12 +1900,13 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       SectionTitle(title: title, icon: icon);
 
   Widget _buildPlantaCard(int index, Planta planta) {
+    final cs = Theme.of(context).colorScheme;
     final categoriaColors = {
-      1: Colors.blue,
-      2: Colors.orange,
-      3: Colors.green,
+      1: cs.primary,
+      2: cs.tertiary,
+      3: cs.secondary,
     };
-    final color = categoriaColors[planta.categoria] ?? Colors.grey;
+    final color = categoriaColors[planta.categoria] ?? cs.onSurfaceVariant;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1927,7 +1935,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (planta.fotoEspeciePath != null)
-              const Icon(Icons.photo, color: Colors.green, size: 20),
+              Icon(Icons.photo, color: cs.primary, size: 20),
             Semantics(
               label: 'Editar planta',
               button: true,
@@ -1940,7 +1948,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
               label: 'Remover planta',
               button: true,
               child: IconButton(
-                icon: Icon(Icons.delete, size: 20, color: Colors.red[300]),
+                icon: Icon(Icons.delete, size: 20, color: cs.error),
                 onPressed: () => _removePlanta(planta),
               ),
             ),
@@ -2043,7 +2051,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             label: 'Remover foto',
             button: true,
             child: IconButton(
-              icon: const Icon(Icons.cancel, color: Colors.red),
+              icon: Icon(Icons.cancel, color: Theme.of(context).colorScheme.error),
               onPressed: onDelete,
               style: IconButton.styleFrom(
                 backgroundColor: Colors.white.withValues(alpha: 0.8),
@@ -2066,18 +2074,18 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey[300]!, width: 2),
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant, width: 2),
             borderRadius: BorderRadius.circular(12),
-            color: Colors.grey[50],
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.add_a_photo, size: 36, color: Colors.grey[400]),
+              Icon(Icons.add_a_photo, size: 36, color: Theme.of(context).colorScheme.onSurfaceVariant),
               const SizedBox(height: 8),
               Text(
                 'Adicionar foto',
-                style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
               ),
             ],
           ),
@@ -2139,7 +2147,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+                foregroundColor: Theme.of(ctx).colorScheme.onError),
             child: const Text('Remover'),
           ),
         ],
@@ -2175,8 +2185,9 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Espaço insuficiente (${freeGB.toStringAsFixed(2)} GB). Libere espaço antes de fotografar.'),
-          backgroundColor: Colors.red,
+              'Espaço insuficiente (${freeGB.toStringAsFixed(2)} GB). Libere espaço antes de fotografar.',
+              style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
           duration: const Duration(seconds: 4),
         ),
       );
@@ -2328,9 +2339,10 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       if (mounted) {
         await context.read<SyncService>().refreshPendingCount();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Rascunho guardado. Pode retomar depois.'),
-            backgroundColor: Colors.blue,
+          SnackBar(
+            content: Text('Rascunho guardado. Pode retomar depois.',
+              style: TextStyle(color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: Duration(seconds: 4),
           ),
         );
@@ -2340,8 +2352,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Erro: $e'),
-              backgroundColor: Colors.red,
+              content: Text('Erro: $e', style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
               duration: const Duration(seconds: 4)),
         );
       }
@@ -2355,10 +2367,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     if (!_formularioValido()) return;
     if (_plantas.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content:
-              Text('Adicione pelo menos 1 planta para concluir a parcela.'),
-          backgroundColor: Colors.red,
+              Text('Adicione pelo menos 1 planta para concluir a parcela.',
+              style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
           duration: Duration(seconds: 5),
         ),
       );
@@ -2367,11 +2380,12 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     // RC-10: geo obrigatória ao concluir (MRV — parcela sem GPS não é auditável)
     if (_latitude == null || _longitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
               'Capture o GPS da parcela antes de concluir. Sem localização, '
-              'a parcela não é auditável (MRV).'),
-          backgroundColor: Colors.red,
+              'a parcela não é auditável (MRV).',
+              style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
           duration: Duration(seconds: 6),
         ),
       );
@@ -2380,11 +2394,12 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     // RS-01: área da unidade amostral obrigatória ao concluir
     if ((_areaM2Calculada ?? 0) <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
               'Informe a área da parcela (m²) antes de concluir. '
-              'Sem área não dá pra calcular carbono por hectare (MRV).'),
-          backgroundColor: Colors.red,
+              'Sem área não dá pra calcular carbono por hectare (MRV).',
+              style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
           duration: Duration(seconds: 6),
         ),
       );
@@ -2404,10 +2419,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       if (mounted) {
         await context.read<SyncService>().refreshPendingCount();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content:
-                Text('Parcela concluída. Pode sincronizar quando tiver rede.'),
-            backgroundColor: Colors.green,
+                Text('Parcela concluída. Pode sincronizar quando tiver rede.',
+              style: TextStyle(color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: Duration(seconds: 4),
           ),
         );
@@ -2417,8 +2433,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Erro ao salvar: $e'),
-              backgroundColor: Colors.red,
+              content: Text('Erro ao salvar: $e', style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
               duration: const Duration(seconds: 5)),
         );
       }
@@ -2622,8 +2638,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child:
-                const Text('Limpar dados', style: TextStyle(color: Colors.red)),
+            child: Text('Limpar dados', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
           ),
         ],
       ),
@@ -2686,9 +2701,10 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('ZIP exportado com sucesso!'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text('ZIP exportado com sucesso!',
+            style: TextStyle(color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: Duration(seconds: 3),
           ),
         );
@@ -2698,8 +2714,8 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
       Navigator.of(context).pop(); // Fecha loading
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erro ao exportar: $e'),
-          backgroundColor: Colors.red,
+          content: Text('Erro ao exportar: $e', style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
           duration: const Duration(seconds: 4),
         ),
       );
