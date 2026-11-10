@@ -257,8 +257,9 @@ class SyncScreenProState extends State<SyncScreenPro> {
           if (syncService.lastError != null && syncService.lastError!.contains('planta(s) falharam')) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(syncService.lastError!),
-                backgroundColor: Colors.orange,
+                content: Text(syncService.lastError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.onTertiaryContainer)),
+                backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
                 duration: const Duration(seconds: 5),
               ),
             );
@@ -953,9 +954,9 @@ class _PendingItem extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title:
-            const Text('Deletar Parcela', style: TextStyle(color: Colors.red)),
-        icon: const Icon(Icons.delete_forever, color: Colors.red),
+        title: Text('Deletar Parcela',
+            style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+        icon: Icon(Icons.delete_forever, color: Theme.of(ctx).colorScheme.error),
         content: Text(
           'Deseja deletar a parcela ${parcela.propriedade ?? ""}/${parcela.propUt ?? ""} - P${parcela.idParcela}?\n\n'
           'Todos os dados (plantas, fotos) serão perdidos!',
@@ -967,8 +968,8 @@ class _PendingItem extends StatelessWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Sim, Deletar'),
@@ -1066,7 +1067,7 @@ class _PendingItem extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+            icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error, size: 20),
             onPressed: () => _confirmDelete(context),
             padding: const EdgeInsets.all(8),
             constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
