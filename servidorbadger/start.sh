@@ -13,7 +13,8 @@ pkill -f "ngrok http 8090" 2>/dev/null || true
 sleep 1
 
 echo "[+] Iniciando PocketBase..."
-./pocketbase serve --http=0.0.0.0:8090 &>/tmp/pb.log &
+# t21: --hooksDir EXPLICITO — sem ele o PB 0.36.4 nao carrega pb_hooks (falha em silencio).
+./pocketbase serve --http=0.0.0.0:8090 --hooksDir="$DIR/pb_hooks" &>/tmp/pb.log &
 sleep 3
 
 echo "[+] Iniciando ngrok..."
