@@ -200,7 +200,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.person_add, color: Colors.blue, size: 32),
+        icon: Icon(Icons.person_add, color: Theme.of(ctx).colorScheme.primary, size: 32),
         title: const Text('Parcela Disponível'),
         content: Text(
           'Parcela ${p.idParcela} está livre.\n'
@@ -251,7 +251,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.lock, color: Colors.red[400], size: 32),
+        icon: Icon(Icons.lock, color: Theme.of(ctx).colorScheme.error, size: 32),
         title: const Text('Parcela Bloqueada'),
         content: Text(
           'Esta parcela pertence a "$ownerName".\n\n'
@@ -471,8 +471,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.visibility,
-                          color: AppTheme.primary, size: 28),
+                      Icon(Icons.visibility,
+                          color: Theme.of(context).colorScheme.primary, size: 28),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -604,7 +604,7 @@ ScaffoldMessenger.of(context).showSnackBar(
         conflictKeys: conflictKeys,
         selectedUuids: selectedUuids,
         selectableUuids: selectableUuids,
-        accentColor: AppTheme.primary,
+        accentColor: Theme.of(context).colorScheme.primary,
         syncedCount: syncedCount,
         onEdit: (p) async {
           Navigator.pop(ctx);
@@ -682,8 +682,14 @@ ScaffoldMessenger.of(context).showSnackBar(
           }
 ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(msg),
-            backgroundColor: r.sent > 0 ? Colors.green : Colors.orange,
+            content: Text(msg,
+                style: TextStyle(
+                    color: r.sent > 0
+                        ? Theme.of(context).colorScheme.onPrimaryContainer
+                        : Theme.of(context).colorScheme.onTertiaryContainer)),
+            backgroundColor: r.sent > 0
+                ? Theme.of(context).colorScheme.primaryContainer
+                : Theme.of(context).colorScheme.tertiaryContainer,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -709,7 +715,7 @@ ScaffoldMessenger.of(context).showSnackBar(
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.cleaning_services, color: Colors.red[400], size: 32),
+        icon: Icon(Icons.cleaning_services, color: Theme.of(ctx).colorScheme.error, size: 32),
         title: const Text('Limpar cache?'),
         content: Text(
           'Isto removerá $count parcela(s) já sincronizada(s) do '
@@ -731,7 +737,7 @@ ScaffoldMessenger.of(context).showSnackBar(
             button: true,
             child: FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error, foregroundColor: Theme.of(ctx).colorScheme.onError),
               child: const Text('Limpar'),
             ),
           ),
@@ -754,8 +760,10 @@ ScaffoldMessenger.of(context).showSnackBar(
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$cleared parcela(s) removida(s) do cache local.'),
-            backgroundColor: Colors.green,
+            content: Text('$cleared parcela(s) removida(s) do cache local.',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -805,9 +813,15 @@ ScaffoldMessenger.of(context).showSnackBar(
     if (mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(syncService.lastError ?? 'Sincronização concluída!'),
+        content: Text(syncService.lastError ?? 'Sincronização concluída!',
+            style: TextStyle(
+                color: syncService.lastError != null
+                    ? Theme.of(context).colorScheme.onErrorContainer
+                    : Theme.of(context).colorScheme.onPrimaryContainer)),
         backgroundColor:
-            syncService.lastError != null ? Colors.red : Colors.green,
+            syncService.lastError != null
+                ? Theme.of(context).colorScheme.errorContainer
+                : Theme.of(context).colorScheme.primaryContainer,
         duration: const Duration(seconds: 5),
       ),
     );
@@ -909,8 +923,8 @@ ScaffoldMessenger.of(context).showSnackBar(
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erro ao atualizar: $e'),
-          backgroundColor: Colors.red,
+          content: Text('Erro ao atualizar: $e', style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
           duration: const Duration(seconds: 5),
         ),
           );
@@ -1075,8 +1089,14 @@ ScaffoldMessenger.of(context).showSnackBar(
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(msg),
-          backgroundColor: ok ? Colors.green : Colors.orange,
+          content: Text(msg,
+              style: TextStyle(
+                  color: ok
+                      ? Theme.of(context).colorScheme.onPrimaryContainer
+                      : Theme.of(context).colorScheme.onTertiaryContainer)),
+          backgroundColor: ok
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.tertiaryContainer,
           duration: const Duration(seconds: 3),
         ),
       );
@@ -1177,10 +1197,12 @@ ScaffoldMessenger.of(context).showSnackBar(
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('ZIP exportado com sucesso!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
+          SnackBar(
+            content: Text('ZIP exportado com sucesso!',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer)),
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -1188,8 +1210,10 @@ ScaffoldMessenger.of(context).showSnackBar(
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao exportar: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Erro ao exportar: $e',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer)),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
             duration: const Duration(seconds: 4),
           ),
         );
@@ -1245,9 +1269,14 @@ ScaffoldMessenger.of(context).showSnackBar(
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text(ok ? 'Planilha exportada.' : 'Sem parcelas para exportar.'),
-          backgroundColor: ok ? Colors.green : Colors.orange,
+          content: Text(ok ? 'Planilha exportada.' : 'Sem parcelas para exportar.',
+              style: TextStyle(
+                  color: ok
+                      ? Theme.of(context).colorScheme.onPrimaryContainer
+                      : Theme.of(context).colorScheme.onTertiaryContainer)),
+          backgroundColor: ok
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.tertiaryContainer,
           duration: const Duration(seconds: 3),
         ),
       );
@@ -1306,9 +1335,9 @@ ScaffoldMessenger.of(context).showSnackBar(
         if (!didPop) _voltar();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF5F5F5),
+        backgroundColor: Theme.of(context).colorScheme.surface,
          appBar: AppBar(
-           backgroundColor: AppTheme.tertiary,
+           backgroundColor: Theme.of(context).colorScheme.primary,
            foregroundColor: Theme.of(context).colorScheme.onPrimary,
            iconTheme: IconThemeData(color: Theme.of(context).colorScheme.onPrimary),
           title: syncService.currentUser != null
@@ -1324,23 +1353,28 @@ ScaffoldMessenger.of(context).showSnackBar(
                       future: syncService.getLastSyncTime(),
                       builder: (context, snapshot) {
                         if (!snapshot.hasData || snapshot.data == null) {
-                          return const Text('Nunca sincronizado',
-                              style: TextStyle(fontSize: 10, color: Colors.grey));
+                          return Text('Nunca sincronizado',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onPrimary
+                                      .withValues(alpha: 0.8)));
                         }
                         final lastSync = snapshot.data!;
                         final diff = DateTime.now().difference(lastSync);
-                        final color = diff.inHours < 1
-                            ? Colors.green
-                            : diff.inHours < 24
-                                ? Colors.amber
-                                : Colors.red;
                         final text = diff.inDays > 0
                             ? '${diff.inDays}d ${diff.inHours % 24}h atrás'
                             : diff.inHours > 0
                                 ? '${diff.inHours}h ${diff.inMinutes % 60}min atrás'
                                 : '${diff.inMinutes}min atrás';
                         return Text('Última sync: $text',
-                            style: TextStyle(fontSize: 10, color: color));
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onPrimary
+                                    .withValues(alpha: 0.8)));
                       },
                     ),
                   ],
@@ -1495,6 +1529,7 @@ ScaffoldMessenger.of(context).showSnackBar(
   // ─── Sync Banner ──────────────────────────────────────
 
   Widget _buildSyncBanner(SyncService syncService) {
+    final cs = Theme.of(context).colorScheme;
     if (syncService.isSyncing) {
       return Container(
         width: double.infinity,
@@ -1506,11 +1541,11 @@ ScaffoldMessenger.of(context).showSnackBar(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppTheme.primary),
+                  strokeWidth: 2, color: cs.primary),
             ),
             const SizedBox(width: 12),
-            const Text('Sincronizando dados...',
-                style: TextStyle(color: AppTheme.primary, fontSize: 13)),
+            Text('Sincronizando dados...',
+                style: TextStyle(color: cs.primary, fontSize: 13)),
           ],
         ),
       );
@@ -1519,16 +1554,16 @@ ScaffoldMessenger.of(context).showSnackBar(
     if (syncService.lastError != null) {
       return Container(
         width: double.infinity,
-        color: Colors.red[50],
+        color: cs.errorContainer,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            Icon(Icons.error_outline, color: Colors.red[700], size: 18),
+            Icon(Icons.error_outline, color: cs.onErrorContainer, size: 18),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 syncService.lastError!,
-                style: TextStyle(color: Colors.red[700], fontSize: 12),
+                style: TextStyle(color: cs.onErrorContainer, fontSize: 12),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1545,15 +1580,15 @@ ScaffoldMessenger.of(context).showSnackBar(
     if (syncService.pendingCount > 0) {
       return Container(
         width: double.infinity,
-        color: Colors.orange[50],
+        color: cs.tertiaryContainer,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: Row(
           children: [
-            Icon(Icons.cloud_off, color: Colors.orange[800], size: 16),
+            Icon(Icons.cloud_off, color: cs.onTertiaryContainer, size: 16),
             const SizedBox(width: 8),
             Text(
               '${syncService.pendingCount} parcela(s) pendente(s)',
-              style: TextStyle(color: Colors.orange[800], fontSize: 13),
+              style: TextStyle(color: cs.onTertiaryContainer, fontSize: 13),
             ),
             const Spacer(),
             TextButton(
@@ -1644,7 +1679,7 @@ ScaffoldMessenger.of(context).showSnackBar(
                    ),
                    focusedBorder: OutlineInputBorder(
                      borderRadius: BorderRadius.circular(10),
-                     borderSide: const BorderSide(color: AppTheme.primary),
+                     borderSide: BorderSide(color: Theme.of(context).colorScheme.primary),
                    ),
                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
@@ -1711,7 +1746,7 @@ ScaffoldMessenger.of(context).showSnackBar(
           child: ElevatedButton.icon(
             onPressed: _adicionar,
             style: ElevatedButton.styleFrom(
-               backgroundColor: AppTheme.primary,
+               backgroundColor: Theme.of(context).colorScheme.primary,
                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
@@ -1773,7 +1808,7 @@ ScaffoldMessenger.of(context).showSnackBar(
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     leading: CircleAvatar(
-                      backgroundColor: AppTheme.primary,
+                      backgroundColor: Theme.of(context).colorScheme.primary,
         child: Icon(Icons.forest,
             color: Theme.of(context).colorScheme.onPrimary, size: 20),
                     ),
@@ -1827,8 +1862,8 @@ ScaffoldMessenger.of(context).showSnackBar(
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               leading: CircleAvatar(
-                backgroundColor: AppTheme.tertiaryContainer,
-                 child: Icon(Icons.map, color: Theme.of(context).colorScheme.onPrimary, size: 20),
+                backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
+                 child: Icon(Icons.map, color: Theme.of(context).colorScheme.onTertiaryContainer, size: 20),
               ),
               title:
                   Text(ut, style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -1867,9 +1902,10 @@ ScaffoldMessenger.of(context).showSnackBar(
       itemBuilder: (_, i) {
         final p = filtered[i];
         final hasWork = p.userId.isNotEmpty;
+        final cs = Theme.of(context).colorScheme;
         final badgeColor = hasWork
-            ? (p.prontaParaSync ? Colors.green : Colors.orange)
-            : Colors.blueGrey;
+            ? (p.prontaParaSync ? cs.primary : cs.tertiary)
+            : cs.onSurfaceVariant;
         final statusLabel = hasWork
             ? (p.prontaParaSync ? 'Concluída' : 'Em progresso')
             : 'Disponível';
@@ -1906,7 +1942,7 @@ ScaffoldMessenger.of(context).showSnackBar(
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               leading: CircleAvatar(
                  backgroundColor:
-                     hasWork ? AppTheme.primary : Theme.of(context).colorScheme.secondaryContainer,
+                     hasWork ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.secondaryContainer,
                  child: Text(
                    '${p.idParcela}',
                    style: TextStyle(
@@ -1992,13 +2028,13 @@ ScaffoldMessenger.of(context).showSnackBar(
                 contentPadding: EdgeInsets.zero,
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'apagar',
               child: ListTile(
                 leading:
-                    Icon(Icons.delete_forever, size: 20, color: Colors.red),
+                    Icon(Icons.delete_forever, size: 20, color: Theme.of(context).colorScheme.error),
                 title:
-                    Text('Apagar parcela', style: TextStyle(color: Colors.red)),
+                    Text('Apagar parcela', style: TextStyle(color: Theme.of(context).colorScheme.error)),
                 subtitle: Text('Remove o slot (local e servidor)'),
                 contentPadding: EdgeInsets.zero,
               ),
@@ -2084,10 +2120,12 @@ ScaffoldMessenger.of(context).showSnackBar(
     if (mounted) {
       await _refreshNivel();
       ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Dados da parcela limpos.'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 3)),
+      SnackBar(
+          content: Text('Dados da parcela limpos.',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer)),
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          duration: const Duration(seconds: 3)),
       );
     }
   }
@@ -2096,7 +2134,7 @@ ScaffoldMessenger.of(context).showSnackBar(
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.delete_forever, color: Colors.red[700], size: 32),
+        icon: Icon(Icons.delete_forever, color: Theme.of(ctx).colorScheme.error, size: 32),
         title: const Text('Apagar parcela?'),
         content: const Text(
           'O slot será removido localmente e no servidor (se já foi sincronizado). '
@@ -2113,7 +2151,7 @@ ScaffoldMessenger.of(context).showSnackBar(
             label: 'Apagar parcela',
             button: true,
             child: FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error, foregroundColor: Theme.of(ctx).colorScheme.onError),
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Apagar'),
             ),
@@ -2130,8 +2168,8 @@ ScaffoldMessenger.of(context).showSnackBar(
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Erro ao apagar no servidor: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Erro ao apagar no servidor: $e', style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
             duration: const Duration(seconds: 5)),
           );
         }
@@ -2167,10 +2205,12 @@ ScaffoldMessenger.of(context).showSnackBar(
     if (mounted) {
       await _refreshNivel();
       ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Parcela apagada.'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 3)),
+      SnackBar(
+          content: Text('Parcela apagada.',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer)),
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          duration: const Duration(seconds: 3)),
       );
     }
   }
@@ -2179,7 +2219,7 @@ ScaffoldMessenger.of(context).showSnackBar(
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.person_remove, color: Colors.orange[700], size: 32),
+        icon: Icon(Icons.person_remove, color: Theme.of(ctx).colorScheme.tertiary, size: 32),
         title: const Text('Desistir da parcela?'),
         content: const Text(
           'A parcela ficará disponível para outros utilizadores. '
@@ -2200,7 +2240,7 @@ ScaffoldMessenger.of(context).showSnackBar(
             button: true,
             child: FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.tertiary, foregroundColor: Theme.of(ctx).colorScheme.onTertiary),
               child: const Text('Desistir'),
             ),
           ),
@@ -2232,13 +2272,13 @@ ScaffoldMessenger.of(context).showSnackBar(
             _ownershipChip(
               Icons.person,
               '${info.mine} minha${info.mine != 1 ? 's' : ''}',
-              Colors.green[700]!,
+              Theme.of(context).colorScheme.primary,
             ),
           if (info.free > 0)
             _ownershipChip(
               Icons.person_add,
               '${info.free} livre${info.free != 1 ? 's' : ''}',
-              Colors.blue,
+              Theme.of(context).colorScheme.tertiary,
             ),
            if (info.other > 0)
              _ownershipChip(
@@ -2422,19 +2462,19 @@ class _SyncListSheetState extends State<_SyncListSheet> {
                             activeColor: widget.accentColor,
                           )
                         : Icon(Icons.warning_amber,
-                            color: Colors.orange[700], size: 24),
+                            color: Theme.of(context).colorScheme.tertiary, size: 24),
                     title: Text(
                       '${p.propriedade} · ${p.propUt} · Parcela ${p.idParcela}',
                       style: TextStyle(
                         fontWeight: FontWeight.w500,
-                        color: isConflict ? Colors.orange[800] : null,
+                        color: isConflict ? Theme.of(context).colorScheme.tertiary : null,
                       ),
                     ),
                     subtitle: isConflict
                         ? Text(
                             'Conflito no servidor (outro utilizador)',
                             style: TextStyle(
-                                fontSize: 11, color: Colors.orange[800]),
+                                fontSize: 11, color: Theme.of(context).colorScheme.tertiary),
                           )
                         : null,
                     trailing: Semantics(
@@ -2496,7 +2536,7 @@ class _SyncListSheetState extends State<_SyncListSheet> {
                             button: true,
                             child: TextButton.icon(
                               icon: Icon(Icons.cleaning_services,
-                                  size: 18, color: Colors.red[400]),
+                                  size: 18, color: Theme.of(context).colorScheme.error),
                               label: const Text('Limpar cache'),
                               onPressed: widget.onClearCache,
                             ),
