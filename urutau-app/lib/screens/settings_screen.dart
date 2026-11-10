@@ -446,10 +446,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 value: ThemeModeUrutau.altoContraste,
                                 label: Text('Alto contraste'),
                               ),
-                              ButtonSegment(
-                                value: ThemeModeUrutau.kanagawa,
-                                label: Text('Kanagawa'),
-                              ),
                             ],
                             selected: {themeProvider.mode},
                             onSelectionChanged: (sel) async =>
@@ -459,7 +455,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Text(
                             'Claro = tema padrão. Alto contraste = preto/amarelo/'
                             'branco com contraste AA, para uso sob sol. '
-                            'Kanagawa = paleta escura do kanagawa.nvim. '
                             'A escolha fica guardada.',
                             style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                           ),

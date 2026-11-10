@@ -579,7 +579,7 @@ class _HomeScreenState extends State<HomeScreen> {
           margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Material(
             // ANTES: Colors.blue[50] fixo — um azul-claro do tema CLARO que
-            // vazava nos dois temas escuros (alto contraste e Kanagawa),
+            // vazava nos temas escuros (alto contraste),
             // deixando o banner "de outro app". Agora deriva do tema activo.
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
@@ -628,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     // Cor do tema, não fixa: `primary` é escolhido por tema para
                     // contrastar com a superfície (amarelo no alto contraste,
-                    // dragonBlue no Kanagawa, verde-sálvia no claro). Fixar
+                    // verde-sálvia no claro). Fixar
                     // Colors.blue[900] aqui deixaria o texto invisível nos
                     // temas escuros — regressão introduzida pela própria
                     // correcção do fundo do banner.

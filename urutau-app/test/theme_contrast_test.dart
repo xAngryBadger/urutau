@@ -59,30 +59,6 @@ void main() {
     });
   });
 
-  group('Contraste AA — Kanagawa (kanagawa.nvim)', () {
-    test('pares de texto passam 4.5:1', () {
-      expect(contrast(AppTokens.kwFujiWhite, AppTokens.kwSumiInk),
-          greaterThanOrEqualTo(4.5)); // texto no fundo
-      expect(contrast(AppTokens.kwFujiWhite, AppTokens.kwSurface),
-          greaterThanOrEqualTo(4.5)); // texto na superfície
-      expect(contrast(AppTokens.kwSumiInk, AppTokens.kwPrimary),
-          greaterThanOrEqualTo(4.5)); // texto no botão primário
-      expect(contrast(AppTokens.kwDragonBlue, AppTokens.kwSumiInk),
-          greaterThanOrEqualTo(4.5)); // label/ênfase
-      expect(contrast(AppTokens.kwSecondary, AppTokens.kwSumiInk),
-          greaterThanOrEqualTo(4.5)); // secundário
-      expect(contrast(AppTokens.kwLightBlue, AppTokens.kwWaveBlue1),
-          greaterThanOrEqualTo(4.5)); // hint sobre input
-      expect(contrast(AppTokens.kwFujiWhite, AppTokens.kwWaveBlue1),
-          greaterThanOrEqualTo(4.5)); // label de chip
-    });
-
-    test('não-texto (borda de card) passa 3:1', () {
-      expect(contrast(AppTokens.kwPrimary, AppTokens.kwSurface),
-          greaterThanOrEqualTo(3));
-    });
-  });
-
   group('Widget — cada tema aplica sem vazar tema claro', () {
     Future<void> pumpTheme(
         WidgetTester tester, ThemeModeUrutau mode) async {
@@ -96,12 +72,6 @@ void main() {
             expect(td.snackBarTheme.backgroundColor, AppTokens.hcSurface2);
             expect(td.dialogTheme.backgroundColor, AppTokens.hcSurface);
             expect(td.colorScheme.surface, AppTokens.hcSurface);
-          } else if (mode == ThemeModeUrutau.kanagawa) {
-            expect(td.scaffoldBackgroundColor, AppTokens.kwSumiInk);
-            expect(td.cardTheme.color, AppTokens.kwSurface);
-            expect(td.snackBarTheme.backgroundColor, AppTokens.kwSurface);
-            expect(td.dialogTheme.backgroundColor, AppTokens.kwSurface);
-            expect(td.colorScheme.surface, AppTokens.kwSurface);
           }
           return Scaffold(
             appBar: AppBar(title: const Text('tema')),
@@ -120,7 +90,6 @@ void main() {
     }
 
     testWidgets('alto contraste', (t) async => pumpTheme(t, ThemeModeUrutau.altoContraste));
-    testWidgets('kanagawa', (t) async => pumpTheme(t, ThemeModeUrutau.kanagawa));
     testWidgets('claro', (t) async => pumpTheme(t, ThemeModeUrutau.claro));
   });
 }

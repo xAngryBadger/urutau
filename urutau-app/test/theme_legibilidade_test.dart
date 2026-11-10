@@ -10,7 +10,7 @@ import 'package:urutau/services/theme_provider.dart';
 /// de cor): o banner "parcela incompleta" tinha fundo `Colors.blue[50]` do
 /// tema claro. Ao trocar o fundo para `colorScheme.surfaceContainerHighest`
 /// — que é ESCURO nos temas escuros — o texto continuou `Colors.blue[900]`,
-/// ficando invisível no alto contraste e no Kanagawa.
+/// ficando invisível no alto contraste.
 ///
 /// Estes testes fixam a regra: todo o par (fundo, texto) passa 4.5:1.
 void main() {
@@ -65,7 +65,7 @@ void main() {
     }
   });
 
-  test('banner de parcela incompleta fica legivel nos 3 temas', () {
+  test('banner de parcela incompleta fica legivel em todos os temas', () {
     // Regressao especifica: fundo do tema + texto do tema, nunca cor fixa.
     for (final modo in ThemeModeUrutau.values) {
       final cs = ThemeProvider.themeFor(modo).colorScheme;

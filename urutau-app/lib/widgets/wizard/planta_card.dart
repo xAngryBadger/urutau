@@ -85,8 +85,8 @@ class PlantaCard extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: AppTokens.fontSmall,
                                   // Cor do tema: onSurfaceVariant garante >=4.5:1
-                                  // sobre o card nos TRES temas (um cinza fixo
-                                  // dava ~2.4:1 no alto contraste e no Kanagawa.
+                                  // sobre o card em todos os temas (um cinza fixo
+                                  // dava ~2.4:1 no alto contraste).
                                   color: Theme.of(context)
                                       .colorScheme
                                       .onSurfaceVariant,

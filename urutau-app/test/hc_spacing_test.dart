@@ -96,8 +96,8 @@ void main() {
   });
 
   test('TODOS os temas usam a mesma métrica de texto', () {
-    // Kanagawa e alto contraste são variações de cor do mesmo layout. Se um
-    // deles fixar tamanho/peso diferente, o espaçamento muda ao trocar de tema.
+    // Alto contraste é variação de cor do mesmo layout. Se fixar tamanho/peso
+    // diferente, o espaçamento muda ao trocar de tema.
     // O tema claro não define textTheme de todo — isso é legítimo (herda os
     // padrões Material 3), e é justamente o valor que os outros temas devem
     // reproduzir quando os definem.
@@ -115,7 +115,7 @@ void main() {
     }
   });
 
-  testWidgets('trocar de tema não muda o layout (os três)',
+  testWidgets('trocar de tema não muda o layout (todos os temas)',
       (tester) async {
     const kSample = Key('sample3');
 

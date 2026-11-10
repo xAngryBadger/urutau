@@ -38,7 +38,6 @@ const PAGES = [
   { grupo: 'App de campo (celular)', titulo: 'Wizard — botões do Revisar', legenda: 'Guardar rascunho e Concluir alterações no fim da etapa.', img: 'wz4-concluir.jpg' },
   { grupo: 'App de campo (celular)', titulo: 'Configurações', legenda: 'Menu do app > Configuracoes - servidor, sync, backup local (zip; guarde fora do celular), tema e wizard.', img: 'wz5-configuracoes.jpg' },
   { grupo: 'App de campo (celular)', titulo: 'Alto contraste (app)', legenda: 'Preto/amarelo/branco com contraste AA (WCAG 2.2) para leitura sob sol direto.', img: 'wz5-alto-contraste.jpg' },
-  { grupo: 'App de campo (celular)', titulo: 'Tema Kanagawa', legenda: 'Terceira opcao de cor nas Configuracoes - paleta do kanagawa.nvim.', img: 'wz5-kanagawa.jpg' },
   { grupo: 'Painel do verificador (web)', titulo: 'Dashboard (modo demonstração)', legenda: 'Selo "DADOS DE DEMONSTRAÇÃO" — servidor PocketBase ainda não publicado.', img: 'painel-01-dashboard.jpg' },
   { grupo: 'Painel do verificador (web)', titulo: 'Auditoria da parcela', legenda: 'Status, crédito bloqueado, cálculo MRV com IC 95% e hash dos insumos; "Refazer a conta" no navegador.', img: 'painel-02-auditoria.jpg' },
   { grupo: 'Painel do verificador (web)', titulo: 'Verificação da cadeia', legenda: 'Cadeia recalculada elo por elo: payload adulterado detectado (dados de demonstração).', img: 'painel-03-cadeia-quebrada.jpg' },

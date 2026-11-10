@@ -29,24 +29,6 @@ abstract final class AppTokens {
   static const Color hcTextMuted = Color(0xFFC9C9C9); // texto secundário (>=4.5:1)
   static const Color hcDisabled = Color(0xFF6E6E6E); // controle desabilitado (>=3:1)
 
-  // ── Kanagawa (3º tema, escuro) — paleta kanagawa.nvim (exata) ─────────
-  static const Color kwFujiWhite = Color(0xFFDCD7BA);
-  static const Color kwSumiInk = Color(0xFF16161D);
-  static const Color kwWaveBlue1 = Color(0xFF223249);
-  static const Color kwDragonBlue = Color(0xFF7E9CD8);
-  static const Color kwLightBlue = Color(0xFF7FB4CA);
-  static const Color kwCrystalBlue = Color(0xFF68ADCF);
-  static const Color kwCarpGreen = Color(0xFF98BC6D);
-  static const Color kwBoatYellow2 = Color(0xFFE6C384);
-  static const Color kwSakuraPink = Color(0xFFD27E99);
-  static const Color kwWaveRed = Color(0xFFE46876);
-  static const Color kwSurimiOrange = Color(0xFFFFA066);
-  static const Color kwSpringViolet1 = Color(0xFF938AA9);
-  // Papéis do tema (pedido): surface entre sumiInk e waveBlue1.
-  static const Color kwSurface = Color(0xFF1F1F28);
-  static const Color kwPrimary = Color(0xFF7E9CD8);
-  static const Color kwSecondary = Color(0xFF938AA9);
-
   // ── Status de verificação (RG-02) — um lugar só pra cor+ícone ───────
   static const Color statusPendente = Color(0xFFE8A13A); // âmbar
   static const Color statusRevisado = Color(0xFF3A7BD5); // azul
