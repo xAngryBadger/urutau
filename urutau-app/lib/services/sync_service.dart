@@ -41,7 +41,14 @@ http.Client _createHttpClient(
         {Duration timeout = const Duration(seconds: 30)}) =>
     _TimeoutHttpClient(http.Client(), timeout: timeout);
 
-String _escapePbFilter(String v) =>
+/// Escape de valor para dentro de um `filter:` do PocketBase.
+///
+/// A barra-invertida é escapada ANTES da aspa: `\"` no valor precisa virar
+/// `\\\"` (barra literal + aspa escapada). Se só a aspa fosse escapada, um
+/// valor terminando em `\` viraria `\"` e a aspa FECHARIA a string do filtro
+/// cedo demais — injecção de operador (`||`, `&&`) para fora da string.
+/// Público para o teste de regressão `test/filtro_injecao_test.dart`.
+String escapePbFilter(String v) =>
     v.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 
 class SyncService extends ChangeNotifier {
@@ -401,7 +408,7 @@ class SyncService extends ChangeNotifier {
 
     // Verifica se já existe no servidor
     try {
-      final safeEmail = _escapePbFilter(email);
+      final safeEmail = escapePbFilter(email);
       final records = await _withRetry(
         () => _pb!
             .collection('users')
