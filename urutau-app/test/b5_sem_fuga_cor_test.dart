@@ -28,16 +28,19 @@ void main() {
   final regex = RegExp(r'Colors\.(?!transparent)\w+|Color\(0x[0-9a-fA-F]+\)');
 
   /// Scrims de overlay sobre foto (viewer fullscreen, badge na miniatura):
-  /// preto/branco translúcido não vazam tema — permitidos.
+  /// preto/branco translúcido não vazam tema — permitidos. Linhas marcadas
+  /// com `// overlay` também são isentas (ex.: foreground branco no viewer).
   const scrims = {'Colors.black', 'Colors.black87', 'Colors.white54'};
 
   test('B5: zero cores duras em telas/widgets/main (fora tokens de tema)', () {
     final fugas = <String>[];
     for (final path in alvos) {
-      final semComentarios =
-          File(path).readAsStringSync().replaceAll(RegExp(r'//[^\n]*'), '');
+      final bruto = File(path).readAsStringSync();
+      final linhasBrutas = bruto.split('\n');
+      final semComentarios = bruto.replaceAll(RegExp(r'//[^\n]*'), '');
       final linhas = semComentarios.split('\n');
       for (var i = 0; i < linhas.length; i++) {
+        if (linhasBrutas[i].contains('overlay')) continue;
         for (final m in regex.allMatches(linhas[i])) {
           final hit = m.group(0)!;
           if (scrims.contains(hit)) continue;

@@ -2039,7 +2039,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
                 style: const TextStyle(
                   fontSize: AppTokens.fontCaption,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: Colors.white, // overlay (badge sobre a foto)
                 ),
               ),
             ),

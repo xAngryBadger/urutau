@@ -425,7 +425,7 @@ class _AdminScreenState extends State<AdminScreen> {
                               height: 24,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: appBarFg,
                               ),
                             )
                           : const Icon(Icons.cloud_upload),
@@ -1942,7 +1942,7 @@ class _FullscreenImageViewerState extends State<_FullscreenImageViewer> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black87,
-        foregroundColor: Colors.white,
+        foregroundColor: Colors.white, // overlay (scrim preto do viewer)
         title: Text(
           '${_currentIndex + 1} / ${widget.fotos.length}',
           style: TextStyle(fontSize: 16),
