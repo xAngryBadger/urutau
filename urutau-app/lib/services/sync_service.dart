@@ -1004,10 +1004,28 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  /// Nome legível de um registro expandido (propriedade/UT).
+  ///
+  /// O schema do servidor (migrations 1776862933_created_propriedades.js e
+  /// 1776862934_created_uts.js) usa `codigo` como chave/identificador e
+  /// `nome` como rótulo. O painel urutau-admin exibe `codigo`
+  /// (src/pages/Parcels.jsx:482,504). Por isso `codigo` vem primeiro;
+  /// `name`/`nome` ficam só como fallback para schemas antigos.
   static String _expandName(dynamic o) {
     if (o == null) return '';
-    if (o is RecordModel) return o.getStringValue('name');
-    if (o is Map && o['name'] != null) return o['name'].toString();
+    if (o is RecordModel) {
+      final codigo = o.getStringValue('codigo');
+      if (codigo.isNotEmpty) return codigo;
+      final nome = o.getStringValue('nome');
+      if (nome.isNotEmpty) return nome;
+      return o.getStringValue('name');
+    }
+    if (o is Map) {
+      for (final k in const ['codigo', 'nome', 'name']) {
+        final v = o[k];
+        if (v != null && v.toString().isNotEmpty) return v.toString();
+      }
+    }
     return '';
   }
 
@@ -1404,23 +1422,28 @@ class SyncService extends ChangeNotifier {
   /// Fetches parcelas from server matching the given keys only.
   Future<List<Map<String, dynamic>>> _fetchServerParcelasByKeys(Set<String> keys) async {
     if (_pb == null || keys.isEmpty) return [];
-    
+
     try {
+      // A coleção parcelas NÃO tem campo `propriedade` (só `prop_ut` text e a
+      // relation `ut`). Filtrar por `propriedade` dava 400 "Something went
+      // wrong" e a detecção de conflito morria silenciosamente (catch → []).
+      // Filtra por prop_ut + id_parcela, que existem e identificam a parcela.
       final filterParts = keys.map((k) {
         final parts = k.split('|');
         if (parts.length != 3) return null;
-        return '(propriedade = "${parts[0]}" && prop_ut = "${parts[1]}" && id_parcela = ${parts[2]})';
+        final utEsc = parts[1].replaceAll('"', '\\"');
+        return '(prop_ut = "$utEsc" && id_parcela = ${parts[2]})';
       }).where((s) => s != null).join(' || ');
-      
+
       if (filterParts.isEmpty) return [];
-      
+
       final result = await _withRetry(() => _pb!.collection('parcelas').getList(
         filter: filterParts,
         perPage: keys.length + 10,
       ));
       return result.items.map((r) => {
-        'propriedade': r.getStringValue('propriedade'),
-        'propUt': r.getStringValue('prop_ut'),
+        'propriedade': _expandName(r.expand?['ut.propriedade']),
+        'propUt': _expandName(r.expand?['ut']),
         'idParcela': r.getIntValue('id_parcela'),
         'user': r.getStringValue('user'),
       }).toList();
@@ -1677,24 +1700,54 @@ class SyncService extends ChangeNotifier {
         .replaceAll(RegExp(r'-+'), '-');
   }
 
+   /// Normaliza o status local para os valores que o select
+   /// `status_verificacao` aceita no servidor.
+   ///
+   /// O default do banco local é 'ativa' (legado) e o wizard já tratava
+   /// 'ativa' como 'pendente' (parcela_form_screen.dart:284-290). Sem esta
+   /// normalização o push mandava 'ativa' e o servidor respondia 400.
+   static String _statusVerificacaoParaServidor(String? status) {
+     switch (status) {
+       case 'revisado':
+       case 'aprovado':
+         return status!;
+       default:
+         // 'pendente', 'ativa', null, ou qualquer valor desconhecido
+         return 'pendente';
+     }
+   }
+
    /// Schema normalizado: obtém ou cria propriedade por nome; retorna id ou null se coleção não existir.
+   ///
+   /// Contrato do schema (1776862933_created_propriedades.js): `codigo` é TEXT
+   /// **required**, `nome` é TEXT opcional. Enviar `name` dava 400
+   /// ("Cannot be blank" em codigo + campo inexistente) e o catch engolia o
+   /// erro, derrubando o push da parcela inteira.
+   ///
+   /// CUIDADO com o filtro: PocketBase valida TODOS os campos do filter e
+   /// devolve 400 se algum não existir na coleção. `name` NÃO existe aqui —
+   /// por isso o filtro usa só `codigo` e `nome`.
    Future<String?> _getOrCreatePropriedadeId(String name) async {
      if (name.isEmpty) return null;
+     final escaped = name.replaceAll('"', '\\"');
+     final filter = '(codigo = "$escaped" || nome = "$escaped")';
      try {
        final list = await _pb!.collection('propriedades').getList(
              page: 1,
              perPage: 1,
-             filter: 'name = "${name.replaceAll('"', '\\"')}"',
+             filter: filter,
            );
        if (list.items.isNotEmpty) return list.items.first.id;
        try {
-         final created =
-             await _pb!.collection('propriedades').create(body: {'name': name});
+         final created = await _pb!.collection('propriedades').create(body: {
+           'codigo': name,
+           'nome': name,
+         });
          return created.id;
        } catch (_) {
          final retry = await _pb!.collection('propriedades').getList(
                page: 1, perPage: 1,
-               filter: 'name = "${name.replaceAll('"', '\\"')}"',
+               filter: filter,
              );
          if (retry.items.isNotEmpty) {
            // Log dedup event
@@ -1712,26 +1765,33 @@ class SyncService extends ChangeNotifier {
    }
 
    /// Schema normalizado: obtém ou cria UT por (propriedadeId, nome UT); retorna id ou null.
+   ///
+   /// Contrato do schema (1776862934_created_uts.js): `codigo` é TEXT
+   /// **required** e a coleção NÃO tem campo `nome`/`name` — só `codigo` e a
+   /// relation `propriedade`. Enviar `name` dava 400.
+   ///
+   /// Mesma restrição de filtro: só `codigo` (e `propriedade`).
    Future<String?> _getOrCreateUtId(String propriedadeId, String utName) async {
      if (propriedadeId.isEmpty || utName.isEmpty) return null;
      final escaped = utName.replaceAll('"', '\\"');
+     final filter = 'codigo = "$escaped" && propriedade = "$propriedadeId"';
      try {
        final list = await _pb!.collection('uts').getList(
              page: 1,
              perPage: 1,
-             filter: 'propriedade = "$propriedadeId" && name = "$escaped"',
+             filter: filter,
            );
        if (list.items.isNotEmpty) return list.items.first.id;
        try {
          final created = await _pb!.collection('uts').create(body: {
+           'codigo': utName,
            'propriedade': propriedadeId,
-           'name': utName,
          });
          return created.id;
        } catch (_) {
          final retry = await _pb!.collection('uts').getList(
                page: 1, perPage: 1,
-               filter: 'propriedade = "$propriedadeId" && name = "$escaped"',
+               filter: filter,
              );
          if (retry.items.isNotEmpty) {
            // Log dedup event
@@ -1811,6 +1871,9 @@ class SyncService extends ChangeNotifier {
     final utId =
         (propId != null) ? await _getOrCreateUtId(propId, propUtValido) : null;
     // Campos MRV (RC-10/RS-01/RS-02/RG-02) — vão junto em qualquer schema.
+    // status_verificacao é select no servidor com values
+    // [pendente,revisado,aprovado] (1778900000_parcelas_mrv_verificacao.js).
+    // O valor local default é 'ativa' (legado) — mandar cru dava 400.
     final mrvBody = <String, dynamic>{
       'latitude': parcela.latitude,
       'longitude': parcela.longitude,
@@ -1819,7 +1882,7 @@ class SyncService extends ChangeNotifier {
       'unidade_forma': parcela.unidadeForma,
       'raio_m': parcela.raioM,
       'marcador': parcela.marcador,
-      'status_verificacao': parcela.statusParcela,
+      'status_verificacao': _statusVerificacaoParaServidor(parcela.statusParcela),
       // v28 MRV: metadados por foto (hash + GPS + timestamp + dono) —
       // promessa do pitch: "cada foto recebe hash SHA-256, GPS, timestamp e dono"
       'fotos_meta': await _fotosMetaJson(parcela.uuid),
@@ -1828,29 +1891,34 @@ class SyncService extends ChangeNotifier {
       'periodo_id': parcela.periodoUuid,
       'protocolo_versao': parcela.protocoloVersao,
     };
+    // A coleção parcelas NÃO tem campo area_ha (schema medido no servidor).
+    // A área vai em observacoes, no mesmo formato "area_ha:0.1234" de sempre.
+    final areaStr = (parcela.areaHa != null && parcela.areaHa! > 0)
+        ? 'area_ha:${parcela.areaHa!.toStringAsFixed(4)}'
+        : '';
+    final obsBase = parcela.observacoes?.trim() ?? '';
+    final observacoesVal = areaStr.isEmpty
+        ? obsBase
+        : obsBase.isEmpty
+            ? areaStr
+            : '$areaStr\n$obsBase';
     if (utId != null) {
+      // prop_ut é TEXT **required** no servidor (schema medido): precisa ir
+      // mesmo no caminho normalizado, não só no flat.
       parcelaBody = {
         'ut': utId,
+        'prop_ut': propUtValido,
         'id_parcela': parcela.idParcela,
-        'observacoes': parcela.observacoes ?? '',
-        'area_ha': parcela.areaHa,
+        'observacoes': observacoesVal,
         'user': parcela.userId,
         ...mrvBody,
       };
     } else {
-      // Schema flat: coleção pode não ter campo area_ha; tudo vai em observacoes
-      final areaStr = (parcela.areaHa != null && parcela.areaHa! > 0)
-          ? 'area_ha:${parcela.areaHa!.toStringAsFixed(4)}'
-          : '';
-      final obs = parcela.observacoes?.trim() ?? '';
-      final observacoesVal = areaStr.isEmpty
-          ? obs
-          : obs.isEmpty
-              ? areaStr
-              : '$areaStr\n$obs';
+      // Schema flat: a coleção parcelas também NÃO tem campo propriedade.
+      // prop_ut carrega "propriedade - UT", formato que _parseParcelaHierarchy
+      // já reconhece no pull (linha do split por ' - ').
       parcelaBody = {
-        'propriedade': parcela.propriedade,
-        'prop_ut': propUtValido,
+        'prop_ut': '${propName.trim()} - ${propUtValido}',
         'id_parcela': parcela.idParcela,
         'observacoes': observacoesVal,
         'user': parcela.userId,
