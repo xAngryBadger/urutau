@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart' show Value;
 import 'data/database.dart';
 import 'services/backup_service.dart';
+import 'services/auto_backup_service.dart';
 import 'services/device_service.dart';
 import 'services/sync_service.dart';
 import 'services/theme_provider.dart';
@@ -36,6 +37,10 @@ void main() async {
     final db = AppDatabase();
     await BackupService.runPendingRestore();
     await BackupService.cleanPreRestoreFiles();
+    // t19 fase 2: backup automático antes de update — se o versionCode subiu,
+    // exporta o ZIP (banco + fotos) para Downloads/Urutau FORA do sandbox antes
+    // de o drift abrir/migrar o banco. Falha não bloqueia o boot.
+    await AutoBackupService.backupIfVersionChanged();
     await _migratePlaintextPasswords(db);
     // Perfil de demonstração: primeiro arranque sem conta nenhuma semeia um
     // utilizador convidado LOCAL, para que quem instalou o app possa explorar

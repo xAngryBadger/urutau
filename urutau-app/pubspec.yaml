@@ -43,6 +43,7 @@ dependencies:
   shared_preferences: ^2.3.4
   http: ^1.6.0
   drift_flutter: ^0.2.8
+  package_info_plus: ^9.0.1 # t19 fase 2: versionCode para disparar backup automático antes de update
 
   # Segurança
   flutter_secure_storage: ^9.2.4
