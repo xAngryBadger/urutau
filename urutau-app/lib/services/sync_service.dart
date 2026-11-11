@@ -303,9 +303,41 @@ class SyncService extends ChangeNotifier {
       await SecureStorageService.write(
           SecureStorageService.keyCurrentPassword, password);
     }
-  await _updatePendingCount();
-  notifyListeners();
-}
+
+    // F3: estabelecer a sessão autenticada no PocketBase.
+    //
+    // Sem isto, o login local NÃO produz sessão no servidor: o token guardado
+    // no SecureStorage é o de uma sessão anterior (e acaba por expirar), e todos
+    // os pedidos que dependem de `Authorization` saem anónimos — o `listRule`
+    // owner-scoped devolve 0 items e o pull devolve "nada novo" em silêncio.
+    //
+    // A autenticação é CONDICIONAL: sem password, sem servidor configurado ou
+    // sem rede, o login local tem de continuar a funcionar (o modo convidado
+    // depende disso). Falha de autenticação NÃO impede o login — fica visível.
+    if (password != null && password.isNotEmpty && _pb != null) {
+      try {
+        final authData = await _withRetry(
+          () => _pb!
+              .collection('users')
+              .authWithPassword(user.email, password),
+        );
+        await SecureStorageService.write(
+            SecureStorageService.keyAuthToken, _pb!.authStore.token);
+        final prefsAuth = await SharedPreferences.getInstance();
+        await prefsAuth.setString('user_id', authData.record.id);
+        await prefsAuth.setString(
+            'user_name', authData.record.getStringValue('name'));
+      } catch (e) {
+        _lastError =
+            'Sessão no servidor não estabelecida: o login local foi concluído, '
+            'mas a sincronização pode pedir dados de forma anónima. '
+            'Verifique a ligação e tente sincronizar.';
+        debugPrint('setCurrentUser: falha ao autenticar no servidor: $e');
+      }
+    }
+    await _updatePendingCount();
+    notifyListeners();
+  }
 
   /// Remove o usuário atual (logout).
   Future<void> clearCurrentUser() async {
@@ -999,6 +1031,23 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  /// Deteta se uma exceção do PocketBase é de autenticação/autorização.
+  ///
+  /// Distingue "a sessão expirou" de "o servidor rejeitou o pedido por outra
+  /// razão" (ex.: schema não normalizado, payload inválido). Sem esta
+  /// distinção, um 401 é mascarado e o utilizador recebe "nada novo" em vez
+  /// de "a sua sessão expirou".
+  static bool _isAuthError(Object e) {
+    final text = e.toString().toLowerCase();
+    if (text.contains('401')) return true;
+    if (text.contains('403')) return true;
+    if (text.contains('unauthorized')) return true;
+    if (text.contains('forbidden')) return true;
+    if (text.contains('auth')) return true;
+    if (text.contains('token')) return true;
+    return false;
+  }
+
   /// Detecta se o servidor usa schema normalizado (parcelas.ut → uts → propriedades).
   bool _isNormalizedSchema(RecordModel rec) {
     try {
@@ -1068,6 +1117,23 @@ class SyncService extends ChangeNotifier {
   Future<int> pullDadosDoServidor({String? userId}) async {
     if (_pb == null) return 0;
 
+    // F1: garantir autenticação ANTES do primeiro pedido.
+    //
+    // Este método era o ÚNICO pull sem esta pre-condição (syncAll, line ~700,
+    // e pullUsuariosDoServidor, line ~854, já fazem). Sem `Authorization`, o
+    // `listRule` owner-scoped devolve 0 items e o `return 0` seguinte é
+    // INDISTINGUÍVEL de "não havia nada novo" — falha silenciosa.
+    if (!_pb!.authStore.isValid) {
+      final ok = await _tryAutoAuth();
+      if (!ok) {
+        _lastError =
+            'Sessão expirada: não foi possível autenticar no servidor, '
+            'por isso nada foi importado. Inicie sessão novamente.';
+        notifyListeners();
+        return 0;
+      }
+    }
+
     try {
       String filter = '';
       if (userId != null && userId.isNotEmpty) {
@@ -1087,7 +1153,16 @@ class SyncService extends ChangeNotifier {
         );
         if (first.items.isEmpty) return 0;
         if (!_isNormalizedSchema(first.items.first)) useExpand = false;
-      } catch (_) {
+      } catch (e) {
+        // Uma falha de autenticação NÃO é "schema plano": mascarar aqui
+        // esconderia a causa e devolveria uma lista incompleta sem aviso.
+        if (_isAuthError(e)) {
+          _lastError =
+              'Sessão expirada durante a importação: o servidor recusou o '
+              'pedido. Inicie sessão novamente.';
+          notifyListeners();
+          return 0;
+        }
         useExpand = false;
       }
 
@@ -1304,6 +1379,9 @@ class SyncService extends ChangeNotifier {
       // 4. Renumerar parcelas dentro de cada UT para 1, 2, 3...
       await _renumerarParcelasLocal();
 
+      // 5. Puxar plantas do servidor para cada parcela restaurada (pull plantas)
+      await _pullPlantasDoServidor(parcelasServidor);
+
       return importados;
     } catch (e) {
       debugPrint('Erro ao puxar dados do servidor: $e');
@@ -1335,6 +1413,116 @@ class SyncService extends ChangeNotifier {
           );
         }
       }
+    }
+  }
+
+  /// Puxa plantas do servidor para parcelas recém-restauradas.
+  ///
+  /// Identidade: o servidor guarda `uuid_local` (o uuid do registo local
+  /// original) em cada planta, e é por esse campo que o push reconcilia
+  /// (ver `_pushParcela`, que envia `'uuid_local': planta.uuid`). Por isso o
+  /// pull tem de gravar o `uuid_local` do servidor como uuid local — usar o
+  /// `id` do servidor criaria um registo novo a cada ciclo pull→push
+  /// (duplicatas). O `serverPlantaId` guarda o id do servidor para o push.
+  Future<void> _pullPlantasDoServidor(
+      List<RecordModel> parcelasServidor) async {
+    if (_pb == null || parcelasServidor.isEmpty) return;
+
+    try {
+      final parcelaIds = parcelasServidor.map((r) => r.id).toSet();
+      if (parcelaIds.isEmpty) return;
+
+      final filterParts = parcelaIds.map((id) => 'parcela = "$id"').join(' || ');
+
+      // Paginação explícita: `perPage` sozinho trunca silenciosamente quando
+      // há mais registos do que o limite.
+      final List<RecordModel> plantasServidor = [];
+      int pagina = 1;
+      const porPagina = 200;
+      bool temMais = true;
+      while (temMais) {
+        final result = await _withRetry(
+          () => _pb!.collection('plantas').getList(
+                page: pagina,
+                perPage: porPagina,
+                filter: filterParts,
+                expand: 'parcela_rel',
+              ),
+        );
+        plantasServidor.addAll(result.items);
+        temMais = result.items.length == porPagina;
+        pagina++;
+      }
+
+      if (plantasServidor.isEmpty) return;
+
+      int inseridas = 0, atualizadas = 0, semParcelaLocal = 0;
+      for (final plantaRec in plantasServidor) {
+        final parcelaServerId = plantaRec.getStringValue('parcela');
+        final parcelaUuid = 'pb-$parcelaServerId';
+
+        final parcelaLocal = await _db.getParcelaByUuid(parcelaUuid);
+        if (parcelaLocal == null) {
+          semParcelaLocal++;
+          continue;
+        }
+
+        // Identidade local = `uuid_local` do servidor. Fallback para o id do
+        // servidor só quando o servidor não tem `uuid_local` (registos legados
+        // pré-Fase-1): nesse caso o push seguinte recria o registo, que é o
+        // comportamento correcto para dados sem identidade local.
+        final uuidLocal = plantaRec.getStringValue('uuid_local');
+        final plantaUuid =
+            uuidLocal.isNotEmpty ? uuidLocal : plantaRec.id;
+
+        final existing = await _db.getPlantaByUuid(plantaUuid);
+
+        final createdAt = plantaRec.created.isNotEmpty
+            ? DateTime.tryParse(plantaRec.created) ?? DateTime.now()
+            : DateTime.now();
+
+        if (existing == null) {
+          await _db.insertPlanta(PlantasCompanion(
+            uuid: Value(plantaUuid),
+            parcelaUuid: Value(parcelaUuid),
+            especie: Value(plantaRec.getStringValue('especie')),
+            alturaCm: Value(plantaRec.getDoubleValue('altura_cm') ?? 0.0),
+            dapCm: Value(plantaRec.getDoubleValue('dap_cm') ?? 0.0),
+            categoria: Value(plantaRec.getIntValue('categoria') ?? 1),
+            synced: const Value(true),
+            createdAt: Value(createdAt),
+            updatedAt: Value(createdAt),
+            serverPlantaId: Value(plantaRec.id),
+            parcelaServerId: Value(parcelaServerId),
+          ));
+          inseridas++;
+        } else {
+          await _db.updatePlanta(PlantasCompanion(
+            uuid: Value(plantaUuid),
+            parcelaUuid: Value(parcelaUuid),
+            especie: Value(plantaRec.getStringValue('especie')),
+            alturaCm: Value(plantaRec.getDoubleValue('altura_cm') ?? 0.0),
+            dapCm: Value(plantaRec.getDoubleValue('dap_cm') ?? 0.0),
+            categoria: Value(plantaRec.getIntValue('categoria') ?? 1),
+            synced: const Value(true),
+            updatedAt: Value(createdAt),
+            serverPlantaId: Value(plantaRec.id),
+            parcelaServerId: Value(parcelaServerId),
+          ), plantaUuid);
+          atualizadas++;
+        }
+      }
+      debugPrint(
+          'Pull de plantas: $inseridas inseridas, $atualizadas atualizadas, '
+          '$semParcelaLocal sem parcela local, '
+          '${plantasServidor.length} no servidor');
+    } catch (e) {
+      // Falha no pull de plantas NÃO pode ser silenciosa: o utilizador tem de
+      // saber que as plantas não foram importadas.
+      _lastError =
+          'As plantas não foram importadas do servidor: $e';
+      notifyListeners();
+      debugPrint('Erro ao puxar plantas do servidor: $e');
     }
   }
 
