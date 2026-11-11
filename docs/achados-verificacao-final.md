@@ -64,10 +64,89 @@ E MethodChannel#com.utarau.storage: java.lang.ClassCastException
 
 `dist/urutau-2.0.1-release.apk` (68,15 MB) está versionado no git. O GitHub avisa na fronteira de 50 MB recomendados (o limite duro é 100 MB, por isso o push passou). Cada clone passa a pagar 68 MB. Alternativas: GitHub Releases, ou Git LFS.
 
+---
+
+# Actualização 2026-11-11 — correções e fechos posteriores a este documento
+
+Este documento foi escrito antes de várias lacunas serem fechadas. Regista-se aqui
+o que mudou, e a correcção a uma afirmação inexacta.
+
+## A. CORRECÇÃO — causa do `ClassCastException` do canal de storage
+
+A secção 5 acima diz "Fica por diagnosticar". A causa **real** foi encontrada e
+corrigida depois. Para não ficar uma afirmação errada no registo:
+
+**Causa real (não a que a tarefa t5 do AgentTeams declarou):** o lado Dart enviava
+`appDir.path` como uma `String` crua, e o lado Kotlin fazia
+`call.argument<String>("path")`. O `MethodCall.argument<T>()` faz cast do campo
+`arguments` a `Map` — e `arguments` era uma `String`. Resultado:
+`String cannot be cast to Map`. O `try/catch` do lado Kotlin estava **depois**
+do cast, portanto não apanhava a excepção.
+
+> A saída da tarefa t5 declarava outra causa ("`freeBytes` é `int` e o Kotlin
+> espera `Long`"). **Essa afirmação está errada** e é corrigida aqui. A causa
+> é o cast de `arguments` a `Map`, não a largura do inteiro.
+
+**Correção:** o Kotlin passou a ler `call.arguments` de forma defensiva
+(`is String` → usa o valor; `is Map` → `args["path"]`), e o Dart passou a enviar
+`{'path': appDir.path}`.
+
+**Prova:** rebuild + instalação + 65 s (2 ciclos do timer de 30 s) →
+`logcat | grep 'ClassCastException|com.urutau.storage'` → **zero ocorrências**.
+Confirmado de novo na sequência de fecho do pull (commit `fe9c9f9`): **zero
+ocorrências**.
+
+## B. Pull de plantas — FECHADO E PROVADO (commit `fe9c9f9`)
+
+O item "o caminho de restauração das plantas (pull)" da secção 8 está fechado.
+A cadeia causal completa está em [`docs/achados-pull-plantas.md`](achados-pull-plantas.md).
+
+Eram **três** falhas encadeadas, todas silenciosas:
+
+| # | Falha | Efeito |
+|---|-------|--------|
+| **F3** | `SyncService.login()` (que autentica e persiste o token) **nunca era chamado** — o login usava `setCurrentUser()`, que só grava prefs e a senha local | Não havia sessão autenticada; o token guardado expirava |
+| **F1** | `pullDadosDoServidor()` era o **único** pull sem auto-auth | Pedido anónimo ⇒ `listRule` owner-scoped devolve 0 items ⇒ `return 0` indistinguível de "nada novo" |
+| **F4** | O pull gravava o `id` do servidor como uuid local, mas o servidor guarda `uuid_local` e é por esse campo que o push reconcilia | Cada ciclo pull→push criava duplicatas |
+
+**Prova observável** (servidor `--dev`, emulador-5554, APK release):
+
+```
+ANTES:   servidor 53 plantas / dispositivo 0 plantas
+         SQL do servidor: WHERE ('' IS NOT '')            ← anónimo
+DEPOIS:  servidor 53 plantas / dispositivo 53 plantas
+         SQL do servidor: WHERE ('fdw8ib4v9xcltnk' IS NOT '')  ← autenticado
+         8 linhas autenticadas, 0 anónimas na janela do pull
+```
+
+Distribuição no dispositivo: `pb-sk6mdrkvtqcs6tz` → 50 plantas;
+`pb-78mni24nr5os3mc` → 3 plantas.
+
+**Persistência da sessão** (o teste mais crítico do F3): `force-stop` + relaunch
+**sem novo login** → o pull seguinte continua autenticado.
+
+**Idempotência**: 2.º pull consecutivo → 53 → 53, sem duplicatas.
+
+**UI** (dump do uiautomator após reinício da app):
+`desc='UT-90 — Parcela 1 | 50 plantas | 0 fotos'` e
+`desc='UT-77 — Parcela 1 | 3 plantas | 0 fotos'`.
+
+## C. O que continua aberto
+
+- **F2** — o botão "Puxar do servidor" no *Explorer* vive num bottom sheet que só
+  abre quando há parcelas pendentes para push. Como todas as 77 parcelas locais
+  têm `synced=1`, esse caminho não abre. (A *Home* do administrador tem
+  "Puxar do servidor" no menu, e é esse caminho que foi usado na prova acima.)
+- **Wizard completo** — criar uma parcela pelo wizard inteiro e empurrá-la.
+- **Matriz de casos de borda** — `docs/matriz-edge-cases.md`.
+- **Decisão do utilizador** sobre o `dist/` de 68 MB versionado no git.
+
+---
+
 ## 8. Veredicto
 
-O que está **fechado e provado**: gates, build, APK de distribuição, D1 (métrica do diálogo) com teste que falha sem o fix, revisão independente, idempotência do sync, recusa da duplicata pela constraint UNIQUE no banco, create compatível com a regra nova de dono.
+O que está **fechado e provado**: gates, build, APK de distribuição, D1 (métrica do diálogo) com teste que falha sem o fix, revisão independente, idempotência do sync, recusa da duplicata pela constraint UNIQUE no banco, create compatível com a regra nova de dono, causa do `ClassCastException` do canal de storage e **o pull completo de plantas (0 → 53, autenticado, idempotente)**.
 
-O que **não** está provado e importa: o caminho de restauração das plantas (pull), o wizard completo do app a criar e empurrar uma parcela, a matriz de casos de borda, e a causa do `ClassCastException` do canal de storage.
+O que **não** está provado e importa: o caminho de pull no *Explorer* (F2), o wizard completo do app a criar e empurrar uma parcela, e a matriz de casos de borda.
 
-**Não é "LISO".** Falta uma ronda só para estes quatro itens.
+**Não é "LISO".** Falta uma ronda só para estes três itens.
