@@ -106,6 +106,14 @@ class SyncService extends ChangeNotifier {
   }
 
   /// Executa uma operação com retry exponencial.
+  ///
+  /// Erros de AUTENTICAÇÃO/AUTORIZAÇÃO (400 credenciais inválidas, 401, 403)
+  /// NÃO são repetidos: são determinísticos — repetir só gastaria 2+4+8 = 14
+  /// segundos de espera antes de devolver o erro ao utilizador. Com senha
+  /// errada, o login ficava 14 s "a pensar" antes de mostrar o erro.
+  ///
+  /// Erros de rede/timeout (sem `statusCode` ou `statusCode >= 500`) continuam
+  /// a ser repetidos — são transitórios e o retry é o comportamento certo.
   Future<T> _withRetry<T>(Future<T> Function() operation,
       {int maxRetries = _maxRetries}) async {
     for (int attempt = 0; attempt <= maxRetries; attempt++) {
@@ -113,6 +121,7 @@ class SyncService extends ChangeNotifier {
         return await operation();
       } catch (e) {
         if (attempt == maxRetries) rethrow;
+        if (_isNonRetryableError(e)) rethrow;
         final delay = _baseRetryDelay * (1 << attempt); // 2s, 4s, 8s
         debugPrint(
             'Tentativa ${attempt + 1} falhou, retentando em ${delay.inSeconds}s: $e');
@@ -121,6 +130,29 @@ class SyncService extends ChangeNotifier {
     }
     throw Exception('Retry exaurido'); // Nunca alcançado
   }
+
+  /// Verdadeiro quando o erro é determinístico e NÃO deve ser repetido.
+  ///
+  /// - `ClientException` com `statusCode` 400/401/403 → erro do cliente
+  ///   (credenciais inválidas, token expirado, sem permissão): repetir não
+  ///   muda o resultado.
+  /// - `ClientException` com `statusCode` 404 → recurso inexistente.
+  /// - `ClientException` com `statusCode` 0 (sem resposta) ou >= 500 → erro
+  ///   transitório de rede/servidor: ESTE é repetido.
+  ///
+  /// Anything que não seja `ClientException` (ex.: `TimeoutException` do
+  /// `_TimeoutHttpClient`, `SocketException`) é transitório e é repetido.
+  static bool _isNonRetryableError(Object e) {
+    if (e is! ClientException) return false;
+    final code = e.statusCode;
+    if (code == 0) return false; // sem resposta -> transitório
+    if (code >= 500) return false; // servidor -> transitório
+    return true; // 4xx -> determinístico
+  }
+
+  /// Expoe `_isNonRetryableError` para os testes de regressão.
+  @visibleForTesting
+  static bool isNonRetryableErrorForTest(Object e) => _isNonRetryableError(e);
 
   /// Inicializa o serviço com a URL do servidor salva localmente.
   Future<void> init() async {
