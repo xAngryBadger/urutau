@@ -1197,6 +1197,35 @@ VGVG0069;UT04;0.0;1''';
   Future<int> insertParcela(ParcelasCompanion parcela) =>
       into(parcelas).insert(parcela);
 
+  /// Garante que a parcela existe na BD antes de uma linha que a referencia
+  /// (plantas, fotos, observações) ser inserida.
+  ///
+  /// A tabela `plantas` tem FK `parcela_uuid -> parcelas.uuid`. Numa parcela
+  /// NOVA, o wizard atribui o uuid no `_initAsync` mas só grava a linha em
+  /// `parcelas` no passo final ("Concluir"). Como a Etapa 3 (Plantas) insere
+  /// as plantas ANTES disso, o insert rebentava com
+  /// `SqliteException(787): FOREIGN KEY constraint failed` — impossibilitando
+  /// criar uma parcela nova com qualquer planta.
+  ///
+  /// Aqui a linha é criada como "rascunho" (ainda sem o dono e sem
+  /// `prontaParaSync`), para que as plantas gravem. O `_writeParcela` final
+  /// completa a mesma linha com todos os campos — é um UPDATE, não um INSERT
+  /// duplicado, porque o uuid é o mesmo.
+  Future<void> ensureParcelaExists(String uuid) async {
+    final existente = await getParcelaByUuid(uuid, includeDeleted: true);
+    if (existente != null) return;
+    await into(parcelas).insert(ParcelasCompanion(
+      uuid: Value(uuid),
+      propriedade: const Value(''),
+      propUt: const Value(''),
+      idParcela: const Value(0),
+      userId: const Value(''),
+      synced: const Value(false),
+      prontaParaSync: const Value(false),
+      updatedAt: Value(DateTime.now()),
+    ));
+  }
+
   Future<int> updateParcela(ParcelasCompanion parcela, String uuid) =>
       (update(parcelas)..where((t) => t.uuid.equals(uuid))).write(parcela);
 
@@ -1732,6 +1761,53 @@ VGVG0069;UT04;0.0;1''';
   }
 
   // ========== AUDIT LOG ==========
+
+  /// Move as plantas e fotos de uma parcela-rascunho para a parcela real.
+  ///
+  /// Cenário: o utilizador preenche a Etapa 3 (Plantas) de uma parcela NOVA.
+  /// `ensureParcelaExists` cria a linha em `parcelas` como rascunho (sem dono)
+  /// para satisfazer a FK `plantas.parcela_uuid`. Se, ao concluir, existir uma
+  /// parcela DISPONÍVEL com a mesma propriedade/UT/número, o wizard passa a
+  /// trabalhar nessa parcela. As plantas já medidas têm de acompanhar a
+  /// mudança — perdê-las seria perda de dados de campo.
+  ///
+  /// O rascunho fica soft-deleted (retenção preservada) e as plantas/fotos
+  /// passam a apontar para a parcela real.
+  Future<void> migrarDadosParaParcela({
+    required String deRascunho,
+    required String paraParcela,
+  }) async {
+    final nPlantas = await (select(plantas)
+          ..where((t) => t.parcelaUuid.equals(deRascunho) & t.deletedAt.isNull()))
+        .get()
+        .then((l) => l.length);
+    final nFotos = await (select(fotosParcela)
+          ..where((t) => t.parcelaUuid.equals(deRascunho) & t.deletedAt.isNull()))
+        .get()
+        .then((l) => l.length);
+    if (nPlantas == 0 && nFotos == 0) return;
+    final now = DateTime.now();
+    await transaction(() async {
+      await (update(plantas)
+            ..where((t) => t.parcelaUuid.equals(deRascunho) & t.deletedAt.isNull()))
+          .write(PlantasCompanion(
+            parcelaUuid: Value(paraParcela),
+            synced: const Value(false),
+            updatedAt: Value(now),
+          ));
+      await (update(fotosParcela)
+            ..where((t) => t.parcelaUuid.equals(deRascunho) & t.deletedAt.isNull()))
+          .write(FotosParcelaCompanion(parcelaUuid: Value(paraParcela)));
+      await logAudit(
+        'parcela_dados_migrados',
+        entityType: 'parcela',
+        entityUuid: paraParcela,
+        details: 'migrados do rascunho $deRascunho: $nPlantas plantas, $nFotos fotos',
+        oldValue: deRascunho,
+        newValue: paraParcela,
+      );
+    });
+  }
 
   /// Registra uma ação no log de auditoria (tabela legada) E na trilha
   /// encadeada por hash (RG-04 — imutável, append-only).

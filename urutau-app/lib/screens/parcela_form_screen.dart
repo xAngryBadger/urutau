@@ -2099,6 +2099,11 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
   // ==========================================
 
   Future<void> _addPlanta() async {
+    // Numa parcela NOVA a linha em `parcelas` só é gravada no passo final
+    // ("Concluir"). A Etapa 3 insere as plantas com `parcela_uuid` a apontar
+    // para esta parcela, e a FK `plantas.parcela_uuid -> parcelas.uuid`
+    // rebentava com SqliteException(787). Garantir a linha primeiro.
+    await _db.ensureParcelaExists(_currentUuid!);
     final result = await Navigator.of(context).push<Planta>(
       MaterialPageRoute(
         builder: (_) => PlantaFormScreen(parcelaUuid: _currentUuid!),
@@ -2452,6 +2457,26 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     if (!_isEditing) {
       final existente = await _db.findParcelaDisponivel(prop, ut, idParcela);
       if (existente != null) {
+        // A parcela-rascunho (criada por `ensureParcelaExists` para a Etapa 3)
+        // pode já ter plantas medidas. Migrá-las para a parcela real — perdê-las
+        // seria perda de dados de campo.
+        final uuidRascunho = _currentUuid;
+        if (uuidRascunho != null && uuidRascunho != existente.uuid) {
+          await _db.migrarDadosParaParcela(
+            deRascunho: uuidRascunho,
+            paraParcela: existente.uuid,
+          );
+          // O rascunho fica indisponível (sem dono), para não aparecer como
+          // parcela livre no catálogo.
+          await _db.updateParcela(
+            ParcelasCompanion(
+              userId: const drift.Value(''),
+              deletedAt: drift.Value(DateTime.now()),
+              updatedAt: drift.Value(DateTime.now()),
+            ),
+            uuidRascunho,
+          );
+        }
         _currentUuid = existente.uuid;
         _isEditing = true;
       }
@@ -2527,7 +2552,17 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
     if (_isEditing) {
       await _db.updateParcela(parcela, _currentUuid!);
     } else {
-      await _db.insertParcela(parcela);
+      // A linha pode já existir como rascunho: `ensureParcelaExists` cria-a
+      // antes de a Etapa 3 poder gravar plantas (FK `plantas.parcela_uuid`).
+      // Nesse caso é um UPDATE da mesma linha — o uuid é o mesmo, portanto
+      // não nasce uma parcela duplicada.
+      final jaExiste =
+          await _db.getParcelaByUuid(_currentUuid!, includeDeleted: true) != null;
+      if (jaExiste) {
+        await _db.updateParcela(parcela, _currentUuid!);
+      } else {
+        await _db.insertParcela(parcela);
+      }
     }
     final autorUuid = context.read<SyncService>().currentUser?.uuid;
     for (final path in _novasFotosPaths) {
