@@ -111,6 +111,19 @@ class ThemeProvider extends ChangeNotifier {
         borderRadius: BorderRadius.circular(AppTokens.radiusM),
       ),
     ),
+    // MESMA METRICA de texto do alto contraste (22/w400 title, 14 content),
+    // apenas com cores do tema claro. Sem isso o claro herda o padrao Material
+    // 3 (maior) e o dialogo do wizard fica com altura diferente entre temas.
+    dialogTheme: const DialogThemeData(
+      titleTextStyle: TextStyle(
+        color: Color(0xFF1A1C18), // onSurface do tema claro
+        fontSize: 22,
+        fontWeight: FontWeight.w400,
+      ),
+      contentTextStyle: TextStyle(
+          color: Color(0xFF43483F), // onSurfaceVariant do tema claro
+          fontSize: 14),
+    ),
   );
 
   // ───────────── TEMA ALTO CONTRASTE (preto/amarelo/branco, AA) ───────────── //
