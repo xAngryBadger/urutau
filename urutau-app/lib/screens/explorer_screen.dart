@@ -566,17 +566,16 @@ if (!syncService.isConfigured) {
     final conflictKeys = conflitosResult.conflictKeys;
     final conflitoMessages = conflitosResult.messages;
 
-    if (pending.isEmpty) {
-      if (mounted) {
-ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Nenhuma parcela concluída para sincronizar.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-      return;
-    }
+    // O bottom sheet tem de ABRIR SEMPRE.
+    //
+    // Antes, `if (pending.isEmpty) { ...; return; }` cortava o fluxo ANTES do
+    // showModalBottomSheet, e o botão "Puxar do servidor" só existe dentro do
+    // sheet. Como, no uso normal, todas as parcelas locais já estão
+    // sincronizadas (`synced=1`), `pending` é vazio e o pull ficava
+    // INALCANÇÁVEL pela UI — a única forma de restaurar plantas era o menu da
+    // Home. O aviso de push continua a existir, mas dentro do sheet: informa
+    // que não há nada a enviar sem bloquear o acesso ao pull.
+    final avisoSemPush = pending.isEmpty;
 
     // Estado: quais UUIDs estão selecionados para envio (apenas não-conflito)
     final selectableUuids = pending
@@ -601,6 +600,7 @@ ScaffoldMessenger.of(context).showSnackBar(
       ),
       builder: (ctx) => _SyncListSheet(
         parcelas: pending,
+        avisoSemPush: avisoSemPush,
         conflictKeys: conflictKeys,
         selectedUuids: selectedUuids,
         selectableUuids: selectableUuids,
@@ -2360,6 +2360,11 @@ Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).colorScheme.on
 /// Parcelas em conflito vêm marcadas com aviso e não podem ser seleccionadas.
 class _SyncListSheet extends StatefulWidget {
   final List<Parcela> parcelas;
+
+  /// Não há parcelas por enviar (todas sincronizadas). O sheet continua a
+  /// abrir para o pull ficar alcançável; o aviso é informativo.
+  final bool avisoSemPush;
+
   final Set<String> conflictKeys;
   final Set<String> selectedUuids;
   final Set<String> selectableUuids;
@@ -2372,6 +2377,7 @@ class _SyncListSheet extends StatefulWidget {
 
   const _SyncListSheet({
     required this.parcelas,
+    required this.avisoSemPush,
     required this.conflictKeys,
     required this.selectedUuids,
     required this.selectableUuids,
@@ -2428,7 +2434,9 @@ class _SyncListSheetState extends State<_SyncListSheet> {
                   Text(
                      hasConflict
                          ? 'Puxámos o servidor. Parcelas em conflito não podem ser enviadas.'
-                         : 'Marque as parcelas que deseja enviar.',
+                         : widget.avisoSemPush
+                             ? 'Nenhuma parcela concluída para sincronizar. Pode na mesma puxar os dados do servidor.'
+                             : 'Marque as parcelas que deseja enviar.',
                      style: TextStyle(fontSize: 12, color: Theme.of(context).disabledColor),
                    ),
                 ],
@@ -2436,59 +2444,85 @@ class _SyncListSheetState extends State<_SyncListSheet> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: ListView.builder(
-                controller: sc,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                itemCount: widget.parcelas.length,
-                itemBuilder: (_, i) {
-                  final p = widget.parcelas[i];
-                  final key = SyncService.parcelaKey(p);
-                  final isConflict = widget.conflictKeys.contains(key);
-                  final canSelect = widget.selectableUuids.contains(p.uuid);
-                  final checked = _selected.contains(p.uuid);
-                  return ListTile(
-                    leading: canSelect
-                        ? Checkbox(
-                            value: checked,
-                            onChanged: (v) {
-                              setState(() {
-                                if (v == true) {
-                                  _selected.add(p.uuid);
-                                } else {
-                                  _selected.remove(p.uuid);
-                                }
-                              });
-                            },
-                            activeColor: widget.accentColor,
-                          )
-                        : Icon(Icons.warning_amber,
-                            color: Theme.of(context).colorScheme.tertiary, size: 24),
-                    title: Text(
-                      '${p.propriedade} · ${p.propUt} · Parcela ${p.idParcela}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w500,
-                        color: isConflict ? Theme.of(context).colorScheme.tertiary : null,
+              child: widget.avisoSemPush
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.cloud_done,
+                                size: 40, color: Theme.of(context).disabledColor),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Todas as suas parcelas já estão sincronizadas.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: Theme.of(context).disabledColor),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    subtitle: isConflict
-                        ? Text(
-                            'Conflito no servidor (outro utilizador)',
+                    )
+                  : ListView.builder(
+                      controller: sc,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      itemCount: widget.parcelas.length,
+                      itemBuilder: (_, i) {
+                        final p = widget.parcelas[i];
+                        final key = SyncService.parcelaKey(p);
+                        final isConflict = widget.conflictKeys.contains(key);
+                        final canSelect = widget.selectableUuids.contains(p.uuid);
+                        final checked = _selected.contains(p.uuid);
+                        return ListTile(
+                          leading: canSelect
+                              ? Checkbox(
+                                  value: checked,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      if (v == true) {
+                                        _selected.add(p.uuid);
+                                      } else {
+                                        _selected.remove(p.uuid);
+                                      }
+                                    });
+                                  },
+                                  activeColor: widget.accentColor,
+                                )
+                              : Icon(Icons.warning_amber,
+                                  color: Theme.of(context).colorScheme.tertiary,
+                                  size: 24),
+                          title: Text(
+                            '${p.propriedade} · ${p.propUt} · Parcela ${p.idParcela}',
                             style: TextStyle(
-                                fontSize: 11, color: Theme.of(context).colorScheme.tertiary),
-                          )
-                        : null,
-                    trailing: Semantics(
-                      label: 'Editar parcela',
-                      button: true,
-                      child: IconButton(
-                        icon: const Icon(Icons.edit, size: 22),
-                        onPressed: () => widget.onEdit(p),
-                        tooltip: 'Editar',
-                      ),
+                              fontWeight: FontWeight.w500,
+                              color: isConflict
+                                  ? Theme.of(context).colorScheme.tertiary
+                                  : null,
+                            ),
+                          ),
+                          subtitle: isConflict
+                              ? Text(
+                                  'Conflito no servidor (outro utilizador)',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color:
+                                          Theme.of(context).colorScheme.tertiary),
+                                )
+                              : null,
+                          trailing: Semantics(
+                            label: 'Editar parcela',
+                            button: true,
+                            child: IconButton(
+                              icon: const Icon(Icons.edit, size: 22),
+                              onPressed: () => widget.onEdit(p),
+                              tooltip: 'Editar',
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
             const Divider(height: 1),
             Padding(
