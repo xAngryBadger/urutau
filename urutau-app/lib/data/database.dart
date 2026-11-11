@@ -1263,6 +1263,10 @@ VGVG0069;UT04;0.0;1''';
   Future<int> deleteAllPlantasByParcela(String parcelaUuid) =>
       (delete(plantas)..where((t) => t.parcelaUuid.equals(parcelaUuid))).go();
 
+  Future<Planta?> getPlantaByUuid(String uuid) =>
+      (select(plantas)..where((t) => t.uuid.equals(uuid) & t.deletedAt.isNull()))
+          .getSingleOrNull();
+
   Future<void> marcarPlantaSynced(String uuid) =>
       (update(plantas)..where((t) => t.uuid.equals(uuid)))
           .write(PlantasCompanion(

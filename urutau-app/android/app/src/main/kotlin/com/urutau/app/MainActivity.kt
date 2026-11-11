@@ -12,10 +12,19 @@ class MainActivity : FlutterActivity() {
     super.configureFlutterEngine(flutterEngine)
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.urutau.storage").setMethodCallHandler { call, result ->
       if (call.method == "getFreeSpace") {
-        val path = call.argument<String>("path") ?: ""
+        // O Dart envia o path como argumento cru (String), não como Map.
+        // `call.argument<T>(...)` faz cast de `arguments` para Map e rebenta
+        // com ClassCastException quando o payload não é um Map. Por isso
+        // le-se `call.arguments` diretamente e aceita-se qualquer forma.
+        val path: String = when (val args = call.arguments) {
+          is String -> args
+          is Map<*, *> -> args["path"] as? String ?: ""
+          else -> ""
+        }
         try {
           val statFs = StatFs(path)
           val freeBytes = statFs.availableBlocksLong * statFs.blockSizeLong
+          // Long do Java: o StandardMessageCodec converte para int do Dart.
           result.success(freeBytes)
         } catch (e: Exception) {
           result.error("GET_FREE_SPACE_ERROR", e.message, null)
