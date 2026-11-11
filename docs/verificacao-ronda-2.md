@@ -1,5 +1,13 @@
 # Verificação independente da ronda 2 — verificador (t8)
 
+> **SUPERSEDIDO — registo histórico da reprovação da ronda 2 no HEAD `c8f239d`.** O blocker aqui apontado (construção de release quebrada por `IconData` não-const em `image_service.dart:315`) foi fechado no commit `128e1ab`. O estado actual está medido em **[verificacao-83f8a40.md](verificacao-83f8a40.md)** (HEAD `83f8a40`) e a análise do acervo t23 em **[evidencias-t23-analise.md](evidencias-t23-analise.md)**.
+>
+> Afirmações deste documento que já **não** são verdade hoje, para não serem relidas como actuais:
+> - "**BLOCKER — build release quebrado no HEAD**" → **fechado** em `128e1ab`; `flutter build apk --release` dá exit 0 no HEAD `83f8a40`.
+> - "**BLOCKER — dist/ stale**" → **fechado**; `dist/urutau-2.0.1-release.apk` é byte-idêntico ao build fresco do HEAD `83f8a40` (sha256 `04B476F6…`).
+> - as capturas `tema-kanagawa.png` / `ui_theme_kanagawa.xml` citadas na §5 **já não existem**: o tema Kanagawa foi removido por decisão do utilizador no commit `40d4062`.
+> - o servidor passou a ter as migrations `1779400000` (create com dono atado ao auth) e `1779500000` (UNIQUE em `parcelas(prop_ut, id_parcela)`); a §4 foi medida antes dessas regras.
+
 HEAD verificado: `c8f239d` (12 commits atómicos da ronda 2, a0a5b66..c8f239d). Árvore limpa (`git status --short` vazio).
 Ambiente: emulator-5554 (320x640@160dpi, com.urutau.app), PocketBase em 127.0.0.1:8090 (subido por mim com `--dir=D:\urutau-devtools\pb-sync`, estava fora do ar), flutter D:\urutau-devtools\flutter.
 
