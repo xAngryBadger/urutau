@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'dart:io' if (dart.library.html) 'dart:io';
 import 'dart:async';
 import 'dart:isolate';
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
@@ -13,10 +14,11 @@ import 'package:path_provider/path_provider.dart';
 import '../data/database.dart';
 import '../models/conflict_info.dart';
 import '../widgets/conflict_resolution_dialog.dart';
+import 'clock_service.dart';
 import 'image_service.dart';
 import 'secure_storage_service.dart';
 import 'password_service.dart';
-import '../../main.dart' as main;
+import '../main.dart' as main;
 
 const String kForcedOfflineKey = 'forced_offline_mode';
 
@@ -39,7 +41,14 @@ http.Client _createHttpClient(
         {Duration timeout = const Duration(seconds: 30)}) =>
     _TimeoutHttpClient(http.Client(), timeout: timeout);
 
-String _escapePbFilter(String v) =>
+/// Escape de valor para dentro de um `filter:` do PocketBase.
+///
+/// A barra-invertida é escapada ANTES da aspa: `\"` no valor precisa virar
+/// `\\\"` (barra literal + aspa escapada). Se só a aspa fosse escapada, um
+/// valor terminando em `\` viraria `\"` e a aspa FECHARIA a string do filtro
+/// cedo demais — injecção de operador (`||`, `&&`) para fora da string.
+/// Público para o teste de regressão `test/filtro_injecao_test.dart`.
+String escapePbFilter(String v) =>
     v.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 
 class SyncService extends ChangeNotifier {
@@ -52,6 +61,10 @@ class SyncService extends ChangeNotifier {
   String? _serverUrl;
   bool _isConnected = false;
   double _syncProgress = 0.0; // 0.0 a 1.0
+
+  /// RG-04: resultado da última verificação da cadeia NO SERVIDOR
+  /// (null = íntegra ou ainda não verificada; string = problema encontrado).
+  String? lastServerChainStatus;
 
   // Usuário local atual
   Usuario? _currentUser;
@@ -93,6 +106,14 @@ class SyncService extends ChangeNotifier {
   }
 
   /// Executa uma operação com retry exponencial.
+  ///
+  /// Erros de AUTENTICAÇÃO/AUTORIZAÇÃO (400 credenciais inválidas, 401, 403)
+  /// NÃO são repetidos: são determinísticos — repetir só gastaria 2+4+8 = 14
+  /// segundos de espera antes de devolver o erro ao utilizador. Com senha
+  /// errada, o login ficava 14 s "a pensar" antes de mostrar o erro.
+  ///
+  /// Erros de rede/timeout (sem `statusCode` ou `statusCode >= 500`) continuam
+  /// a ser repetidos — são transitórios e o retry é o comportamento certo.
   Future<T> _withRetry<T>(Future<T> Function() operation,
       {int maxRetries = _maxRetries}) async {
     for (int attempt = 0; attempt <= maxRetries; attempt++) {
@@ -100,6 +121,7 @@ class SyncService extends ChangeNotifier {
         return await operation();
       } catch (e) {
         if (attempt == maxRetries) rethrow;
+        if (_isNonRetryableError(e)) rethrow;
         final delay = _baseRetryDelay * (1 << attempt); // 2s, 4s, 8s
         debugPrint(
             'Tentativa ${attempt + 1} falhou, retentando em ${delay.inSeconds}s: $e');
@@ -108,6 +130,29 @@ class SyncService extends ChangeNotifier {
     }
     throw Exception('Retry exaurido'); // Nunca alcançado
   }
+
+  /// Verdadeiro quando o erro é determinístico e NÃO deve ser repetido.
+  ///
+  /// - `ClientException` com `statusCode` 400/401/403 → erro do cliente
+  ///   (credenciais inválidas, token expirado, sem permissão): repetir não
+  ///   muda o resultado.
+  /// - `ClientException` com `statusCode` 404 → recurso inexistente.
+  /// - `ClientException` com `statusCode` 0 (sem resposta) ou >= 500 → erro
+  ///   transitório de rede/servidor: ESTE é repetido.
+  ///
+  /// Anything que não seja `ClientException` (ex.: `TimeoutException` do
+  /// `_TimeoutHttpClient`, `SocketException`) é transitório e é repetido.
+  static bool _isNonRetryableError(Object e) {
+    if (e is! ClientException) return false;
+    final code = e.statusCode;
+    if (code == 0) return false; // sem resposta -> transitório
+    if (code >= 500) return false; // servidor -> transitório
+    return true; // 4xx -> determinístico
+  }
+
+  /// Expoe `_isNonRetryableError` para os testes de regressão.
+  @visibleForTesting
+  static bool isNonRetryableErrorForTest(Object e) => _isNonRetryableError(e);
 
   /// Inicializa o serviço com a URL do servidor salva localmente.
   Future<void> init() async {
@@ -141,6 +186,106 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// RG-04/RC-05: envia entradas novas da trilha local para o servidor
+  /// (append-only). Idempotente: pula entry_hash já existente no servidor.
+  /// Mantém a ordem: se uma falhar, para (não pula buraco na cadeia).
+  /// Retorna quantas entradas foram effectively enviadas.
+  Future<int> pushTrilhaAuditoria() async {
+    if (_pb == null) return 0;
+    final prefs = await SharedPreferences.getInstance();
+    final ultimoId = prefs.getInt('trilha_last_synced_idseq') ?? 0;
+    final entradas = await (_db.select(_db.trilhaAuditoria)
+          ..where((t) => t.idSeq.isBiggerThanValue(ultimoId))
+          ..orderBy([(t) => OrderingTerm.asc(t.idSeq)]))
+        .get();
+    if (entradas.isEmpty) return 0;
+
+    int enviadas = 0;
+    int ultimoEnviado = ultimoId;
+    for (final e in entradas) {
+      try {
+        final existe = await _withRetry(() => _pb!.collection('trilha_auditoria')
+            .getList(page: 1, perPage: 1, filter: "entry_hash = '${e.entryHash}'"));
+        if (existe.items.isEmpty) {
+          // RC-13: dispositivo_id vai no registro do servidor (fora do hash local)
+          final dispId = prefs.getString('device_uuid');
+          await _withRetry(() => _pb!.collection('trilha_auditoria').create(body: {
+                'entidade_tipo': e.entidadeTipo,
+                'entidade_uuid': e.entidadeUuid,
+                'acao': e.acao,
+                'antes': e.antes,
+                'depois': e.depois,
+                'usuario_uuid': e.usuarioUuid,
+                'ts_servidor': e.tsServidor?.toUtc().toIso8601String(),
+                'ts_dispositivo': e.tsDispositivo?.toUtc().toIso8601String(),
+                'offset_relogio_ms': e.offsetRelogioMs,
+                'origem': e.origem,
+                'prev_hash': e.prevHash,
+                'entry_hash': e.entryHash,
+                'dispositivo_id': dispId,
+              }));
+        }
+        enviadas++;
+        ultimoEnviado = e.idSeq;
+      } catch (err) {
+        debugPrint('Falha ao enviar trilha idSeq=${e.idSeq}: $err — parando (cadeia em ordem).');
+        break;
+      }
+    }
+    await prefs.setInt('trilha_last_synced_idseq', ultimoEnviado);
+    return enviadas;
+  }
+
+  /// RG-04: verifica a cadeia COMPLETA no servidor (ordem por id de criação),
+  /// remontando o mesmo payload hasheado no app. Retorna null se íntegra.
+  Future<String?> verificarCadeiaServidor() async {
+    if (_pb == null) return 'servidor não configurado';
+    try {
+      final todos = await _withRetry(() => _pb!
+          .collection('trilha_auditoria')
+          .getFullList(sort: 'id', batch: 500));
+      String prev = 'GENESIS';
+      for (final rec in todos) {
+        final prevHash = (rec.data['prev_hash'] as String?) ?? '';
+        if (prevHash != prev) {
+          return 'Cadeia quebrada no servidor (id=${rec.id}): prevHash esperado $prev, encontrado $prevHash';
+        }
+        // mesmo payload do insert local (mesma ordem de chaves)
+        final tsDisp = rec.data['ts_dispositivo'] as String?;
+        final offset = (rec.data['offset_relogio_ms'] as num?)?.toInt();
+        final payload = jsonEncode({
+          'prev': prevHash,
+          'acao': rec.getStringValue('acao'),
+          'entidade_tipo': rec.data['entidade_tipo'] as String?,
+          'entidade_uuid': rec.data['entidade_uuid'] as String?,
+          'usuario_uuid': rec.data['usuario_uuid'] as String?,
+          'antes': rec.data['antes'] as String?,
+          'depois': rec.data['depois'] as String?,
+          'ts_dispositivo': tsDisp == null
+              ? null
+              : DateTime.fromMillisecondsSinceEpoch(
+                      DateTime.parse(tsDisp).toUtc().millisecondsSinceEpoch,
+                      isUtc: true)
+                  .toIso8601String(),
+          if (offset != null) 'offset_relogio_ms': offset,
+          'origem': rec.getStringValue('origem'),
+        });
+        final esperado = sha256.convert(utf8.encode(payload)).toString();
+        final entryHash = rec.data['entry_hash'] as String?;
+        if (entryHash == null) {
+          return 'Hash ausente no servidor (id=${rec.id})';
+        }
+        if (entryHash != esperado) {
+          return 'Hash divergente no servidor (id=${rec.id})';
+        }
+        prev = entryHash;
+      }
+      return null; // íntegra
+    } catch (e) {
+      return 'erro ao verificar cadeia no servidor: $e';
+    }
+  }
+
   /// Testa conexão com o servidor PocketBase.
   /// Retorna uma string descritiva do resultado.
   Future<String> testConnection([String? urlOverride]) async {
@@ -154,6 +299,8 @@ class SyncService extends ChangeNotifier {
       final response = await testPb.health.check();
       if (response.code == 200) {
         _isConnected = true;
+        // RC-05: mede offset device↔servidor pelo cabeçalho Date
+        await ClockService.capturarOffsetServidor(url);
         notifyListeners();
         return 'OK';
       }
@@ -188,9 +335,41 @@ class SyncService extends ChangeNotifier {
       await SecureStorageService.write(
           SecureStorageService.keyCurrentPassword, password);
     }
-  await _updatePendingCount();
-  notifyListeners();
-}
+
+    // F3: estabelecer a sessão autenticada no PocketBase.
+    //
+    // Sem isto, o login local NÃO produz sessão no servidor: o token guardado
+    // no SecureStorage é o de uma sessão anterior (e acaba por expirar), e todos
+    // os pedidos que dependem de `Authorization` saem anónimos — o `listRule`
+    // owner-scoped devolve 0 items e o pull devolve "nada novo" em silêncio.
+    //
+    // A autenticação é CONDICIONAL: sem password, sem servidor configurado ou
+    // sem rede, o login local tem de continuar a funcionar (o modo convidado
+    // depende disso). Falha de autenticação NÃO impede o login — fica visível.
+    if (password != null && password.isNotEmpty && _pb != null) {
+      try {
+        final authData = await _withRetry(
+          () => _pb!
+              .collection('users')
+              .authWithPassword(user.email, password),
+        );
+        await SecureStorageService.write(
+            SecureStorageService.keyAuthToken, _pb!.authStore.token);
+        final prefsAuth = await SharedPreferences.getInstance();
+        await prefsAuth.setString('user_id', authData.record.id);
+        await prefsAuth.setString(
+            'user_name', authData.record.getStringValue('name'));
+      } catch (e) {
+        _lastError =
+            'Sessão no servidor não estabelecida: o login local foi concluído, '
+            'mas a sincronização pode pedir dados de forma anónima. '
+            'Verifique a ligação e tente sincronizar.';
+        debugPrint('setCurrentUser: falha ao autenticar no servidor: $e');
+      }
+    }
+    await _updatePendingCount();
+    notifyListeners();
+  }
 
   /// Remove o usuário atual (logout).
   Future<void> clearCurrentUser() async {
@@ -284,21 +463,37 @@ class SyncService extends ChangeNotifier {
 
   /// Registra usuário no servidor PocketBase (cadastro online-first).
   /// Retorna o ID do registro criado, ou null se falhar.
+  ///
+  /// H-1 (segurança): o cliente NUNCA envia `isAdmin` — a regra do servidor
+  /// rejeita isAdmin=true no create, e o default do campo é false.
   Future<String?> registrarUsuarioNoServidor(
-      String nome, String email, String senha,
-      {bool isAdmin = false}) async {
+      String nome, String email, String senha) async {
     if (_pb == null || _serverUrl == null) return null;
 
     // Verifica se já existe no servidor
     try {
-      final safeEmail = _escapePbFilter(email);
+      final safeEmail = escapePbFilter(email);
       final records = await _withRetry(
         () => _pb!
             .collection('users')
             .getFullList(filter: 'email = "$safeEmail"'),
       );
       if (records.isNotEmpty) {
-        return records.first.id;
+        // Política de colisão de identidade (auditoria servidor §7): NUNCA
+        // devolver o id de um registro existente só por email — a senha
+        // precisa ser verificada PELO SERVIDOR (authWithPassword) antes de
+        // adotar o id. Se o email existe mas a senha não confere, recusa.
+        final existing = records.first;
+        try {
+          await _withRetry(
+            () => _pb!.collection('users').authWithPassword(email, senha),
+          );
+          return existing.id;
+        } catch (_) {
+          debugPrint(
+              'registrarUsuarioNoServidor: email já existe no servidor e a senha não confere — id NÃO adotado.');
+          return null;
+        }
       }
     } catch (_) {}
 
@@ -310,7 +505,6 @@ class SyncService extends ChangeNotifier {
           'password': senha,
           'passwordConfirm': senha,
           'name': nome,
-          'isAdmin': isAdmin,
         }),
       );
       return record.id;
@@ -330,7 +524,6 @@ class SyncService extends ChangeNotifier {
           'password': senha,
           'passwordConfirm': senha,
           'name': nome,
-          'isAdmin': isAdmin,
         }),
       );
       client.close();
@@ -347,49 +540,36 @@ class SyncService extends ChangeNotifier {
     return null;
   }
 
-  /// Busca e autentica usuário no servidor PocketBase por email+senha.
-  /// Retorna dados do usuário se autenticou com sucesso, null caso contrário.
-  Future<Map<String, dynamic>?> buscarUsuarioNoServidor(String email,
-      {String? password}) async {
+  /// Autentica usuário no servidor PocketBase por email+senha.
+  ///
+  /// H-3 (segurança, blocker): a senha é OBRIGATÓRIA e SEMPRE verificada pelo
+  /// servidor via authWithPassword. O fallback antigo devolvia o utilizador
+  /// só por email (listagem sem senha) — quem soubesse um email entrava na
+  /// conta de outra pessoa. Esse caminho foi REMOVIDO: sem verificação de
+  /// senha no servidor, esta função devolve null.
+  ///
+  /// Retorna os dados do usuário se a senha foi verificada, null caso contrário.
+  Future<Map<String, dynamic>?> buscarUsuarioNoServidor(
+      String email, String password) async {
     if (_pb == null) return null;
+    if (password.isEmpty) return null;
 
-    // 1. Se temos senha, tenta auth direta (mais confiável, não precisa de admin auth)
-    if (password != null && password.isNotEmpty) {
-      try {
-        final authData = await _withRetry(
-          () => _pb!.collection('users').authWithPassword(email, password),
-        );
-        final r = authData.record;
-        debugPrint('Auth PocketBase OK para $email (id: ${r.id})');
-        return {
-          'id': r.id,
-          'name': r.getStringValue('name'),
-          'email': r.getStringValue('email'),
-        };
-      } catch (e) {
-        debugPrint('Auth PocketBase falhou para $email: $e');
-        // Se auth falhou, pode ser senha errada ou user não existe
-        // Tenta listagem como fallback abaixo
-      }
-    }
-
-    // 2. Fallback: tenta buscar por listagem (requer admin auth)
     try {
-      final records = await _withRetry(
-        () => _pb!.collection('users').getFullList(filter: 'email = "$email"'),
+      final authData = await _withRetry(
+        () => _pb!.collection('users').authWithPassword(email, password),
       );
-      if (records.isNotEmpty) {
-        final r = records.first;
-        return {
-          'id': r.id,
-          'name': r.getStringValue('name'),
-          'email': r.getStringValue('email'),
-        };
-      }
+      final r = authData.record;
+      debugPrint('Auth PocketBase OK para $email (id: ${r.id})');
+      return {
+        'id': r.id,
+        'name': r.getStringValue('name'),
+        'email': r.getStringValue('email'),
+      };
     } catch (e) {
-      debugPrint('Erro ao buscar usuário no servidor (listagem): $e');
+      // Senha errada ou usuário inexistente: ambos são "não autenticado".
+      debugPrint('Auth PocketBase falhou para $email: $e');
+      return null;
     }
-    return null;
   }
 
   /// Atualiza contagem de itens pendentes.
@@ -536,8 +716,18 @@ class SyncService extends ChangeNotifier {
     return SecureStorageService.read(SecureStorageService.keyCurrentPassword);
   }
 
+  /// Espera o sync anterior terminar.
+  ///
+  /// Q3 item 2: engole a falha do sync ANTERIOR. Antes, `completeError` no
+  /// catch do syncAll transferia a exceção para todo sync que chegasse depois
+  /// e ficasse na fila — o "envenenamento" — e o sync novo falhava sem nem ter
+  /// começado. Falha do sync anterior é problema dele; o próximo começa limpo.
   Future<void> _waitForSyncLock() async {
-    await _syncLock?.future;
+    try {
+      await _syncLock?.future;
+    } catch (_) {
+      // falha do sync anterior não invalida o próximo
+    }
   }
 
   /// Sincroniza todas as parcelas pendentes com o servidor.
@@ -584,6 +774,10 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // ── RC-05: atualiza o offset do relógio antes de gravar qualquer coisa ──
+      if (_serverUrl != null) {
+        await ClockService.capturarOffsetServidor(_serverUrl!);
+      }
       // ── 0. Reconcilia UUIDs de TODOS os usuários locais com PocketBase ──
       await _buildUserIdMap();
       // Recarrega currentUser pois o uuid pode ter mudado
@@ -639,6 +833,11 @@ class SyncService extends ChangeNotifier {
           }
           try {
             await _syncParcela(parcela);
+            // >>> t16 D-1 (H3): sync MARCA, nunca apaga (RC-03)
+            await _db.marcarFotosEnviadasVerificadas(parcela.uuid);
+            // RC-04 pós-upload: hash conferido no recheck -> sha256_verificado
+            await _db.marcarAtivosVerificadosDaParcela(parcela.uuid);
+            // <<< t16 D-1: fim
             sincronizados++;
             _syncProgress = total > 0 ? sincronizados / total : 1.0;
             notifyListeners();
@@ -654,6 +853,16 @@ class SyncService extends ChangeNotifier {
             }
           }
         }
+      }
+
+      // ── 1b. PUSH da trilha de auditoria (RG-04/RC-05): réplica append-only
+      // pro servidor. Falha não bloqueia o sync de parcelas. ──
+      try {
+        final enviadas = await pushTrilhaAuditoria();
+        if (enviadas > 0) debugPrint('Trilha: $enviadas entradas enviadas ao servidor.');
+        lastServerChainStatus = await verificarCadeiaServidor();
+      } catch (e) {
+        debugPrint('Erro ao enviar trilha de auditoria: $e');
       }
 
       // ── 2. PULL usuários do servidor ──
@@ -678,21 +887,18 @@ class SyncService extends ChangeNotifier {
       await prefs.setInt(
           'last_sync_timestamp', DateTime.now().millisecondsSinceEpoch);
 
-      // Limpar fotos comprimidas temporárias após sync bem-sucedido
-      try {
-        await ImageService.cleanCompressedPhotos();
-      } catch (e) {
-        debugPrint('Clean compressed photos failed (non-critical): $e');
-      }
-
       await _updatePendingCount();
     } catch (e) {
       _lastError =
           'Falha na sincronização. Verifique a conexão e tente novamente.';
       debugPrint('Erro na sincronização: $e');
-      _syncLock!.completeError(e);
-      _syncLock = null;
-      rethrow;
+      // Q3 item 2: completa o lock SEM erro — o waiter pega o estado limpo e
+      // o erro já está em _lastError para a UI mostrar. Sem rethrow: quem
+      // chama não precisa (e antes não tinha) try/catch em 4 telas.
+      if (_syncLock != null) {
+        _syncLock!.complete();
+        _syncLock = null;
+      }
     } finally {
       _isSyncing = false;
       _syncProgress = 0.0;
@@ -857,6 +1063,23 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  /// Deteta se uma exceção do PocketBase é de autenticação/autorização.
+  ///
+  /// Distingue "a sessão expirou" de "o servidor rejeitou o pedido por outra
+  /// razão" (ex.: schema não normalizado, payload inválido). Sem esta
+  /// distinção, um 401 é mascarado e o utilizador recebe "nada novo" em vez
+  /// de "a sua sessão expirou".
+  static bool _isAuthError(Object e) {
+    final text = e.toString().toLowerCase();
+    if (text.contains('401')) return true;
+    if (text.contains('403')) return true;
+    if (text.contains('unauthorized')) return true;
+    if (text.contains('forbidden')) return true;
+    if (text.contains('auth')) return true;
+    if (text.contains('token')) return true;
+    return false;
+  }
+
   /// Detecta se o servidor usa schema normalizado (parcelas.ut → uts → propriedades).
   bool _isNormalizedSchema(RecordModel rec) {
     try {
@@ -870,10 +1093,28 @@ class SyncService extends ChangeNotifier {
     }
   }
 
+  /// Nome legível de um registro expandido (propriedade/UT).
+  ///
+  /// O schema do servidor (migrations 1776862933_created_propriedades.js e
+  /// 1776862934_created_uts.js) usa `codigo` como chave/identificador e
+  /// `nome` como rótulo. O painel urutau-admin exibe `codigo`
+  /// (src/pages/Parcels.jsx:482,504). Por isso `codigo` vem primeiro;
+  /// `name`/`nome` ficam só como fallback para schemas antigos.
   static String _expandName(dynamic o) {
     if (o == null) return '';
-    if (o is RecordModel) return o.getStringValue('name');
-    if (o is Map && o['name'] != null) return o['name'].toString();
+    if (o is RecordModel) {
+      final codigo = o.getStringValue('codigo');
+      if (codigo.isNotEmpty) return codigo;
+      final nome = o.getStringValue('nome');
+      if (nome.isNotEmpty) return nome;
+      return o.getStringValue('name');
+    }
+    if (o is Map) {
+      for (final k in const ['codigo', 'nome', 'name']) {
+        final v = o[k];
+        if (v != null && v.toString().isNotEmpty) return v.toString();
+      }
+    }
     return '';
   }
 
@@ -908,6 +1149,23 @@ class SyncService extends ChangeNotifier {
   Future<int> pullDadosDoServidor({String? userId}) async {
     if (_pb == null) return 0;
 
+    // F1: garantir autenticação ANTES do primeiro pedido.
+    //
+    // Este método era o ÚNICO pull sem esta pre-condição (syncAll, line ~700,
+    // e pullUsuariosDoServidor, line ~854, já fazem). Sem `Authorization`, o
+    // `listRule` owner-scoped devolve 0 items e o `return 0` seguinte é
+    // INDISTINGUÍVEL de "não havia nada novo" — falha silenciosa.
+    if (!_pb!.authStore.isValid) {
+      final ok = await _tryAutoAuth();
+      if (!ok) {
+        _lastError =
+            'Sessão expirada: não foi possível autenticar no servidor, '
+            'por isso nada foi importado. Inicie sessão novamente.';
+        notifyListeners();
+        return 0;
+      }
+    }
+
     try {
       String filter = '';
       if (userId != null && userId.isNotEmpty) {
@@ -927,7 +1185,16 @@ class SyncService extends ChangeNotifier {
         );
         if (first.items.isEmpty) return 0;
         if (!_isNormalizedSchema(first.items.first)) useExpand = false;
-      } catch (_) {
+      } catch (e) {
+        // Uma falha de autenticação NÃO é "schema plano": mascarar aqui
+        // esconderia a causa e devolveria uma lista incompleta sem aviso.
+        if (_isAuthError(e)) {
+          _lastError =
+              'Sessão expirada durante a importação: o servidor recusou o '
+              'pedido. Inicie sessão novamente.';
+          notifyListeners();
+          return 0;
+        }
         useExpand = false;
       }
 
@@ -986,6 +1253,12 @@ class SyncService extends ChangeNotifier {
         final existing = await _db.getParcelaByUuid(parcelaUuid);
         if (existing != null) {
           if (existing.synced) {
+            // Campos MRV vindos do servidor (RC-10/RS-01/RS-02/RG-02)
+            final lat = rec.data['latitude'];
+            final lon = rec.data['longitude'];
+            final areaM2 = rec.data['area_m2'];
+            final raio = rec.data['raio_m'];
+            final statusVer = rec.getStringValue('status_verificacao');
             await _db.updateParcela(
               ParcelasCompanion(
                 propriedade: Value(propriedade),
@@ -993,12 +1266,51 @@ class SyncService extends ChangeNotifier {
                 userId: Value(serverUser),
                 areaHa: Value(areaHa != 0 ? areaHa : null),
                 observacoes: Value(cleanObs.isNotEmpty ? cleanObs : null),
+                latitude: Value(lat is num ? lat.toDouble() : null),
+                longitude: Value(lon is num ? lon.toDouble() : null),
+                geoJson: Value(rec.getStringValue('geo_json').isNotEmpty
+                    ? rec.getStringValue('geo_json')
+                    : null),
+                areaM2: Value(areaM2 is num ? areaM2.toDouble() : null),
+                unidadeForma: Value(
+                    rec.getStringValue('unidade_forma').isNotEmpty
+                        ? rec.getStringValue('unidade_forma')
+                        : null),
+                raioM: Value(raio is num ? raio.toDouble() : null),
+                marcador: Value(rec.getStringValue('marcador').isNotEmpty
+                    ? rec.getStringValue('marcador')
+                    : null),
+                statusParcela: Value(statusVer.isNotEmpty ? statusVer : null),
+                // RT-01/RC-11: devolve projeto/período/protocolo do servidor
+                projetoUuid: Value((rec.data['projeto_id'] as String?)?.isNotEmpty == true
+                    ? rec.data['projeto_id'] as String
+                    : null),
+                periodoUuid: Value((rec.data['periodo_id'] as String?)?.isNotEmpty == true
+                    ? rec.data['periodo_id'] as String
+                    : null),
+                protocoloVersao: Value(
+                    (rec.data['protocolo_versao'] as String?)?.isNotEmpty == true
+                        ? rec.data['protocolo_versao'] as String
+                        : null),
               ),
               parcelaUuid,
             );
+            // v28 MRV: aplica metadados das fotos vindos do servidor
+            await _aplicarFotosMetaDoServidor(
+                parcelaUuid, rec.getStringValue('fotos_meta'));
           }
           if (existing.deletedAt != null) {
-            await _db.restaurarParcela(parcelaUuid);
+            // Q3 item 6: soft-delete LOCAL tem precedência sobre o servidor.
+            // Antes este ramo RESSUSCITAVA a parcela (restaurarParcela) em
+            // todo pull — a deleção offline nunca venciava. Agora: propaga o
+            // delete para o servidor e mantém a parcela morta localmente.
+            try {
+              await _pb!.collection('parcelas').delete(rec.id);
+              debugPrint('Parcela $parcelaUuid: deletada localmente — '
+                  'delete propagado ao servidor no pull');
+            } catch (e) {
+              debugPrint('Aviso: falha ao propagar delete no pull: $e');
+            }
           }
           continue;
         }
@@ -1037,6 +1349,22 @@ class SyncService extends ChangeNotifier {
           }
         }
 
+        // Q3 item 6 (parte 2): chave natural já existe LOCALMENTE como
+        // soft-delete — inserir criaria duplicata ressuscitada. Propaga o
+        // delete ao servidor e não reinsere.
+        final localDeletado =
+            await _db.findParcelaDeletadaPorChave(propriedade, propUt, idParcela);
+        if (localDeletado != null) {
+          try {
+            await _pb!.collection('parcelas').delete(rec.id);
+            debugPrint('Parcela ${localDeletado.uuid}: deletada localmente — '
+                'delete propagado ao servidor no pull (insert evitado)');
+          } catch (e) {
+            debugPrint('Aviso: falha ao propagar delete no pull: $e');
+          }
+          continue;
+        }
+
         // D) Inserir nova parcela
         DateTime createdAt;
         try {
@@ -1045,6 +1373,11 @@ class SyncService extends ChangeNotifier {
           createdAt = DateTime.now();
         }
 
+        final lat = rec.data['latitude'];
+        final lon = rec.data['longitude'];
+        final areaM2 = rec.data['area_m2'];
+        final raio = rec.data['raio_m'];
+        final statusVer = rec.getStringValue('status_verificacao');
         await _db.insertParcela(ParcelasCompanion.insert(
           uuid: parcelaUuid,
           propriedade: Value(propriedade.isNotEmpty ? propriedade : ''),
@@ -1056,12 +1389,30 @@ class SyncService extends ChangeNotifier {
           synced: const Value(true),
           createdAt: Value(createdAt),
           updatedAt: Value(createdAt),
+          // campos MRV vindos do servidor
+          latitude: Value(lat is num ? lat.toDouble() : null),
+          longitude: Value(lon is num ? lon.toDouble() : null),
+          geoJson: Value(rec.getStringValue('geo_json').isNotEmpty
+              ? rec.getStringValue('geo_json')
+              : null),
+          areaM2: Value(areaM2 is num ? areaM2.toDouble() : null),
+          unidadeForma: Value(rec.getStringValue('unidade_forma').isNotEmpty
+              ? rec.getStringValue('unidade_forma')
+              : null),
+          raioM: Value(raio is num ? raio.toDouble() : null),
+          marcador: Value(rec.getStringValue('marcador').isNotEmpty
+              ? rec.getStringValue('marcador')
+              : null),
+          statusParcela: Value(statusVer.isNotEmpty ? statusVer : 'pendente'),
         ));
         importados++;
       }
 
       // 4. Renumerar parcelas dentro de cada UT para 1, 2, 3...
       await _renumerarParcelasLocal();
+
+      // 5. Puxar plantas do servidor para cada parcela restaurada (pull plantas)
+      await _pullPlantasDoServidor(parcelasServidor);
 
       return importados;
     } catch (e) {
@@ -1072,19 +1423,138 @@ class SyncService extends ChangeNotifier {
 
   /// Renumera parcelas dentro de cada UT para 1, 2, 3...
   /// Corrige numeração não-sequencial vinda do servidor.
+  ///
+  /// Q3 item 7: a renumeração também (re)deriva parcela_id_text — se a chave
+  /// fosse calculada só no insert, a renumeração a invalidaria. Aqui ela é
+  /// mantida consistente com o idParcela final.
   Future<void> _renumerarParcelasLocal() async {
     final talhoes = await _db.getAllTalhoes();
     for (final ut in talhoes) {
       final parcelas = await _db.getParcelasByHierarchy(propUt: ut);
       for (int i = 0; i < parcelas.length; i++) {
         final expected = i + 1;
-        if (parcelas[i].idParcela != expected) {
+        final expectedText = '$ut-P$expected';
+        if (parcelas[i].idParcela != expected ||
+            parcelas[i].parcelaIdText != expectedText) {
           await _db.updateParcela(
-            ParcelasCompanion(idParcela: Value(expected)),
+            ParcelasCompanion(
+              idParcela: Value(expected),
+              parcelaIdText: Value(expectedText),
+            ),
             parcelas[i].uuid,
           );
         }
       }
+    }
+  }
+
+  /// Puxa plantas do servidor para parcelas recém-restauradas.
+  ///
+  /// Identidade: o servidor guarda `uuid_local` (o uuid do registo local
+  /// original) em cada planta, e é por esse campo que o push reconcilia
+  /// (ver `_pushParcela`, que envia `'uuid_local': planta.uuid`). Por isso o
+  /// pull tem de gravar o `uuid_local` do servidor como uuid local — usar o
+  /// `id` do servidor criaria um registo novo a cada ciclo pull→push
+  /// (duplicatas). O `serverPlantaId` guarda o id do servidor para o push.
+  Future<void> _pullPlantasDoServidor(
+      List<RecordModel> parcelasServidor) async {
+    if (_pb == null || parcelasServidor.isEmpty) return;
+
+    try {
+      final parcelaIds = parcelasServidor.map((r) => r.id).toSet();
+      if (parcelaIds.isEmpty) return;
+
+      final filterParts = parcelaIds.map((id) => 'parcela = "$id"').join(' || ');
+
+      // Paginação explícita: `perPage` sozinho trunca silenciosamente quando
+      // há mais registos do que o limite.
+      final List<RecordModel> plantasServidor = [];
+      int pagina = 1;
+      const porPagina = 200;
+      bool temMais = true;
+      while (temMais) {
+        final result = await _withRetry(
+          () => _pb!.collection('plantas').getList(
+                page: pagina,
+                perPage: porPagina,
+                filter: filterParts,
+                expand: 'parcela_rel',
+              ),
+        );
+        plantasServidor.addAll(result.items);
+        temMais = result.items.length == porPagina;
+        pagina++;
+      }
+
+      if (plantasServidor.isEmpty) return;
+
+      int inseridas = 0, atualizadas = 0, semParcelaLocal = 0;
+      for (final plantaRec in plantasServidor) {
+        final parcelaServerId = plantaRec.getStringValue('parcela');
+        final parcelaUuid = 'pb-$parcelaServerId';
+
+        final parcelaLocal = await _db.getParcelaByUuid(parcelaUuid);
+        if (parcelaLocal == null) {
+          semParcelaLocal++;
+          continue;
+        }
+
+        // Identidade local = `uuid_local` do servidor. Fallback para o id do
+        // servidor só quando o servidor não tem `uuid_local` (registos legados
+        // pré-Fase-1): nesse caso o push seguinte recria o registo, que é o
+        // comportamento correcto para dados sem identidade local.
+        final uuidLocal = plantaRec.getStringValue('uuid_local');
+        final plantaUuid =
+            uuidLocal.isNotEmpty ? uuidLocal : plantaRec.id;
+
+        final existing = await _db.getPlantaByUuid(plantaUuid);
+
+        final createdAt = plantaRec.created.isNotEmpty
+            ? DateTime.tryParse(plantaRec.created) ?? DateTime.now()
+            : DateTime.now();
+
+        if (existing == null) {
+          await _db.insertPlanta(PlantasCompanion(
+            uuid: Value(plantaUuid),
+            parcelaUuid: Value(parcelaUuid),
+            especie: Value(plantaRec.getStringValue('especie')),
+            alturaCm: Value(plantaRec.getDoubleValue('altura_cm') ?? 0.0),
+            dapCm: Value(plantaRec.getDoubleValue('dap_cm') ?? 0.0),
+            categoria: Value(plantaRec.getIntValue('categoria') ?? 1),
+            synced: const Value(true),
+            createdAt: Value(createdAt),
+            updatedAt: Value(createdAt),
+            serverPlantaId: Value(plantaRec.id),
+            parcelaServerId: Value(parcelaServerId),
+          ));
+          inseridas++;
+        } else {
+          await _db.updatePlanta(PlantasCompanion(
+            uuid: Value(plantaUuid),
+            parcelaUuid: Value(parcelaUuid),
+            especie: Value(plantaRec.getStringValue('especie')),
+            alturaCm: Value(plantaRec.getDoubleValue('altura_cm') ?? 0.0),
+            dapCm: Value(plantaRec.getDoubleValue('dap_cm') ?? 0.0),
+            categoria: Value(plantaRec.getIntValue('categoria') ?? 1),
+            synced: const Value(true),
+            updatedAt: Value(createdAt),
+            serverPlantaId: Value(plantaRec.id),
+            parcelaServerId: Value(parcelaServerId),
+          ), plantaUuid);
+          atualizadas++;
+        }
+      }
+      debugPrint(
+          'Pull de plantas: $inseridas inseridas, $atualizadas atualizadas, '
+          '$semParcelaLocal sem parcela local, '
+          '${plantasServidor.length} no servidor');
+    } catch (e) {
+      // Falha no pull de plantas NÃO pode ser silenciosa: o utilizador tem de
+      // saber que as plantas não foram importadas.
+      _lastError =
+          'As plantas não foram importadas do servidor: $e';
+      notifyListeners();
+      debugPrint('Erro ao puxar plantas do servidor: $e');
     }
   }
 
@@ -1180,23 +1650,28 @@ class SyncService extends ChangeNotifier {
   /// Fetches parcelas from server matching the given keys only.
   Future<List<Map<String, dynamic>>> _fetchServerParcelasByKeys(Set<String> keys) async {
     if (_pb == null || keys.isEmpty) return [];
-    
+
     try {
+      // A coleção parcelas NÃO tem campo `propriedade` (só `prop_ut` text e a
+      // relation `ut`). Filtrar por `propriedade` dava 400 "Something went
+      // wrong" e a detecção de conflito morria silenciosamente (catch → []).
+      // Filtra por prop_ut + id_parcela, que existem e identificam a parcela.
       final filterParts = keys.map((k) {
         final parts = k.split('|');
         if (parts.length != 3) return null;
-        return '(propriedade = "${parts[0]}" && prop_ut = "${parts[1]}" && id_parcela = ${parts[2]})';
+        final utEsc = parts[1].replaceAll('"', '\\"');
+        return '(prop_ut = "$utEsc" && id_parcela = ${parts[2]})';
       }).where((s) => s != null).join(' || ');
-      
+
       if (filterParts.isEmpty) return [];
-      
+
       final result = await _withRetry(() => _pb!.collection('parcelas').getList(
         filter: filterParts,
         perPage: keys.length + 10,
       ));
       return result.items.map((r) => {
-        'propriedade': r.getStringValue('propriedade'),
-        'propUt': r.getStringValue('prop_ut'),
+        'propriedade': _expandName(r.expand?['ut.propriedade']),
+        'propUt': _expandName(r.expand?['ut']),
         'idParcela': r.getIntValue('id_parcela'),
         'user': r.getStringValue('user'),
       }).toList();
@@ -1324,6 +1799,11 @@ class SyncService extends ChangeNotifier {
         }
         try {
           await _syncParcela(p);
+          // >>> t16 D-1 (H3): sync MARCA, nunca apaga (RC-03)
+          await _db.marcarFotosEnviadasVerificadas(p.uuid);
+          // RC-04 pós-upload: sha256_verificado nos ativos da parcela
+          await _db.marcarAtivosVerificadosDaParcela(p.uuid);
+          // <<< t16 D-1: fim
           sent++;
           notifyListeners();
         } catch (e) {
@@ -1333,16 +1813,13 @@ class SyncService extends ChangeNotifier {
       }
       await _updatePendingCount();
 
-      // Limpar fotos comprimidas temporárias após sync bem-sucedido
-      try {
-        await ImageService.cleanCompressedPhotos();
-      } catch (e) {
-        debugPrint('Clean compressed photos failed (non-critical): $e');
-      }
     } catch (e) {
-      _syncLock!.completeError(e);
-      _syncLock = null;
-      rethrow;
+      // Q3 item 2: mesma semântica do syncAll — completa limpo e sem rethrow.
+      debugPrint('Erro na sincronização selecionada: $e');
+      if (_syncLock != null) {
+        _syncLock!.complete();
+        _syncLock = null;
+      }
     } finally {
       _isSyncing = false;
       if (_syncLock != null) {
@@ -1394,6 +1871,55 @@ class SyncService extends ChangeNotifier {
     return '${propUt}_P${parcela.idParcela.toString().padLeft(2, '0')}_Planta${(index + 1).toString().padLeft(2, '0')}_C${planta.categoria}_${data}_$hora.jpg';
   }
 
+  /// v28 MRV: JSON com os metadados de cada foto da parcela
+  /// (uuid, nome, sha256, lat/long, autor, timestamp) — o pitch promete
+  /// "cada foto recebe hash SHA-256, GPS, timestamp e dono"; isso sobe
+  /// junto com a parcela pra o auditor refazer a conta.
+  Future<String> _fotosMetaJson(String parcelaUuid) async {
+    final fotos = await _db.getFotosByParcela(parcelaUuid);
+    final lista = <Map<String, dynamic>>[];
+    for (final f in fotos) {
+      final hash = await _db.hashDoAtivoDaFoto(f.uuid);
+      lista.add({
+        'uuid': f.uuid,
+        'arquivo': f.filePath.split(RegExp(r'[\\/]')).last,
+        'sha256': hash,
+        'latitude': f.latitude,
+        'longitude': f.longitude,
+        'autor': f.autorUuid,
+        'capturada_em': f.createdAt.toIso8601String(),
+      });
+    }
+    return jsonEncode(lista);
+  }
+
+  /// v28 MRV: aplica no banco local o fotos_meta vindo do servidor
+  /// (atualiza GPS/dono das fotos PELOS dados do servidor, sem apagar hash).
+  Future<void> _aplicarFotosMetaDoServidor(
+      String parcelaUuid, String fotosMetaJson) async {
+    if (fotosMetaJson.trim().isEmpty) return;
+    try {
+      final lista = jsonDecode(fotosMetaJson);
+      if (lista is! List) return;
+      for (final item in lista) {
+        if (item is! Map) continue;
+        final uuid = item['uuid']?.toString();
+        if (uuid == null || uuid.isEmpty) continue;
+        final lat = item['latitude'];
+        final lon = item['longitude'];
+        final autor = item['autor']?.toString();
+        await _db.updateFotoParcelaCampos(
+          uuid,
+          latitude: lat is num ? lat.toDouble() : null,
+          longitude: lon is num ? lon.toDouble() : null,
+          autorUuid: (autor != null && autor.isNotEmpty) ? autor : null,
+        );
+      }
+    } catch (e) {
+      debugPrint('fotos_meta inválido vindo do servidor: $e');
+    }
+  }
+
   /// Remove caracteres especiais de nomes de arquivo.
   String _sanitizeFileName(String name) {
     return name
@@ -1402,24 +1928,54 @@ class SyncService extends ChangeNotifier {
         .replaceAll(RegExp(r'-+'), '-');
   }
 
+   /// Normaliza o status local para os valores que o select
+   /// `status_verificacao` aceita no servidor.
+   ///
+   /// O default do banco local é 'ativa' (legado) e o wizard já tratava
+   /// 'ativa' como 'pendente' (parcela_form_screen.dart:284-290). Sem esta
+   /// normalização o push mandava 'ativa' e o servidor respondia 400.
+   static String _statusVerificacaoParaServidor(String? status) {
+     switch (status) {
+       case 'revisado':
+       case 'aprovado':
+         return status!;
+       default:
+         // 'pendente', 'ativa', null, ou qualquer valor desconhecido
+         return 'pendente';
+     }
+   }
+
    /// Schema normalizado: obtém ou cria propriedade por nome; retorna id ou null se coleção não existir.
+   ///
+   /// Contrato do schema (1776862933_created_propriedades.js): `codigo` é TEXT
+   /// **required**, `nome` é TEXT opcional. Enviar `name` dava 400
+   /// ("Cannot be blank" em codigo + campo inexistente) e o catch engolia o
+   /// erro, derrubando o push da parcela inteira.
+   ///
+   /// CUIDADO com o filtro: PocketBase valida TODOS os campos do filter e
+   /// devolve 400 se algum não existir na coleção. `name` NÃO existe aqui —
+   /// por isso o filtro usa só `codigo` e `nome`.
    Future<String?> _getOrCreatePropriedadeId(String name) async {
      if (name.isEmpty) return null;
+     final escaped = name.replaceAll('"', '\\"');
+     final filter = '(codigo = "$escaped" || nome = "$escaped")';
      try {
        final list = await _pb!.collection('propriedades').getList(
              page: 1,
              perPage: 1,
-             filter: 'name = "${name.replaceAll('"', '\\"')}"',
+             filter: filter,
            );
        if (list.items.isNotEmpty) return list.items.first.id;
        try {
-         final created =
-             await _pb!.collection('propriedades').create(body: {'name': name});
+         final created = await _pb!.collection('propriedades').create(body: {
+           'codigo': name,
+           'nome': name,
+         });
          return created.id;
        } catch (_) {
          final retry = await _pb!.collection('propriedades').getList(
                page: 1, perPage: 1,
-               filter: 'name = "${name.replaceAll('"', '\\"')}"',
+               filter: filter,
              );
          if (retry.items.isNotEmpty) {
            // Log dedup event
@@ -1437,26 +1993,33 @@ class SyncService extends ChangeNotifier {
    }
 
    /// Schema normalizado: obtém ou cria UT por (propriedadeId, nome UT); retorna id ou null.
+   ///
+   /// Contrato do schema (1776862934_created_uts.js): `codigo` é TEXT
+   /// **required** e a coleção NÃO tem campo `nome`/`name` — só `codigo` e a
+   /// relation `propriedade`. Enviar `name` dava 400.
+   ///
+   /// Mesma restrição de filtro: só `codigo` (e `propriedade`).
    Future<String?> _getOrCreateUtId(String propriedadeId, String utName) async {
      if (propriedadeId.isEmpty || utName.isEmpty) return null;
      final escaped = utName.replaceAll('"', '\\"');
+     final filter = 'codigo = "$escaped" && propriedade = "$propriedadeId"';
      try {
        final list = await _pb!.collection('uts').getList(
              page: 1,
              perPage: 1,
-             filter: 'propriedade = "$propriedadeId" && name = "$escaped"',
+             filter: filter,
            );
        if (list.items.isNotEmpty) return list.items.first.id;
        try {
          final created = await _pb!.collection('uts').create(body: {
+           'codigo': utName,
            'propriedade': propriedadeId,
-           'name': utName,
          });
          return created.id;
        } catch (_) {
          final retry = await _pb!.collection('uts').getList(
                page: 1, perPage: 1,
-               filter: 'propriedade = "$propriedadeId" && name = "$escaped"',
+               filter: filter,
              );
          if (retry.items.isNotEmpty) {
            // Log dedup event
@@ -1475,6 +2038,12 @@ class SyncService extends ChangeNotifier {
 
   /// Sincroniza uma parcela pelo UUID.
   /// Público para uso em operações em lote.
+  ///
+  /// Q3 item 3: antes este caminho NÃO tinha os guards do canônico — sem
+  /// lock (dois syncs podiam correr concorrentes na mesma parcela; com o
+  /// delete+recreate do motor de plantas, isso é corrupção de servidor) e sem
+  /// a checagem de modo offline forçado que syncAll/syncSelected têm. Continua
+  /// lançando exceção nas falhas — os callers em lote contam falha por parcela.
   Future<void> syncSingleParcela(String parcelaUuid) async {
     final parcela = await _db.getParcelaByUuid(parcelaUuid);
     if (parcela == null) {
@@ -1485,11 +2054,25 @@ class SyncService extends ChangeNotifier {
       throw Exception('Servidor não configurado');
     }
 
+    if (await isForcedOffline) {
+      throw Exception('Sync bloqueada: modo offline forçado ativo.');
+    }
+
     if (!await hasInternet()) {
       throw Exception('Sem conexão com a internet');
     }
 
-    await _syncParcela(parcela);
+    // Mesma serialização do syncAll: espera o sync em curso e ocupa o lock.
+    await _waitForSyncLock();
+    _syncLock = Completer<void>();
+    try {
+      await _syncParcela(parcela);
+    } finally {
+      if (_syncLock != null) {
+        _syncLock!.complete();
+        _syncLock = null;
+      }
+    }
   }
 
   /// Apaga uma parcela (soft delete local + tentativa no servidor).
@@ -1515,31 +2098,59 @@ class SyncService extends ChangeNotifier {
     final propId = await _getOrCreatePropriedadeId(propName);
     final utId =
         (propId != null) ? await _getOrCreateUtId(propId, propUtValido) : null;
+    // Campos MRV (RC-10/RS-01/RS-02/RG-02) — vão junto em qualquer schema.
+    // status_verificacao é select no servidor com values
+    // [pendente,revisado,aprovado] (1778900000_parcelas_mrv_verificacao.js).
+    // O valor local default é 'ativa' (legado) — mandar cru dava 400.
+    final mrvBody = <String, dynamic>{
+      'latitude': parcela.latitude,
+      'longitude': parcela.longitude,
+      'geo_json': parcela.geoJson,
+      'area_m2': parcela.areaM2,
+      'unidade_forma': parcela.unidadeForma,
+      'raio_m': parcela.raioM,
+      'marcador': parcela.marcador,
+      'status_verificacao': _statusVerificacaoParaServidor(parcela.statusParcela),
+      // v28 MRV: metadados por foto (hash + GPS + timestamp + dono) —
+      // promessa do pitch: "cada foto recebe hash SHA-256, GPS, timestamp e dono"
+      'fotos_meta': await _fotosMetaJson(parcela.uuid),
+      // RT-01/RC-11: vínculo projeto/período + SOP aplicado nesta medição
+      'projeto_id': parcela.projetoUuid,
+      'periodo_id': parcela.periodoUuid,
+      'protocolo_versao': parcela.protocoloVersao,
+    };
+    // A coleção parcelas NÃO tem campo area_ha (schema medido no servidor).
+    // A área vai em observacoes, no mesmo formato "area_ha:0.1234" de sempre.
+    final areaStr = (parcela.areaHa != null && parcela.areaHa! > 0)
+        ? 'area_ha:${parcela.areaHa!.toStringAsFixed(4)}'
+        : '';
+    final obsBase = parcela.observacoes?.trim() ?? '';
+    final observacoesVal = areaStr.isEmpty
+        ? obsBase
+        : obsBase.isEmpty
+            ? areaStr
+            : '$areaStr\n$obsBase';
     if (utId != null) {
+      // prop_ut é TEXT **required** no servidor (schema medido): precisa ir
+      // mesmo no caminho normalizado, não só no flat.
       parcelaBody = {
         'ut': utId,
-        'id_parcela': parcela.idParcela,
-        'observacoes': parcela.observacoes ?? '',
-        'area_ha': parcela.areaHa,
-        'user': parcela.userId,
-      };
-    } else {
-      // Schema flat: coleção pode não ter campo area_ha; tudo vai em observacoes
-      final areaStr = (parcela.areaHa != null && parcela.areaHa! > 0)
-          ? 'area_ha:${parcela.areaHa!.toStringAsFixed(4)}'
-          : '';
-      final obs = parcela.observacoes?.trim() ?? '';
-      final observacoesVal = areaStr.isEmpty
-          ? obs
-          : obs.isEmpty
-              ? areaStr
-              : '$areaStr\n$obs';
-      parcelaBody = {
-        'propriedade': parcela.propriedade,
         'prop_ut': propUtValido,
         'id_parcela': parcela.idParcela,
         'observacoes': observacoesVal,
         'user': parcela.userId,
+        ...mrvBody,
+      };
+    } else {
+      // Schema flat: a coleção parcelas também NÃO tem campo propriedade.
+      // prop_ut carrega "propriedade - UT", formato que _parseParcelaHierarchy
+      // já reconhece no pull (linha do split por ' - ').
+      parcelaBody = {
+        'prop_ut': '${propName.trim()} - ${propUtValido}',
+        'id_parcela': parcela.idParcela,
+        'observacoes': observacoesVal,
+        'user': parcela.userId,
+        ...mrvBody,
       };
     }
 
@@ -1570,7 +2181,21 @@ class SyncService extends ChangeNotifier {
     final foto = fotos[entry['index'] as int];
     final path = foto.filePath;
     final file = File(path);
-    final fileToSend = (await ImageService.compressImage(file)) ?? file;
+    // >>> t14 S3 (H4): inicio — recheck de hash antes de subir (RC-04)
+    // D-1: o ORIGINAL sobe; hash conferido contra o catálogo.
+    final hashDoUpload = await ImageService.sha256De(file.path);
+    final doCatalogo = await _db.hashDoAtivoDaFoto(foto.uuid);
+    if (doCatalogo != null && hashDoUpload != null && hashDoUpload != doCatalogo) {
+      await _db.logAudit('hash_divergente_upload',
+          entityType: 'foto',
+          entityUuid: foto.uuid,
+          oldValue: doCatalogo,
+          newValue: hashDoUpload);
+      throw Exception(
+          'Hash divergente no upload (RC-04): catalogo=$doCatalogo arquivo=$hashDoUpload');
+    }
+    final fileToSend = file;
+    // <<< t14 S3: fim
         freshFiles.add(await http.MultipartFile.fromPath(
           'fotos_parcela',
           fileToSend.path,
@@ -1590,42 +2215,54 @@ class SyncService extends ChangeNotifier {
           );
     });
 
-    // 2. Enviar as plantas desta parcela — rastreia falhas individualmente
-    // Primeiro, coleta IDs das plantas existentes no servidor para deletar ANTES de criar
-    final oldPlantaIds = <String>[];
-    try {
-      final existingPlantas = await _withRetry(
-        () => _pb!.collection('plantas').getFullList(
-              filter: 'parcela = "${record.id}"',
-            ),
-      );
-      oldPlantaIds.addAll(existingPlantas.map((r) => r.id));
-    } catch (e) {
-      debugPrint('Aviso: não foi possível buscar plantas existentes: $e');
-    }
-
-    // 3. Deleta plantas antigas do servidor ANTES de criar novas (idempotente)
-    for (final oldId in oldPlantaIds) {
-      try {
-        await _pb!.collection('plantas').delete(oldId);
-      } catch (_) {}
-    }
-
+    // 2. UPSERT versionado das plantas (Q3 motor Fase 2 — fim do delete+recreate)
+    // ANTES: coletava todas as plantas do servidor, DELETAVA todas e recriava.
+    // Se o create falhasse no meio, o servidor perdia plantas que existiam; a
+    // retry seguinte deletava até as já criadas. AGORA: upsert por
+    // (parcela, uuid_local), last-writer-wins por updated_at (política
+    // documentada: campo numérico/texto — o updated_at mais recente vence).
+    // Push normal NUNCA faz delete cego.
     final plantas = await _db.getPlantasByParcela(parcela.uuid);
     bool allPlantasOk = true;
     final List<String> plantaErrors = [];
 
+    // Índice do que está no servidor por uuid_local. Registros SEM uuid_local
+    // (legado pré-Fase-1) ficam fora do upsert por identidade — não são
+    // apagados (regra P-2: evidência sobrevive) e sua normalização é v25+.
+    final existentes = <String, RecordModel>{};
+    try {
+      final serverPlantas = await _withRetry(
+        () => _pb!.collection('plantas').getFullList(
+              filter: 'parcela = "${record.id}"',
+            ),
+      );
+      for (final r in serverPlantas) {
+        final u = r.data['uuid_local'];
+        if (u is String && u.isNotEmpty) existentes[u] = r;
+      }
+    } catch (e) {
+      debugPrint('Aviso: não foi possível buscar plantas existentes: $e');
+    }
+
     for (int i = 0; i < plantas.length; i++) {
       final planta = plantas[i];
       try {
-        // Enviar sempre números (0 quando "só categoria") para não exigir mudanças no servidor
+        final existente = existentes[planta.uuid];
         final plantaBody = <String, dynamic>{
           'parcela': record.id,
+          // t14: relation nova (1778600000) — MESMO valor do texto; o campo
+          // texto fica para o app antigo e para o filtro durante a transição.
+          'parcela_rel': record.id,
           'especie': planta.especie,
           'altura_cm': planta.alturaCm,
           'dap_cm': planta.dapCm,
           'categoria': planta.categoria,
           'created_at': planta.createdAt.toIso8601String(),
+          // Fase 1: identidade + versão para o upsert
+          'uuid_local': planta.uuid,
+          'updated_at': planta.updatedAt.toIso8601String(),
+          // v28 MRV: dono da medição (pitch: cada medição tem dono)
+          'autor': planta.autorUuid,
         };
 
         // Pré-calcula caminho da foto para criar MultipartFile fresco a cada retry
@@ -1635,34 +2272,108 @@ class SyncService extends ChangeNotifier {
         if (!kIsWeb && planta.fotoEspeciePath != null) {
           final fotoFile = File(planta.fotoEspeciePath!);
           if (await fotoFile.exists()) {
-            final compressed = await ImageService.compressImage(fotoFile);
-            final fileToSend = compressed ?? fotoFile;
-            plantaFotoPath = fileToSend.path;
+            // >>> t14 S3 (H4): inicio — recheck de hash antes de subir (RC-04)
+            // D-1: o ORIGINAL sobe, sem re-encodar.
+            final hashDoUpload = await ImageService.sha256De(fotoFile.path);
+            final doCatalogo = await _db.hashDoAtivoDaFoto(planta.uuid);
+            if (doCatalogo != null &&
+                hashDoUpload != null &&
+                hashDoUpload != doCatalogo) {
+              await _db.logAudit('hash_divergente_upload',
+                  entityType: 'foto',
+                  entityUuid: planta.uuid,
+                  oldValue: doCatalogo,
+                  newValue: hashDoUpload);
+              throw Exception(
+                  'Hash divergente no upload (RC-04): catalogo=$doCatalogo arquivo=$hashDoUpload');
+            }
+            // <<< t14 S3: fim
+            plantaFotoPath = fotoFile.path;
             plantaFotoName = _gerarNomeFotoPlanta(parcela, planta, i);
           }
         }
 
-        await _withRetry(() async {
-          final freshPlantaFiles = <http.MultipartFile>[];
-          if (plantaFotoPath != null) {
-            freshPlantaFiles.add(await http.MultipartFile.fromPath(
-              'foto_especie',
-              plantaFotoPath,
-              filename: plantaFotoName,
-            ));
+        RecordModel resultado;
+        if (existente == null) {
+          plantaBody['version'] = 1;
+          resultado = await _withRetry(() async {
+            final freshPlantaFiles = <http.MultipartFile>[];
+            if (plantaFotoPath != null) {
+              freshPlantaFiles.add(await http.MultipartFile.fromPath(
+                'foto_especie',
+                plantaFotoPath,
+                filename: plantaFotoName,
+              ));
+            }
+            return _pb!.collection('plantas').create(
+                  body: plantaBody,
+                  files: freshPlantaFiles,
+                );
+          });
+        } else {
+          // last-writer-wins por updated_at
+          final serverUpdated = DateTime.tryParse(
+              existente.data['updated_at']?.toString() ?? '');
+          final localNewer = serverUpdated == null ||
+              planta.updatedAt.isAfter(serverUpdated);
+          if (localNewer) {
+            plantaBody['version'] =
+                ((existente.data['version'] as num?)?.toInt() ?? 1) + 1;
+            resultado = await _withRetry(() async {
+              final freshPlantaFiles = <http.MultipartFile>[];
+              if (plantaFotoPath != null) {
+                freshPlantaFiles.add(await http.MultipartFile.fromPath(
+                  'foto_especie',
+                  plantaFotoPath,
+                  filename: plantaFotoName,
+                ));
+              }
+              return _pb!.collection('plantas').update(
+                    existente.id,
+                    body: plantaBody,
+                    files: freshPlantaFiles,
+                  );
+            });
+          } else {
+            // servidor mais novo: política last-writer-wins = servidor vence.
+            // Não sobrescreve; marca synced (cópia local é histórico) e loga —
+            // a reconciliação completa de plantas é o item 6 (pull).
+            debugPrint(
+                'Planta ${planta.uuid}: servidor mais novo, update ignorado');
+            resultado = existente;
           }
-          return _pb!.collection('plantas').create(
-                body: plantaBody,
-                files: freshPlantaFiles,
-              );
-        });
+        }
 
         await _db.marcarPlantaSynced(planta.uuid);
+        if (planta.serverPlantaId != resultado.id) {
+          await _db.atualizarServerPlantaId(planta.uuid, resultado.id);
+        }
+        // t14 v26: guarda o server id da parcela para a relation (nunca
+        // sobrescreve — valor já preenchido fica como está)
+        await _db.registrarParcelaServerId(planta.uuid, record.id);
       } catch (e) {
         allPlantasOk = false;
         plantaErrors.add('Planta ${planta.especie}: $e');
         debugPrint('Erro ao enviar planta ${planta.uuid}: $e');
       }
+    }
+
+    // Propaga deleções locais: planta no servidor (identificada por uuid_local)
+    // sem par local vivo é removida — deleção EXPLÍCITA por identidade, não o
+    // delete-all cego de antes. Legado sem uuid_local fica intacto (P-2).
+    try {
+      final vivas = plantas.map((p) => p.uuid).toSet();
+      for (final entry in existentes.entries) {
+        if (vivas.contains(entry.key)) continue;
+        try {
+          await _pb!.collection('plantas').delete(entry.value.id);
+          debugPrint('Planta ${entry.key}: deletada localmente, removida do servidor');
+        } catch (e) {
+          debugPrint('Aviso: falha ao propagar delete de ${entry.key}: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('Aviso: propagação de deletes falhou: $e');
     }
 
     // 4. Só marca tudo como synced se TODAS as plantas foram enviadas
@@ -1673,13 +2384,14 @@ class SyncService extends ChangeNotifier {
         }
         await _db.marcarParcelaSynced(parcela.uuid);
 
-        // 5. Remapear UUID local para 'pb-{recordId}' (só para parcelas criadas localmente)
+        // 5. Remapear UUID local para 'pb-{recordId}' (só para parcelas criadas localmente).
+        // SEM try/catch: se falhar, a transacção aborta e nada fica marcado
+        // como sincronizado. Com o catch, uma falha silenciosa deixava a
+        // parcela marcada synced mas com o UUID local — e no sync seguinte
+        // `existingServerId` seria null, criando UM SEGUNDO registo no
+        // servidor. Duplicação silenciosa de dados.
         if (existingServerId == null) {
-          try {
-            await _db.remapParcelaUuid(parcela.uuid, 'pb-${record.id}');
-          } catch (e) {
-            debugPrint('Aviso: não foi possível remapear UUID da parcela: $e');
-          }
+          await _db.remapParcelaUuid(parcela.uuid, 'pb-${record.id}');
         }
 
         // Audita sync bem-sucedido
@@ -1690,10 +2402,12 @@ class SyncService extends ChangeNotifier {
             newValue: 'synced');
       });
       } else {
+        // Q3 item 5: planta falhou → a parcela NÃO está completa. Antes este
+        // ramo marcava as FOTOS como synced mesmo com plantas pendentes —
+        // órfão: foto no servidor (subiu com a parcela) marcada localmente
+        // como feita enquanto a planta dona nem existe lá. Agora nada é
+        // marcado synced no caminho parcial: a retry trata tudo junto.
         await _db.marcarParcelaParcialmenteSincronizada(parcela.uuid);
-        for (final foto in fotos) {
-          await _db.marcarFotoSynced(foto.uuid);
-        }
         throw Exception(
             '${plantaErrors.length} planta(s) falharam ao sincronizar, tentará novamente na próxima vez');
       }

@@ -1,6 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import useServerHealth from '../hooks/useServerHealth';
+import ServerOfflineBanner from './ui/ServerOfflineBanner';
+import ReadOnlyBadge from './ui/ReadOnlyBadge';
+import DemoBanner from './ui/DemoBanner';
+import { USE_MOCK } from '../services/mock/demoData';
 import {
   LayoutDashboard,
   TreePine,
@@ -10,21 +15,29 @@ import {
   LogOut,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle,
+  ClipboardList
 } from 'lucide-react';
 
 const Layout = () => {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isReadOnly } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const health = useServerHealth();
 
-  const closeMobile = useCallback(() => setMobileOpen(false), []);
-
+  // R13: alto contraste (campo sob sol) — persistido, igual ao app.
+  const [hc, setHc] = useState(() => localStorage.getItem('urutau_tema') === 'hc');
   useEffect(() => {
-    closeMobile();
-  }, [location.pathname, closeMobile]);
+    document.documentElement.setAttribute('data-theme', hc ? 'hc' : 'claro');
+    localStorage.setItem('urutau_tema', hc ? 'hc' : 'claro');
+  }, [hc]);
+
+  // Fecha o drawer mobile ao navegar (substitui o effect com setState —
+  // o React não aceita efeito sincronizado disparando render em cascata).
+  const closeMobileNav = useCallback(() => setMobileOpen(false), []);
 
   const handleLogout = () => {
     logout();
@@ -34,17 +47,18 @@ const Layout = () => {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Parcelas', href: '/parcels', icon: TreePine },
+    { name: 'Incidentes', href: '/incidents', icon: AlertTriangle },
+    { name: 'Projeto MRV', href: '/mrv', icon: ClipboardList },
     { name: 'Fotos', href: '/photos', icon: Image },
     { name: 'Relatórios', href: '/reports', icon: FileSpreadsheet },
     ...(isAdmin ? [{ name: 'Usuários', href: '/users', icon: Users }] : []),
   ];
-
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 md:hidden"
-          onClick={closeMobile}
+          onClick={closeMobileNav}
         />
       )}
 
@@ -75,6 +89,7 @@ const Layout = () => {
                 <li key={item.name}>
                   <Link
                     to={item.href}
+                    onClick={closeMobileNav}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                       isActive
                         ? 'bg-forest-700 text-white'
@@ -129,29 +144,49 @@ const Layout = () => {
             <button
               onClick={() => setMobileOpen(true)}
               className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+              aria-label="Abrir menu"
             >
               <Menu className="h-5 w-5" />
             </button>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="hidden md:block p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+              aria-label={sidebarOpen ? 'Recolher menu' : 'Expandir menu'}
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span>Urutau</span>
-            <ChevronRight className="h-4 w-4" />
-            <span className="text-forest-700 font-medium">
+          <div className="flex items-center gap-3 text-sm text-gray-500">
+            <span className="hidden sm:inline">Urutau</span>
+            <ChevronRight className="hidden h-4 w-4 sm:inline" />
+            <span className="font-medium text-forest-700">
               {navigation.find(n => n.href === location.pathname)?.name || 'Dashboard'}
             </span>
+            {isReadOnly && <ReadOnlyBadge role={user?.role} />}
+            <button
+              type="button"
+              onClick={() => setHc((v) => !v)}
+              className={`rounded-lg border px-2 py-1 text-xs font-medium transition-colors ${
+                hc
+                  ? 'border-hc-primary bg-hc-primary text-hc-on-primary'
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+              }`}
+              aria-pressed={hc}
+              title="Alto contraste (uso em campo sob sol)"
+            >
+              {hc ? 'HC' : 'Alto contraste'}
+            </button>
           </div>
         </header>
 
         <main className="flex-1 overflow-auto p-6">
-          <div className="max-w-7xl mx-auto">
-            <Outlet />
+          <div className="max-w-7xl mx-auto space-y-6">
+            {USE_MOCK && <DemoBanner />}
+            {health.status === 'offline' && (
+              <ServerOfflineBanner onRetry={health.recheck} retrying={false} />
+            )}
+            <Outlet context={{ health }} />
           </div>
         </main>
       </div>

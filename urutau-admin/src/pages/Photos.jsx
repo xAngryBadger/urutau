@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef, startTransition } from 'react';
 import { fetchParcels, getPhotoUrl } from '../services/pocketbase';
+import { fetchFotosMeta } from '../services/mrv';
+import PhotoMetaPanel from '../components/photos/PhotoMetaPanel';
 import safeError from '../services/logger';
 import {
   Image,
@@ -42,35 +44,43 @@ const Photos = () => {
   const [parcels, setParcels] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
-  const [hasMore, setHasMore] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [actionError, setActionError] = useState(null);
   const pageRef = useRef(1);
+  const [fotosMeta, setFotosMeta] = useState({});
 
-  const loadPhotos = useCallback(async (page = 1, append = false) => {
+  const loadPhotos = useCallback(async (page = 1) => {
     try {
-      if (append) {
-        startTransition(() => { setLoadingMore(true); });
-      } else {
-        startTransition(() => { setLoading(true); setError(null); });
-      }
+      startTransition(() => { setLoading(true); setError(null); });
 
       const result = await fetchParcels({ hasPhotos: true }, page, PHOTOS_PER_PAGE);
       const newPhotos = result.items.flatMap(parcelToPhotos);
 
       startTransition(() => {
-        if (append) {
-          setParcels((prev) => [...prev, ...result.items]);
-          setPhotos((prev) => [...prev, ...newPhotos]);
-        } else {
-          setParcels(result.items);
-          setPhotos(newPhotos);
-        }
-        setHasMore(result.items.length === PHOTOS_PER_PAGE);
+        setParcels(result.items);
+        setPhotos(newPhotos);
+      });
+
+      // R4: provas por foto (hash/GPS/ts/dono) — o app sobe fotos_meta
+      startTransition(() => {
+        setFotosMeta((prev) => {
+          const next = { ...prev };
+          for (const p of result.items) {
+            if (next[p.id]) continue;
+            fetchFotosMeta(p.id).then((res) => {
+              if (!res.ok) return;
+              const byFile = new Map(res.data.map((m) => [m.arquivo, m]));
+              setFotosMeta((cur) => ({
+                ...cur,
+                [p.id]: Object.fromEntries(byFile),
+              }));
+            });
+          }
+          return next;
+        });
       });
     } catch (err) {
       startTransition(() => setError('Erro ao carregar fotos. Tente novamente.'));
@@ -78,7 +88,6 @@ const Photos = () => {
     } finally {
       startTransition(() => {
         setLoading(false);
-        setLoadingMore(false);
       });
     }
   }, []);
@@ -87,12 +96,6 @@ const Photos = () => {
     pageRef.current = 1;
     startTransition(() => { loadPhotos(1); });
   }, [loadPhotos]);
-
-  const loadMore = () => {
-    const nextPage = pageRef.current + 1;
-    pageRef.current = nextPage;
-    loadPhotos(nextPage, true);
-  };
 
   useEffect(() => {
     if (!actionError) return;
@@ -330,8 +333,8 @@ const Photos = () => {
                 <div>
                   <p className="font-medium">{selectedPhoto.property} - {selectedPhoto.ut}</p>
                   <p className="text-sm opacity-80">
-                    Parcela {String(selectedPhoto.parcelNumber).padStart(3, '0')} • 
-                    {' '}{selectedPhoto.user} • 
+                    Parcela {String(selectedPhoto.parcelNumber).padStart(3, '0')} •
+                    {' '}{selectedPhoto.user} •
                     {' '}{selectedPhoto.date ? new Date(selectedPhoto.date).toLocaleDateString('pt-BR') : '-'}
                   </p>
                 </div>
@@ -342,6 +345,10 @@ const Photos = () => {
                   <Download className="h-4 w-4" />
                   Baixar
                 </button>
+              </div>
+              {/* Promessa do pitch por foto: hash + GPS + timestamp + dono */}
+              <div className="mt-3 border-t border-white/20 pt-3">
+                <PhotoMetaPanel meta={fotosMeta[selectedPhoto.parcelId]} />
               </div>
             </div>
           </div>

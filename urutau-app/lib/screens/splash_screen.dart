@@ -61,11 +61,11 @@ class _SplashScreenState extends State<SplashScreen> {
           'assets/images/urutau_real.png',
           fit: BoxFit.cover,
           errorBuilder: (ctx, error, stackTrace) {
-            return const Center(
+            return Center(
               child: Icon(
                 Icons.forest,
                 size: 120,
-                color: Color(0xFF5A6B5C),
+                color: Theme.of(ctx).colorScheme.primary,
               ),
             );
           },

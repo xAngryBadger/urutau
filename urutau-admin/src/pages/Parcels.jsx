@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, startTransition } from 'react';
+import { Link } from 'react-router-dom';
 import {
   fetchParcels,
   fetchAllParcels,
@@ -12,6 +13,7 @@ import {
   getPhotoUrl,
 } from '../services/pocketbase';
 import { useAuth } from '../context/AuthContext';
+import StatusBadge from '../components/ui/StatusBadge';
 import safeError from '../services/logger';
 import {
   Search,
@@ -30,6 +32,7 @@ import {
   User,
   TreePine,
   Camera,
+  ShieldCheck,
 } from 'lucide-react';
 
 const ParcelDetailModal = ({ parcel, onClose }) => {
@@ -699,15 +702,11 @@ const Parcels = () => {
                             </div>
                           </td>
                           <td className="table-cell">
-        {parcel.prontaParaSync ? (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">
-            <CheckCircle className="h-3 w-3" /> Sync
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-            <Clock className="h-3 w-3" /> Rascunho
-          </span>
-        )}
+                            <StatusBadge
+                              statusParcela={parcel.statusVerificacao ?? parcel.status_parcela}
+                              prontaParaSync={parcel.prontaParaSync}
+                              size="sm"
+                            />
                           </td>
                           <td className="table-cell">
                             {parcel.photoCount > 0 ? (
@@ -727,13 +726,23 @@ const Parcels = () => {
                               : '-'}
                           </td>
                           <td className="table-cell">
-                            <button
-                              className="text-forest-600 hover:text-forest-800"
-                              title="Ver detalhes"
-                              onClick={() => setDetailParcel(parcel)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                className="text-forest-600 hover:text-forest-800"
+                                title="Ver detalhes"
+                                onClick={() => setDetailParcel(parcel)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              <Link
+                                to={`/parcels/${parcel.id}/auditoria`}
+                                className="inline-flex items-center gap-1 rounded-md border border-urutau-300 px-2 py-1 text-xs font-medium text-urutau-700 transition-colors hover:bg-urutau-100"
+                                title="Auditoria completa: cálculo, trilha, hashes"
+                              >
+                                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                Auditar
+                              </Link>
+                            </div>
                           </td>
                         </tr>
                       ))}

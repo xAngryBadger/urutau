@@ -1,5 +1,6 @@
 import PocketBase from 'pocketbase';
 import safeError from './logger';
+import { USE_MOCK, mock } from './mock/demoData';
 
 const sanitizeUrl = (url) => (url || '').trim().replace(/\/+$/, '');
 
@@ -101,7 +102,16 @@ return {
     displayUser,
     synced: parcel.synced === true,
     prontaParaSync: parcel.prontaParaSync === true,
-      syncLabel: parcel.prontaParaSync ? 'Pronto para sync' : 'Rascunho',
+    // Status canônico de verificação (RG-02) — o app grava status_verificacao;
+    // status_parcela (ativa/arquivada) é legado e fica como fallback.
+    statusVerificacao: parcel.status_verificacao ?? parcel.status_parcela ?? null,
+    protocoloVersao: parcel.protocolo_versao || parcel.protocoloVersao || null,
+    projetoId: parcel.projeto_id || parcel.projetoId || null,
+    periodoId: parcel.periodo_id || parcel.periodoId || null,
+    latitude: parcel.latitude ?? null,
+    longitude: parcel.longitude ?? null,
+    areaM2: parcel.area_m2 ?? parcel.area_ha ?? null,
+    substitutaDe: parcel.substituta_de || null,
     createdAt: parcel.created || parcel.updated || null,
   };
 };
@@ -114,14 +124,20 @@ const buildUserSession = (model, authCollection = '') => {
   const collectionName = authCollection || model.collectionName || '';
   const isSuperuser = collectionName === '_superusers';
   const isAdmin = isSuperuser || model.isAdmin === true;
+  // Papel canônico: o servidor pode informar `role`/`papel`; quem não é admin
+  // é VERIFICADOR (read-only) — nunca 'user' com canEdit implícito.
+  const role = isAdmin
+    ? 'admin'
+    : (model.role || model.papel || 'verificador');
 
   return {
     ...model,
     authCollection: collectionName,
-    role: isAdmin ? 'admin' : 'user',
-    canEdit: isAdmin,
-    canDelete: isAdmin,
-    canExport: true,
+    role,
+    canEdit: role === 'admin',
+    canDelete: role === 'admin',
+    // Exportação em massa é privilégio de admin; verificador apenas consulta.
+    canExport: role === 'admin',
     canView: true,
   };
 };
@@ -150,6 +166,28 @@ const toAuthErrorMessage = (error) => {
 
 export const loginUser = async (identity, password, { remember = true } = {}) => {
   const normalizedIdentity = (identity || '').trim();
+
+  // Modo demonstração: sessão de verificador real (read-only) sem servidor.
+  if (USE_MOCK) {
+    if (!normalizedIdentity || !password) {
+      return { success: false, error: 'Informe usuario/email e senha.' };
+    }
+    const isAdmin = /^admin/i.test(normalizedIdentity);
+    return {
+      success: true,
+      user: {
+        id: 'demo-user',
+        email: normalizedIdentity,
+        name: isAdmin ? 'Admin (demo)' : 'Verificador (demo)',
+        authCollection: 'mock',
+        role: isAdmin ? 'admin' : 'verificador',
+        canEdit: isAdmin,
+        canDelete: isAdmin,
+        canExport: isAdmin,
+        canView: true,
+      },
+    };
+  }
 
   if (!normalizedIdentity || !password) {
     return {
@@ -280,6 +318,10 @@ export const fetchParcelsByIds = async (ids, usersById = null) => {
 };
 
 export const fetchParcelById = async (id, usersById = null) => {
+  if (USE_MOCK) {
+    const found = mock.parcels.find((p) => p.uuid === id || String(p.id_parcela) === String(id));
+    return found || null;
+  }
   try {
     const result = await pb.collection('parcelas').getOne(id, {
       expand: EXPAND_RELATIONS,
@@ -293,6 +335,9 @@ export const fetchParcelById = async (id, usersById = null) => {
 };
 
 export const fetchPlantsByParcel = async (parcelId) => {
+  if (USE_MOCK) {
+    return mock.plants[parcelId] || [];
+  }
   try {
     const result = await pb.collection('plantas').getFullList({
       filter: `parcela = "${parcelId}"`,

@@ -41,7 +41,8 @@ Get-Process -Name "pocketbase" -ErrorAction SilentlyContinue | Stop-Process -For
 Start-Sleep -Seconds 1
 
 Write-Host "[+] Iniciando PocketBase..." -ForegroundColor Green
-Start-Process -FilePath $pbExe -ArgumentList "serve" -WorkingDirectory $servidorDir -WindowStyle Minimized
+# t21: --hooksDir EXPLICITO — sem ele o PB 0.36.4 nao carrega pb_hooks (falha em silencio).
+Start-Process -FilePath $pbExe -ArgumentList "serve --hooksDir=$servidorDir\pb_hooks" -WorkingDirectory $servidorDir -WindowStyle Minimized
 Start-Sleep -Seconds 4
 
 Write-Host "[+] Iniciando ngrok..." -ForegroundColor Green

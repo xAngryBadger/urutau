@@ -37,6 +37,15 @@ String descricaoCategoria(int categoria) {
   }
 }
 
+/// Rótulo curto da categoria para chip compacto no card da planta
+/// (UX-APP-CAMPO): o número sozinho ("C1") não diz nada em campo.
+String rotuloChipCategoria(int categoria) => switch (categoria) {
+      1 => 'Cat. 1 · < 50cm',
+      2 => 'Cat. 2 · DAP < 5cm',
+      3 => 'Cat. 3 · DAP ≥ 5cm',
+      _ => 'Cat. ?',
+    };
+
 /// Lista de espécies comuns para autocomplete.
 /// "NI" = Não Identificada.
 const List<String> especiesComuns = [

@@ -12,7 +12,15 @@ import 'image_service.dart';
 
 class BackupService {
   static const String _dbName = 'urutau';
-  static const int _currentSchemaVersion = 16;
+  // t19 F-3a: tem de ser o MESMO schemaVersion de AppDatabase (database.dart:234,
+  // hoje 32). Se ficar para trás, um backup feito num app real (manifest
+  // v26..v32) é rejeitado com "Atualize o app" num app que JÁ é novo o
+  // suficiente — medido no teste 6 antigo. O teste 8 de backup_roundtrip_test
+  // trava esta constante ao schema real do AppDatabase.
+  static const int _currentSchemaVersion = 32;
+
+  /// Expõe a constante para o teste de regressão (F-3a).
+  static int get currentSchemaVersion => _currentSchemaVersion;
   static const String _pendingRestoreKey = 'pending_restore';
   static const String _pendingRestorePathKey = 'pending_restore_path';
   static const String _pendingRestoreFotosKey = 'pending_restore_fotos_path';
@@ -25,8 +33,17 @@ class BackupService {
     return p.join(dir.path, '$_dbName.sqlite');
   }
 
+  /// Caminho do banco, exposto para o AutoBackupService (t19 fase 2).
+  static Future<String> get dbFilePath async => _dbPath;
+
   static bool _isZipFile(List<int> bytes) {
     return bytes.length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B;
+  }
+
+  // t19 F-3b: cabeçalho SQLite ("SQLite format 3\0") — 16 bytes.
+  static bool _looksLikeSqlite(List<int> bytes) {
+    if (bytes.length < 100) return false;
+    return String.fromCharCodes(bytes.sublist(0, 16)) == 'SQLite format 3\u0000';
   }
 
   static ({bool ok, String? error}) _validateManifest(String manifestJson) {
@@ -134,84 +151,154 @@ class BackupService {
     debugPrint('BackupService: ficheiros pre-restore limpos.');
   }
 
+  /// Dump do banco que ENXERGA o WAL (fix P0 — impl-backup-wal.md §2/§4).
+  ///
+  /// O caminho antigo abria a conexão em `OpenMode.readOnly`, tentava
+  /// `PRAGMA wal_checkpoint(TRUNCATE)` (operação que o SQLite RECUSA em
+  /// read-only — "disk I/O error 10", medido), ENGOLIA o erro como "não
+  /// crítico" e copiava só o arquivo principal via readAsBytes: todo dado
+  /// ainda no `-wal` era perdido em silêncio, e o backup resultante passava
+  /// `integrity_check` "ok" mesmo incompleto (falso conforto medido).
+  ///
+  /// Agora: `VACUUM INTO` (conexão READ-WRITE, atômico, WAL-safe por
+  /// construção — cópia consistente de tudo que o banco tem) + validação
+  /// obrigatória pós-backup: integrity_check + contagem de objetos +
+  /// user_version. Integrity sozinho NÃO pega este bug (aprovou o backup
+  /// corrompido no teste do arquiteto) — por isso as três checagens.
+  ///
+  /// Exposto (público) para o teste de regressão `backup_wal_test.dart`.
+  static Future<List<int>> dumpWalsafe(String sourcePath) async {
+    final tmp = File('$sourcePath.tmp-backup');
+    if (await tmp.exists()) await tmp.delete();
+    final dest = tmp.path.replaceAll("'", "''");
+
+    final db = sqlite3.open(sourcePath); // READ-WRITE: VACUUM exige escrita
+    try {
+      db.execute("VACUUM INTO '$dest'");
+    } finally {
+      db.dispose();
+    }
+    if (!await tmp.exists()) {
+      throw Exception('dumpWalsafe: VACUUM INTO não gerou arquivo destino.');
+    }
+
+    // Validação obrigatória — as TRÊS checagens, não só integridade.
+    final check = sqlite3.open(tmp.path, mode: OpenMode.readOnly);
+    final srcCheck = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
+    try {
+      final integrity =
+          check.select('PRAGMA integrity_check').first.values.first;
+      if ('$integrity'.toLowerCase() != 'ok') {
+        throw Exception('dumpWalsafe: backup inválido (integrity_check=$integrity).');
+      }
+      final objetos = check.select('SELECT COUNT(*) AS c FROM sqlite_master').first['c'] as int;
+      if (objetos <= 0) {
+        throw Exception('dumpWalsafe: backup inválido (nenhum objeto no schema).');
+      }
+      // A versão do backup tem de bater com o schema do banco DE ORIGEM
+      // (não com a constante do app — banco de campo pode estar em
+      // versão anterior durante a transição de releases).
+      final versao = check.select('PRAGMA user_version').first.values.first;
+      final srcVersao =
+          srcCheck.select('PRAGMA user_version').first.values.first;
+      if ('$versao' != '$srcVersao') {
+        throw Exception('dumpWalsafe: backup inválido (user_version=$versao, '
+            'banco de origem=$srcVersao).');
+      }
+    } finally {
+      check.dispose();
+      srcCheck.dispose();
+    }
+
+    final bytes = await tmp.readAsBytes();
+    await tmp.delete();
+    return bytes;
+  }
+
+  /// Constrói o ZIP de backup: banco (WAL-safe via dumpWalsafe) + fotos em
+  /// `fotos/` + manifesto. Usado por [exportBackup] (share) e pelo backup
+  /// automático antes de update (t19 fase 2, via [exportBackupToFile]).
+  static Future<List<int>> buildBackupZip() async {
+    final sourcePath = await _dbPath;
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      throw Exception('Base de dados não encontrada.');
+    }
+
+    final archive = Archive();
+
+    final dbBytes = await dumpWalsafe(sourcePath);
+    final dbFile = ArchiveFile('urutau.sqlite', dbBytes.length, dbBytes);
+    dbFile.compress = true;
+    archive.addFile(dbFile);
+
+    final photosDir = await ImageService.getPhotosDir();
+    int photoCount = 0;
+    if (await photosDir.exists()) {
+      await for (final entity in photosDir.list(recursive: true)) {
+        if (entity is File) {
+          final relative = p.relative(entity.path, from: photosDir.path);
+          final archivePath = 'fotos/$relative';
+          final photoBytes = await entity.readAsBytes();
+          final photoFile = ArchiveFile(archivePath, photoBytes.length, photoBytes);
+          final ext = p.extension(entity.path).toLowerCase();
+          photoFile.compress = !(ext == '.jpg' || ext == '.jpeg');
+          archive.addFile(photoFile);
+          photoCount++;
+        }
+      }
+    }
+
+    int parcelaCount = 0;
+    int plantaCount = 0;
+    try {
+      final db = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
+      final parcelaResult = db.select('SELECT COUNT(*) AS cnt FROM parcelas WHERE deleted_at IS NULL');
+      parcelaCount = parcelaResult.first['cnt'] as int;
+      final plantaResult = db.select('SELECT COUNT(*) AS cnt FROM plantas WHERE deleted_at IS NULL');
+      plantaCount = plantaResult.first['cnt'] as int;
+      db.dispose();
+    } catch (e) {
+      debugPrint('BackupService: erro ao contar registros: $e');
+    }
+
+    final manifest = jsonEncode({
+      'schemaVersion': _currentSchemaVersion,
+      'appVersion': '2.0.1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'photoCount': photoCount,
+      'parcelaCount': parcelaCount,
+      'plantaCount': plantaCount,
+    });
+    final manifestBytes = utf8.encode(manifest);
+    final manifestFile = ArchiveFile('manifest.json', manifestBytes.length, manifestBytes);
+    manifestFile.compress = true;
+    archive.addFile(manifestFile);
+
+    final zipBytes = ZipEncoder().encode(archive);
+    if (zipBytes == null) {
+      throw Exception('Erro ao criar ZIP.');
+    }
+    return zipBytes;
+  }
+
+  /// Grava o ZIP de backup num diretório (padrão: documentos do app) e
+  /// devolve o ficheiro. Sem share sheet — é o caminho do backup automático.
+  static Future<File> exportBackupToFile({Directory? targetDir, String? fileName}) async {
+    final zipBytes = await buildBackupZip();
+    final dir = targetDir ?? await getApplicationDocumentsDirectory();
+    await dir.create(recursive: true);
+    final now = DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now());
+    final name = fileName ?? 'urutau_backup_$now.zip';
+    final dest = File(p.join(dir.path, name));
+    await dest.writeAsBytes(zipBytes);
+    return dest;
+  }
+
   static Future<String> exportBackup() async {
     if (kIsWeb) return 'Backup não disponível na versão web.';
     try {
-      final sourcePath = await _dbPath;
-      final source = File(sourcePath);
-      if (!await source.exists()) {
-        return 'Base de dados não encontrada.';
-      }
-
-      try {
-        final db = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
-        db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
-        db.dispose();
-      } catch (e) {
-        debugPrint('BackupService: WAL checkpoint falhou (não crítico): $e');
-      }
-
-      final archive = Archive();
-
-      final dbBytes = await source.readAsBytes();
-      final dbFile = ArchiveFile('urutau.sqlite', dbBytes.length, dbBytes);
-      dbFile.compress = true;
-      archive.addFile(dbFile);
-
-      final photosDir = await ImageService.getPhotosDir();
-      int photoCount = 0;
-      if (await photosDir.exists()) {
-        await for (final entity in photosDir.list(recursive: true)) {
-          if (entity is File) {
-            final relative = p.relative(entity.path, from: photosDir.path);
-            final archivePath = 'fotos/$relative';
-            final photoBytes = await entity.readAsBytes();
-            final photoFile = ArchiveFile(archivePath, photoBytes.length, photoBytes);
-            final ext = p.extension(entity.path).toLowerCase();
-            photoFile.compress = !(ext == '.jpg' || ext == '.jpeg');
-            archive.addFile(photoFile);
-            photoCount++;
-          }
-        }
-      }
-
-      int parcelaCount = 0;
-      int plantaCount = 0;
-      try {
-        final db = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
-        final parcelaResult = db.select('SELECT COUNT(*) AS cnt FROM parcelas WHERE deleted_at IS NULL');
-        parcelaCount = parcelaResult.first['cnt'] as int;
-        final plantaResult = db.select('SELECT COUNT(*) AS cnt FROM plantas WHERE deleted_at IS NULL');
-        plantaCount = plantaResult.first['cnt'] as int;
-        db.dispose();
-      } catch (e) {
-        debugPrint('BackupService: erro ao contar registros: $e');
-      }
-
-      final manifest = jsonEncode({
-        'schemaVersion': _currentSchemaVersion,
-        'appVersion': '2.0.0',
-        'timestamp': DateTime.now().toUtc().toIso8601String(),
-        'photoCount': photoCount,
-        'parcelaCount': parcelaCount,
-        'plantaCount': plantaCount,
-      });
-      final manifestBytes = utf8.encode(manifest);
-      final manifestFile = ArchiveFile('manifest.json', manifestBytes.length, manifestBytes);
-      manifestFile.compress = true;
-      archive.addFile(manifestFile);
-
-      final zipBytes = ZipEncoder().encode(archive);
-      if (zipBytes == null) {
-        return 'Erro ao criar ZIP.';
-      }
-
-      final dir = await getApplicationDocumentsDirectory();
-      final now = DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now());
-      final fileName = 'urutau_backup_$now.zip';
-      final destPath = p.join(dir.path, fileName);
-      final dest = File(destPath);
-      await dest.writeAsBytes(zipBytes);
+      final dest = await exportBackupToFile();
 
       await Share.shareXFiles(
         [XFile(dest.path)],
@@ -222,92 +309,6 @@ class BackupService {
         await dest.delete();
       } catch (_) {}
       return 'Backup partilhado. Guarde o ficheiro (ex.: em Downloads ou Drive) para poder restaurar depois.';
-    } catch (e) {
-      return 'Erro ao exportar: $e';
-    }
-  }
-
-  /// Creates a background backup without sharing (for Workmanager).
-  static Future<String> exportBackgroundBackup() async {
-    if (kIsWeb) return 'Backup não disponível na versão web.';
-    try {
-      final sourcePath = await _dbPath;
-      final source = File(sourcePath);
-      if (!await source.exists()) {
-        return 'Base de dados não encontrada.';
-      }
-
-      try {
-        final db = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
-        db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
-        db.dispose();
-      } catch (e) {
-        debugPrint('BackupService: WAL checkpoint falhou (não crítico): $e');
-      }
-
-      final archive = Archive();
-
-      final dbBytes = await source.readAsBytes();
-      final dbFile = ArchiveFile('urutau.sqlite', dbBytes.length, dbBytes);
-      dbFile.compress = true;
-      archive.addFile(dbFile);
-
-      final photosDir = await ImageService.getPhotosDir();
-      int photoCount = 0;
-      if (await photosDir.exists()) {
-        await for (final entity in photosDir.list(recursive: true)) {
-          if (entity is File) {
-            final relative = p.relative(entity.path, from: photosDir.path);
-            final archivePath = 'fotos/$relative';
-            final photoBytes = await entity.readAsBytes();
-            final photoFile = ArchiveFile(archivePath, photoBytes.length, photoBytes);
-            final ext = p.extension(entity.path).toLowerCase();
-            photoFile.compress = !(ext == '.jpg' || ext == '.jpeg');
-            archive.addFile(photoFile);
-            photoCount++;
-          }
-        }
-      }
-
-      int parcelaCount = 0;
-      int plantaCount = 0;
-      try {
-        final db = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
-        final parcelaResult = db.select('SELECT COUNT(*) AS cnt FROM parcelas WHERE deleted_at IS NULL');
-        parcelaCount = parcelaResult.first['cnt'] as int;
-        final plantaResult = db.select('SELECT COUNT(*) AS cnt FROM plantas WHERE deleted_at IS NULL');
-        plantaCount = plantaResult.first['cnt'] as int;
-        db.dispose();
-      } catch (e) {
-        debugPrint('BackupService: erro ao contar registros: $e');
-      }
-
-      final manifest = jsonEncode({
-        'schemaVersion': _currentSchemaVersion,
-        'appVersion': '2.0.0',
-        'timestamp': DateTime.now().toUtc().toIso8601String(),
-        'photoCount': photoCount,
-        'parcelaCount': parcelaCount,
-        'plantaCount': plantaCount,
-      });
-      final manifestBytes = utf8.encode(manifest);
-      final manifestFile = ArchiveFile('manifest.json', manifestBytes.length, manifestBytes);
-      manifestFile.compress = true;
-      archive.addFile(manifestFile);
-
-      final zipBytes = ZipEncoder().encode(archive);
-      if (zipBytes == null) {
-        return 'Erro ao criar ZIP.';
-      }
-
-      final dir = await getApplicationDocumentsDirectory();
-      final now = DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now());
-      final fileName = 'urutau_backup_$now.zip';
-      final destPath = p.join(dir.path, fileName);
-      final dest = File(destPath);
-      await dest.writeAsBytes(zipBytes);
-
-      return 'Background backup salvo em: $destPath';
     } catch (e) {
       return 'Erro ao exportar: $e';
     }
@@ -341,16 +342,10 @@ class BackupService {
         return await _prepareRestoreFromZip(bytes);
       }
 
-      final dir = await getApplicationDocumentsDirectory();
-      const pendingName = 'restore_pending.sqlite';
-      final pendingPath = p.join(dir.path, pendingName);
-      final pending = File(pendingPath);
-      if (await pending.exists()) await pending.delete();
-      await pending.writeAsBytes(bytes);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_pendingRestorePathKey, pendingPath);
-      await prefs.setBool(_pendingRestoreKey, true);
-      return 'Restauração marcada. Feche o app completamente e reabra para aplicar (os dados atuais serão substituídos pelo backup).';
+      // t19 F-3b: caminho raw (banco SQLite solto) passa por validação ANTES
+      // de ser aceite — antes, qualquer ficheiro de texto era gravado no
+      // pending e corrompia o banco no runPendingRestore.
+      return await _stagePendingDb(bytes);
     } catch (e) {
       return 'Erro ao preparar restauração: $e';
     }
@@ -478,16 +473,45 @@ class BackupService {
     }
   }
 
-  static Future<String> _writePendingAndSetFlag(File backup) async {
+  /// t19 F-3b: grava os bytes como banco pendente SOMENTE se forem um SQLite
+  /// válido (cabeçalho + integrity_check ok + pelo menos uma tabela no schema).
+  /// Se falhar, nada fica pendente e o banco atual não é tocado.
+  static Future<String> _stagePendingDb(List<int> bytes) async {
+    if (!_looksLikeSqlite(bytes)) {
+      return 'Ficheiro não é um backup válido (nem ZIP nem banco SQLite). Nada foi alterado.';
+    }
     final dir = await getApplicationDocumentsDirectory();
     const pendingName = 'restore_pending.sqlite';
     final pendingPath = p.join(dir.path, pendingName);
     final pending = File(pendingPath);
     if (await pending.exists()) await pending.delete();
-    await backup.copy(pendingPath);
+    await pending.writeAsBytes(bytes);
+
+    try {
+      final db = sqlite3.open(pendingPath, mode: OpenMode.readOnly);
+      final integrity = db.select('PRAGMA integrity_check').first.values.first.toString();
+      final objetos = db.select('SELECT COUNT(*) AS c FROM sqlite_master').first['c'] as int;
+      db.dispose();
+      if (integrity != 'ok') {
+        try { await pending.delete(); } catch (_) {}
+        return 'Integridade do banco de dados falhou: $integrity. Nada foi alterado.';
+      }
+      if (objetos <= 0) {
+        try { await pending.delete(); } catch (_) {}
+        return 'Backup inválido: banco sem tabelas. Nada foi alterado.';
+      }
+    } catch (e) {
+      try { await pending.delete(); } catch (_) {}
+      return 'Erro ao validar banco: $e. Nada foi alterado.';
+    }
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_pendingRestorePathKey, pendingPath);
     await prefs.setBool(_pendingRestoreKey, true);
     return 'Restauração marcada. Feche o app completamente e reabra para aplicar (os dados atuais serão substituídos pelo backup).';
+  }
+
+  static Future<String> _writePendingAndSetFlag(File backup) async {
+    return await _stagePendingDb(await backup.readAsBytes());
   }
 }

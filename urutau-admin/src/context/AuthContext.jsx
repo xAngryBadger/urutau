@@ -101,6 +101,12 @@ return () => { if (typeof unsub === 'function') unsub(); };
     isAuthenticated: !!user,
     hasPermission,
     isAdmin: user?.role === 'admin',
+    // Verificador (VVB): papel read-only por padrão. Qualquer pessoa que não
+    // seja admin NÃO pode editar/excluir — só consultar e verificar.
+    isVerificador: user?.role === 'verificador',
+    isReadOnly: !!user && user?.role !== 'admin',
+    canVerifyChain: !!user,
+    canResolveIncident: user?.role === 'admin',
   }), [user, initializing, loading, error, login, logout, hasPermission]);
 
   return (

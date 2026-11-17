@@ -16,6 +16,21 @@ void main() {
         expect(ConflictInfo.normalizeValue(1.5), '1.5');
       });
 
+      test('normalizes whole double to int form (Q0: 42.0 -> "42")', () {
+        expect(ConflictInfo.normalizeValue(42.0), '42');
+      });
+
+      test('int and whole double normalize identically (Q0: no false conflict)', () {
+        expect(ConflictInfo.normalizeValue(42), ConflictInfo.normalizeValue(42.0));
+        expect(ConflictInfo.normalizeValue(42), '42');
+        expect(ConflictInfo.normalizeValue(0), '0');
+        expect(ConflictInfo.normalizeValue(-7), '-7');
+      });
+
+      test('fractional double keeps precision (1.5 vs 1.50 collide)', () {
+        expect(ConflictInfo.normalizeValue(1.50), '1.5');
+      });
+
       test('normalizes bool to string', () {
         expect(ConflictInfo.normalizeValue(true), 'true');
         expect(ConflictInfo.normalizeValue(false), 'false');

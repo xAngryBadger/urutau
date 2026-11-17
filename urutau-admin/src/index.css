@@ -12,7 +12,33 @@
   --color-urutau-700: #5A6B5C;
   --color-urutau-800: #4A5A4C;
   --color-urutau-900: #2C3E2E;
-  
+
+  /* ── Tokens canônicos do app (app_tokens.dart) ─────────────────────── */
+  --color-brand-bg: #F9F6F0;        /* brandBackground (off-white quente)  */
+  --color-brand-primary: #5A6B5C;   /* brandPrimary (verde-sálvia)        */
+  --color-brand-secondary: #C4A47C; /* brandSecondary (bege-dourado)      */
+
+  /* Status de verificação (RG-02) — cor + label canônicos */
+  --color-status-pendente: #E8A13A;
+  --color-status-revisado: #3A7BD5;
+  --color-status-aprovado: #3E8E4F;
+  --color-status-rascunho: #6B7280;
+
+  /* MRV / carbono + semânticas */
+  --color-mrv-green: #2E7D32;
+  --color-mrv-green-bg: #E8F5E9;
+  --color-mrv-danger: #C62828;
+  --color-mrv-warning: #FF9800;
+  --color-mrv-success: #4CAF50;
+
+  /* Alto contraste (campo sob sol) — mesmo par do app */
+  --color-hc-primary: #FFD600;
+  --color-hc-bg: #000000;
+  --color-hc-surface: #141200;
+  --color-hc-surface-2: #1A1500;
+  --color-hc-outline: #332B00;
+  --color-hc-text: #FFFFFF;
+
   --color-wood-50: #efebe9;
   --color-wood-100: #d7ccc8;
   --color-wood-200: #bcaaa4;
@@ -39,6 +65,99 @@
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-brand-bg);
+}
+
+/* Foco visível consistente (WCAG 2.4.7) — painel é ferramenta de auditoria */
+:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Respeita preferência por menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── R13: alto contraste (campo sob sol) — mesmo par do app ─────────────
+   Ativado por [data-theme="hc"] no <html> (botão no header, persistido).
+   Fundo preto, superfície escura, texto branco, amarelo de destaque. */
+[data-theme="hc"] {
+  --color-urutau-50: #0b0b0b;
+  --color-urutau-100: #141200;
+  --color-urutau-200: #e8e8e8;
+  --color-urutau-300: #c9c9c9;
+  --color-urutau-400: #a9a9a9;
+  --color-urutau-500: #8f8f8f;
+  --color-urutau-600: #6f6f6f;
+  --color-urutau-700: #FFD600;
+  --color-urutau-800: #FFD600;
+  --color-urutau-900: #FFD600;
+  --color-brand-bg: #000000;
+  --color-brand-primary: #FFD600;
+  --color-brand-secondary: #FFD600;
+  --color-forest-50: #0b0b0b;
+  --color-forest-100: #141200;
+  --color-forest-200: #e8e8e8;
+  --color-forest-400: #c9c9c9;
+  --color-forest-700: #FFD600;
+  --color-forest-800: #141200;
+  --color-status-pendente: #FFD600;
+  --color-status-revisado: #7FB2FF;
+  --color-status-aprovado: #58D68D;
+  --color-mrv-green: #58D68D;
+  --color-mrv-danger: #FF6B6B;
+  --color-mrv-warning: #FFD600;
+  color-scheme: dark;
+}
+
+[data-theme="hc"] body {
+  background-color: #000000;
+  color: #FFFFFF;
+}
+
+[data-theme="hc"] .card,
+[data-theme="hc"] .bg-white {
+  background-color: #141200 !important;
+  border-color: #332B00 !important;
+  color: #FFFFFF;
+}
+
+[data-theme="hc"] .text-gray-900,
+[data-theme="hc"] .text-gray-800,
+[data-theme="hc"] .text-gray-700,
+[data-theme="hc"] .text-gray-600,
+[data-theme="hc"] .text-gray-500 {
+  color: #FFFFFF;
+}
+
+[data-theme="hc"] .bg-gray-50 {
+  background-color: #000000 !important;
+}
+
+[data-theme="hc"] .border-gray-200,
+[data-theme="hc"] .border-gray-100,
+[data-theme="hc"] .divide-gray-200,
+[data-theme="hc"] .divide-gray-100 {
+  border-color: #332B00 !important;
+}
+
+[data-theme="hc"] .bg-gray-100 {
+  background-color: #1A1500 !important;
+}
+
+[data-theme="hc"] .input-field {
+  background-color: #141200;
+  border-color: #FFD600;
+  color: #FFFFFF;
+}
+
+[data-theme="hc"] .table-header {
+  color: #FFD600;
 }
 
 /* Button styles */

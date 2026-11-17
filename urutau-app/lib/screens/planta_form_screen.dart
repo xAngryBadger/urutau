@@ -7,9 +7,12 @@ import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
 import '../data/database.dart';
 import '../data/categoria_helper.dart';
+import '../theme/app_tokens.dart';
 import '../data/especie_item.dart';
 import '../services/image_service.dart';
 import '../services/species_service.dart';
+import '../services/sync_service.dart';
+import '../widgets/arquivo_ausente_badge.dart';
 
 class PlantaFormScreen extends StatefulWidget {
   final String parcelaUuid;
@@ -39,6 +42,8 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
   bool _mostrarDAP = false;
   bool _fotoObrigatoria = false;
   String? _fotoPath;
+  String? _fotoSha256; // S3: hash do original na origem (RC-04)
+  int? _fotoBytes; // S3: bytes do original
   bool _isEditing = false;
   String? _currentUuid;
   bool _isSaving = false;
@@ -57,11 +62,41 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
         setState(() {
           _allSpecies = list;
           _filteredSpecies = list;
+          // BUG-FIX (UX-APP-CAMPO): se o usuário já estava digitando/quando
+          // a lista chega depois do foco, mostrar as sugestões já vale.
+          if (_especieFocusNode.hasFocus ||
+              _especieController.text.trim().isNotEmpty) {
+            _filteredSpecies = SpeciesService.filter(
+              _allSpecies,
+              _especieController.text,
+              _useNomePopular,
+            );
+            _showSpeciesList = _filteredSpecies.isNotEmpty;
+          }
         });
       }
     });
+    // BUG-FIX (UX-APP-CAMPO): as sugestões precisam aparecer na PRIMEIRA
+    // interação. Antes a lista só era ligada no onChanged com texto não
+    // vazio (e no onTap somente quando o campo JÁ tinha texto) — ao tocar o
+    // campo vazio nada aparecia e a lista effectively só surgia numa
+    // interação posterior ("só no 2º clique"). Agora: ganhar foco MOSTRA a
+    // lista (filtrada pelo texto atual; campo vazio = catálogo inteiro) e
+    // perder foco esconde.
     _especieFocusNode.addListener(() {
-      if (!_especieFocusNode.hasFocus) setState(() => _showSpeciesList = false);
+      if (!mounted) return;
+      if (_especieFocusNode.hasFocus) {
+        setState(() {
+          _filteredSpecies = SpeciesService.filter(
+            _allSpecies,
+            _especieController.text,
+            _useNomePopular,
+          );
+          _showSpeciesList = _filteredSpecies.isNotEmpty;
+        });
+      } else {
+        setState(() => _showSpeciesList = false);
+      }
     });
     if (widget.existingPlanta != null) {
       final p = widget.existingPlanta!;
@@ -110,14 +145,6 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categoriaColors = {
-      0: Colors.grey,
-      1: Colors.blue,
-      2: Colors.orange,
-      3: Colors.green,
-    };
-    final color = categoriaColors[_categoria] ?? Colors.grey;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Editar Planta' : 'Adicionar Planta'),
@@ -130,152 +157,15 @@ class _PlantaFormScreenState extends State<PlantaFormScreen> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(16),
             children: [
-              if (_categoriaManual)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    color: categoriaColors[_categoriaManualSelecionada ?? 0]
-                            ?.withAlpha(30) ??
-                        Colors.grey.withAlpha(30),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: categoriaColors[_categoriaManualSelecionada ?? 0]
-                                ?.withAlpha(80) ??
-                            Colors.grey.withAlpha(80)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.category,
-                          color: categoriaColors[
-                                  _categoriaManualSelecionada ?? 0] ??
-                              Colors.grey),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Categoria ${_categoriaManualSelecionada ?? '-'}',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: categoriaColors[
-                                        _categoriaManualSelecionada ?? 0] ??
-                                    Colors.grey,
-                              ),
-                            ),
-                            if (_categoriaManualSelecionada != null)
-                              Text(
-                                descricaoCategoria(
-                                    _categoriaManualSelecionada!),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: categoriaColors[
-                                              _categoriaManualSelecionada ?? 0]
-                                          ?.withAlpha(200) ??
-                                      Colors.grey.withAlpha(200),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else if (_categoria > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withAlpha(30),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: color.withAlpha(80)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.category, color: color),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Categoria $_categoria',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: color,
-                              ),
-                            ),
-                            Text(
-                              descricaoCategoria(_categoria),
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: color.withAlpha(200),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 24),
-              Semantics(
-                label: 'Selecionar categoria manualmente',
-                child: CheckboxListTile(
-                  title: const Text('Quero apenas selecionar a categoria'),
-                  value: _categoriaManual,
-                  onChanged: (val) {
-                    setState(() {
-                      _categoriaManual = val ?? false;
-                      if (!_categoriaManual) _categoriaManualSelecionada = null;
-                    });
-                  },
-                ),
-              ),
-              if (_categoriaManual)
-                Semantics(
-                  label: 'Selecione a categoria',
-                  child: DropdownButtonFormField<int>(
-                    decoration: InputDecoration(
-                      labelText: 'Selecione a categoria',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    value: _categoriaManualSelecionada,
-                    items: [1, 2, 3]
-                        .map((cat) => DropdownMenuItem(
-                              value: cat,
-                              child: Text('Categoria $cat'),
-                            ))
-                        .toList(),
-                    onChanged: (val) {
-                      setState(() {
-                        _categoriaManualSelecionada = val;
-                      });
-                    },
-                    validator: (v) {
-                      if (v == null) return 'Selecione a categoria';
-                      return null;
-                    },
-                  ),
-                ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 4),
 Wrap(
         spacing: 8,
         runSpacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Icon(Icons.eco, color: Colors.grey[700]),
+          Icon(Icons.eco, color: Theme.of(context).colorScheme.onSurfaceVariant),
           Text('Tipo de nome:',
-              style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+              style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ChoiceChip(
             label: const Text('Nome popular'),
             selected: _useNomePopular,
@@ -323,7 +213,7 @@ Semantics(
                         ? Tooltip(
                             message: 'Foto obrigatória para NI',
                             child: Icon(Icons.warning_amber,
-                                color: Colors.orange[700]),
+                                color: Theme.of(context).colorScheme.tertiary),
                           )
                         : null,
                   ),
@@ -344,73 +234,97 @@ Semantics(
                     _updateCategoria();
                   },
                   onTap: () {
-                    if (_especieController.text.trim().isNotEmpty) {
-                      setState(() {
-                        _filteredSpecies = SpeciesService.filter(
-                          _allSpecies,
-                          _especieController.text,
-                          _useNomePopular,
-                        );
-                        _showSpeciesList = true;
-                      });
-                    }
+                    // BUG-FIX (UX-APP-CAMPO): mostrar também com o campo
+                    // vazio (catálogo inteiro) — sem esperar o 2º clique.
+                    setState(() {
+                      _filteredSpecies = SpeciesService.filter(
+                        _allSpecies,
+                        _especieController.text,
+                        _useNomePopular,
+                      );
+                      _showSpeciesList = _filteredSpecies.isNotEmpty;
+                    });
                   },
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Informe a espécie';
         if (!RegExp(r"^[a-zA-ZÀ-ÿ0-9\s\-.()'-]+$").hasMatch(v)) {
           return 'Apenas letras, números, espaços, hífens, pontos e parênteses';
                     }
+                    // RC-12: entrada fechada no catálogo oficial — só aceita
+                    // item do catálogo (match normalizado) ou NI. Espécie
+                    // legada já existente continua válida sem alteração.
+                    final norm = SpeciesService.normalize(v.trim());
+                    if (norm == 'ni') return null;
+                    final legacy = widget.existingPlanta?.especie;
+                    if (legacy != null &&
+                        SpeciesService.normalize(legacy) == norm) {
+                      return null;
+                    }
+                    final noCatalogo = _allSpecies.any((e) =>
+                        SpeciesService.normalize(e.nomePopular) == norm ||
+                        SpeciesService.normalize(e.nomeCientifico) == norm);
+                    if (!noCatalogo) {
+                      return 'Espécie fora do catálogo oficial. Escolha na lista acima ou use NI.';
+                    }
                     return null;
                   },
                 ),
               ),
               if (_showSpeciesList && _filteredSpecies.isNotEmpty)
-                Container(
-                  margin: const EdgeInsets.only(top: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    border: Border.all(color: Colors.grey[300]!),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    padding: EdgeInsets.zero,
-                    itemCount: _filteredSpecies.length,
-                    itemBuilder: (_, i) {
-                      final e = _filteredSpecies[i];
-                      final nomeExibir = e.nomeCientifico.isNotEmpty
-                          ? e.nomeCientifico
-                          : e.nomePopular;
-                      return ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.eco, size: 20),
-                        title: Text(
-                          nomeExibir,
-                          style: const TextStyle(fontSize: 15),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: !_useNomePopular &&
-                                e.nomePopular.isNotEmpty &&
-                                e.nomePopular != e.nomeCientifico
-                            ? Text(
-                                e.nomePopular,
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.grey[600]),
-                                overflow: TextOverflow.ellipsis,
-                              )
-                            : null,
-                        onTap: () {
-                          _especieController.text = nomeExibir;
-                          setState(() {
-                            _showSpeciesList = false;
-                            _filteredSpecies = [];
-                          });
-                          _updateCategoria();
-                          FocusScope.of(context).unfocus();
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  // Material (não Container colorido) como ancestral dos
+                  // ListTiles: o ink/splash do toque fica visível e o
+                  // debugCheckHasMaterial do ListTile passa.
+                  child: Material(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        itemCount: _filteredSpecies.length,
+                        itemBuilder: (_, i) {
+                          final e = _filteredSpecies[i];
+                          final nomeExibir = e.nomeCientifico.isNotEmpty
+                              ? e.nomeCientifico
+                              : e.nomePopular;
+                          return ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.eco, size: 20),
+                            title: Text(
+                              nomeExibir,
+                              style: const TextStyle(fontSize: 15),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: !_useNomePopular &&
+                                    e.nomePopular.isNotEmpty &&
+                                    e.nomePopular != e.nomeCientifico
+                                ? Text(
+                                    e.nomePopular,
+                                    style: TextStyle(
+                                        fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                    overflow: TextOverflow.ellipsis,
+                                  )
+                                : null,
+                            onTap: () {
+                              _especieController.text = nomeExibir;
+                              setState(() {
+                                _showSpeciesList = false;
+                                _filteredSpecies = [];
+                              });
+                              _updateCategoria();
+                              FocusScope.of(context).unfocus();
+                            },
+                          );
                         },
-                      );
-                    },
+                      ),
+                    ),
                   ),
                 ),
               if (_fotoObrigatoria) ...[
@@ -419,20 +333,20 @@ Semantics(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.orange[50],
+                    color: Theme.of(context).colorScheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange[200]!),
+                    border: Border.all(color: Theme.of(context).colorScheme.tertiary),
                   ),
                   child: Row(
                     children: [
                       Icon(Icons.info_outline,
-                          color: Colors.orange[700], size: 18),
+                          color: Theme.of(context).colorScheme.onTertiaryContainer, size: 18),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Atenção: Foto obrigatória para identificação posterior.',
                           style: TextStyle(
-                            color: Colors.orange[800],
+                            color: Theme.of(context).colorScheme.onTertiaryContainer,
                             fontSize: 13,
                           ),
                         ),
@@ -518,6 +432,65 @@ Semantics(
                         )
                       : const SizedBox.shrink(),
                 ),
+              // Categoria DEPOIS de altura/DAP (é derivada deles) e
+              // DISCRETA: linha de texto pequena + escape manual compacto.
+              const SizedBox(height: 4),
+              Text(
+                _categoriaManual
+                    ? 'Categoria: ${_categoriaManualSelecionada != null ? rotuloChipCategoria(_categoriaManualSelecionada!) : '—'}'
+                    : (_categoria > 0
+                        ? 'Categoria calculada: ${rotuloChipCategoria(_categoria)}'
+                        : 'Categoria: calculada pela altura/DAP'),
+                style: TextStyle(
+                  fontSize: AppTokens.fontCaption,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              Semantics(
+                label: 'Selecionar categoria manualmente',
+                child: CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  title: Text(
+                    'Quero apenas selecionar a categoria',
+                    style: TextStyle(fontSize: AppTokens.fontSmall),
+                  ),
+                  value: _categoriaManual,
+                  onChanged: (val) {
+                    setState(() {
+                      _categoriaManual = val ?? false;
+                      if (!_categoriaManual) _categoriaManualSelecionada = null;
+                    });
+                  },
+                ),
+              ),
+              if (_categoriaManual)
+                Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: DropdownButtonFormField<int>(
+                    decoration: const InputDecoration(
+                      labelText: 'Selecione a categoria',
+                      isDense: true,
+                    ),
+                    value: _categoriaManualSelecionada,
+                    items: [1, 2, 3]
+                        .map((cat) => DropdownMenuItem(
+                              value: cat,
+                              child: Text('Categoria $cat'),
+                            ))
+                        .toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _categoriaManualSelecionada = val;
+                      });
+                    },
+                    validator: (v) {
+                      if (v == null) return 'Selecione a categoria';
+                      return null;
+                    },
+                  ),
+                ),
               const SizedBox(height: 8),
               Text(
                 _fotoObrigatoria
@@ -542,22 +515,20 @@ Semantics(
                         cacheWidth: kIsWeb ? null : 600,
                       ),
                     ),
+                    // >>> t9 S1: badge se a foto salva desta planta está ausente
+                    if (_fotoPath == widget.existingPlanta?.fotoEspeciePath &&
+                        (widget.existingPlanta?.fotoAusente ?? false))
+                      const ArquivoAusenteBadge(),
                     Positioned(
                       top: 8,
                       right: 8,
-                      child: Semantics(
-                        label: 'Remover foto da espécie',
-                        button: true,
-                        child: IconButton(
-                          icon: const Icon(Icons.cancel, color: Colors.red),
-                          onPressed: () {
-                            setState(() => _fotoPath = null);
-                          },
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.white.withValues(alpha: 0.8),
-                            minimumSize: const Size(48, 48),
-                            padding: const EdgeInsets.all(12),
-                          ),
+                      child: IconButton(
+                        icon: Icon(Icons.cancel, color: Theme.of(context).colorScheme.error),
+                        onPressed: () {
+                          setState(() => _fotoPath = null);
+                        },
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.8),
                         ),
                       ),
                     ),
@@ -575,14 +546,14 @@ Semantics(
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: _fotoObrigatoria
-                              ? Colors.orange[300]!
-                              : Colors.grey[300]!,
+                              ? Theme.of(context).colorScheme.tertiary
+                              : Theme.of(context).colorScheme.outlineVariant,
                           width: 2,
                         ),
                         borderRadius: BorderRadius.circular(12),
                         color: _fotoObrigatoria
-                            ? Colors.orange[50]
-                            : Colors.grey[50],
+                            ? Theme.of(context).colorScheme.tertiaryContainer
+                            : Theme.of(context).colorScheme.surfaceContainerHighest,
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -591,16 +562,16 @@ Semantics(
                             Icons.add_a_photo,
                             size: 40,
                             color: _fotoObrigatoria
-                                ? Colors.orange[400]
-                                : Colors.grey[400],
+                                ? Theme.of(context).colorScheme.tertiary
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Tirar foto da planta',
                             style: TextStyle(
                               color: _fotoObrigatoria
-                                  ? Colors.orange[600]
-                                  : Colors.grey[500],
+                                  ? Theme.of(context).colorScheme.onTertiaryContainer
+                                  : Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -615,11 +586,11 @@ Semantics(
       child: FilledButton.icon(
         onPressed: _isSaving ? null : _salvarPlanta,
         icon: _isSaving
-            ? const SizedBox(
+            ? SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white))
+                    strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary))
             : const Icon(Icons.check),
                   label: FittedBox(
                     fit: BoxFit.scaleDown,
@@ -670,85 +641,148 @@ Semantics(
 
     final photo = await picker.pickImage(
       source: source,
-      imageQuality: 85,
-      maxWidth: 2048,
+      // D-1 (decisão do Badger): o ORIGINAL sobe — sem re-encodar no picker.
     );
 
     if (photo != null) {
-      final savedPath = await ImageService.savePhotoLocally(photo.path);
-      setState(() => _fotoPath = savedPath);
+      // >>> t14 S3: inicio — original preservado (D-1) + hash na origem
+      final salvo = await ImageService.salvarOriginalComMetadados(photo.path);
+      setState(() => _fotoPath = salvo.caminho);
+      _fotoSha256 = salvo.sha256;
+      _fotoBytes = salvo.bytes;
+      // <<< t14 S3: fim
     }
   }
 
   Future<void> _salvarPlanta() async {
+    if (_isSaving) return;
     if (!_formKey.currentState!.validate()) return;
 
     if (_fotoObrigatoria && _fotoPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Foto obrigatória para espécie NI (não identificada)',
-          ),
-          backgroundColor: Colors.red,
+        SnackBar(
+          content: Text('Foto obrigatória para espécie NI (não identificada)',
+              style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
           duration: Duration(seconds: 5),
         ),
       );
       return;
     }
 
-    double altura = 0;
-    double? dap;
-    int cat = 0;
-    if (_categoriaManual) {
-      cat = _categoriaManualSelecionada ?? 0;
-    } else {
-      altura = double.parse(_alturaController.text.replaceAll(',', '.'));
-      dap = _mostrarDAP
-          ? double.tryParse(_dapController.text.replaceAll(',', '.'))
-          : null;
-      cat = calcularCategoria(altura, dap);
+    setState(() => _isSaving = true);
+
+    try {
+      if (_fotoObrigatoria && _fotoPath == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Foto obrigatória para espécie NI (não identificada)',
+            ),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+            duration: Duration(seconds: 5),
+          ),
+        );
+        return;
+      }
+
+      double altura = 0;
+      double? dap;
+      int cat = 0;
+      if (_categoriaManual) {
+        cat = _categoriaManualSelecionada ?? 0;
+      } else {
+        altura = double.parse(_alturaController.text.replaceAll(',', '.'));
+        dap = _mostrarDAP
+            ? double.tryParse(_dapController.text.replaceAll(',', '.'))
+            : null;
+        cat = calcularCategoria(altura, dap);
+      }
+
+      // v28 MRV: dono da medição (pitch: "cada medição tem ... dono")
+      final autor = context.read<SyncService>().currentUser?.uuid;
+      final companion = PlantasCompanion(
+        uuid: drift.Value(_currentUuid!),
+        parcelaUuid: drift.Value(widget.parcelaUuid),
+        especie: drift.Value(_especieController.text.trim()),
+        alturaCm: drift.Value(altura),
+        dapCm: drift.Value(dap),
+        categoria: drift.Value(cat),
+        fotoEspeciePath: drift.Value(_fotoPath),
+        synced: const drift.Value(false),
+        updatedAt: drift.Value(DateTime.now()),
+        autorUuid: _isEditing
+            ? const drift.Value.absent()
+            : drift.Value(autor),
+      );
+
+      if (_isEditing) {
+        await _db.updatePlanta(companion, _currentUuid!);
+        await _db.logAudit('update', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'updated');
+      } else {
+        await _db.insertPlanta(companion);
+        await _db.logAudit('create', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'created');
+      }
+
+      if (_fotoPath != null) {
+        final ativoUuid = 'legado-ativo-$_currentUuid';
+        await _db.registrarFotoCatalogo(
+          objetoUuid: _currentUuid!,
+          entidadeTipo: 'planta',
+          entidadeUuid: _currentUuid!,
+          caminhoOriginal: _fotoPath!,
+          capturadoEm: DateTime.now(),
+        );
+        if (_fotoSha256 != null) {
+          await _db.registrarHashDoAtivo(
+            ativoUuid: ativoUuid,
+            sha256: _fotoSha256!,
+            bytes: _fotoBytes,
+            papel: 'bruto',
+          );
+        }
+      }
+
+      final planta = Planta(
+        id: 0,
+        uuid: _currentUuid!,
+        parcelaUuid: widget.parcelaUuid,
+        especie: _especieController.text.trim(),
+        alturaCm: altura,
+        dapCm: dap,
+        categoria: cat,
+        fotoEspeciePath: _fotoPath,
+        synced: false,
+        createdAt: _isEditing && widget.existingPlanta != null
+            ? widget.existingPlanta!.createdAt
+            : DateTime.now(),
+        updatedAt: DateTime.now(),
+        fotoAusente: false,
+      );
+
+      if (mounted) {
+        Navigator.of(context).pop(planta);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao salvar: $e',
+            style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Tentar novamente',
+              textColor: Theme.of(context).colorScheme.onErrorContainer,
+              onPressed: () => _salvarPlanta(),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
-
-  final companion = PlantasCompanion(
-  uuid: drift.Value(_currentUuid!),
-  parcelaUuid: drift.Value(widget.parcelaUuid),
-  especie: drift.Value(_especieController.text.trim()),
-  alturaCm: drift.Value(altura),
-  dapCm: drift.Value(dap),
-  categoria: drift.Value(cat),
-  fotoEspeciePath: drift.Value(_fotoPath),
-  synced: const drift.Value(false),
-  updatedAt: drift.Value(DateTime.now()),
-  );
-
-  if (_isEditing) {
-    await _db.updatePlanta(companion, _currentUuid!);
-    // Audit log for planta update
-    await _db.logAudit('update', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'updated');
-  } else {
-    await _db.insertPlanta(companion);
-    // Audit log for planta creation
-    await _db.logAudit('create', entityType: 'planta', entityUuid: _currentUuid!, newValue: 'created');
   }
-
-final planta = Planta(
-  id: 0,
-  uuid: _currentUuid!,
-  parcelaUuid: widget.parcelaUuid,
-  especie: _especieController.text.trim(),
-  alturaCm: altura,
-  dapCm: dap,
-  categoria: cat,
-  fotoEspeciePath: _fotoPath,
-  synced: false,
-  createdAt: _isEditing && widget.existingPlanta != null
-      ? widget.existingPlanta!.createdAt
-      : DateTime.now(),
-  updatedAt: DateTime.now(),
-  );
-
-  if (mounted) {
-    Navigator.of(context).pop(planta);
-  }
-}
 }

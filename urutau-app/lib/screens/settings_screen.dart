@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:workmanager/workmanager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,10 +8,8 @@ import '../services/backup_service.dart';
 import '../services/sync_service.dart';
 import '../services/theme_provider.dart';
 
-const String kPhotoQualityKey = 'photo_compression_quality';
-const int kPhotoQualityDefault = 70;
 const String kForcedOfflineKey = 'forced_offline_mode';
-const String kAutoBackupKey = 'auto_backup_enabled';
+const String kWizardModeKey = 'wizard_mode_enabled';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -29,24 +26,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _testResult;
   bool? _testOk;
 
-  int _photoQuality = kPhotoQualityDefault;
   bool _forcedOffline = false;
-  bool _autoBackupEnabled = false;
+  bool _wizardMode = true; // UX-APP-CAMPO: default ligado
 
   @override
   void initState() {
     super.initState();
     final syncService = context.read<SyncService>();
     _serverUrlController.text = syncService.serverUrl ?? '';
-    _loadPhotoQuality();
     _loadForcedOffline();
-    _loadAutoBackup();
+    _loadWizardMode();
   }
 
-  Future<void> _loadPhotoQuality() async {
+  Future<void> _loadWizardMode() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _photoQuality = prefs.getInt(kPhotoQualityKey) ?? kPhotoQualityDefault;
+      // UX-APP-CAMPO: modo wizard é o padrão; desligado = form clássico.
+      _wizardMode = prefs.getBool(kWizardModeKey) ?? true;
     });
   }
 
@@ -54,13 +50,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _forcedOffline = prefs.getBool(kForcedOfflineKey) ?? false;
-    });
-  }
-
-  Future<void> _loadAutoBackup() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _autoBackupEnabled = prefs.getBool(kAutoBackupKey) ?? false;
     });
   }
 
@@ -73,6 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final syncService = context.watch<SyncService>();
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -128,12 +118,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: FilledButton.icon(
                             onPressed: _isSaving ? null : _saveServerUrl,
                             icon: _isSaving
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 18,
                                     height: 18,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: Colors.white,
+                                      color: cs.onPrimary,
                                     ),
                                   )
                                 : const Icon(Icons.save),
@@ -170,22 +160,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color:
-                            _testOk == true ? Colors.green[50] : Colors.red[50],
+                        color: _testOk == true
+                            ? cs.primaryContainer
+                            : cs.errorContainer,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: _testOk == true
-                              ? Colors.green[300]!
-                              : Colors.red[300]!,
+                          color: _testOk == true ? cs.primary : cs.error,
                         ),
                       ),
                       child: Row(
                         children: [
                           Icon(
                             _testOk == true ? Icons.check_circle : Icons.error,
-                            color: _testOk == true
-                                ? Colors.green[700]
-                                : Colors.red[700],
+                            color: _testOk == true ? cs.primary : cs.error,
                             size: 20,
                           ),
                           const SizedBox(width: 8),
@@ -196,8 +183,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   : _testResult!,
                               style: TextStyle(
                                 color: _testOk == true
-                                    ? Colors.green[800]
-                                    : Colors.red[800],
+                                    ? cs.onPrimaryContainer
+                                    : cs.onErrorContainer,
                                 fontSize: 13,
                               ),
                             ),
@@ -241,8 +228,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ? Icons.cloud_off
                           : Icons.cloud_done,
                       color: syncService.pendingCount > 0
-                          ? Colors.orange
-                          : Colors.green,
+                          ? cs.tertiary
+                          : cs.primary,
                     ),
                     title: Text(
                       syncService.pendingCount > 0
@@ -252,8 +239,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: syncService.lastError != null
                         ? Text(
                             syncService.lastError!,
-                            style: const TextStyle(
-                              color: Colors.red,
+                            style: TextStyle(
+                              color: cs.error,
                               fontSize: 12,
                             ),
                           )
@@ -308,9 +295,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Exporte um backup antes de desinstalar; após reinstalar, use Restaurar e escolha o ficheiro. O Android também pode restaurar dados automaticamente se o backup estiver ativo.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  Text(
+                    'Backup LOCAL = ficheiro ZIP com o banco (SQLite) e as fotos. '
+                    'Use "Exportar backup local" e GUARDE o ficheiro fora do celular '
+                    '(Downloads/Drive): uma cópia que fica só no aparelho desaparece '
+                    'se ele for perdido, quebrado ou o app desinstalado. '
+                    'Para voltar, use "Restaurar" e escolha o ficheiro — substitui os dados atuais.',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
@@ -335,21 +326,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () async {
-                        final result = await FilePicker.pickFile(
+                        final result = await FilePicker.platform.pickFiles(
                           type: FileType.any,
+                          allowMultiple: false,
                         );
-                        if (result == null || !context.mounted) return;
-                        final file = result;
+                        if (result == null ||
+                            result.files.isEmpty ||
+                            !context.mounted) return;
+                        final file = result.files.single;
                         String msg;
                         if (file.path != null && file.path!.isNotEmpty) {
                           msg = await BackupService.prepareRestore(file.path!);
+                        } else if (file.bytes != null &&
+                            file.bytes!.isNotEmpty) {
+                          msg = await BackupService.prepareRestoreFromBytes(
+                              file.bytes!);
                         } else {
-                          final bytes = await file.readAsBytes();
-                          if (bytes.isNotEmpty) {
-                            msg = await BackupService.prepareRestoreFromBytes(bytes);
-                          } else {
-                            msg = 'Não foi possível aceder ao ficheiro.';
-                          }
+                          msg = 'Não foi possível aceder ao ficheiro.';
                         }
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -440,13 +433,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 12),
                   Consumer<ThemeProvider>(
                     builder: (context, themeProvider, _) {
-                      return SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        secondary: const Icon(Icons.contrast),
-                        title: const Text('Modo Alto Contraste'),
-                        value: themeProvider.isHighContrast,
-                        onChanged: (val) async =>
-                            await themeProvider.setHighContrast(val),
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SegmentedButton<ThemeModeUrutau>(
+                            segments: const [
+                              ButtonSegment(
+                                value: ThemeModeUrutau.claro,
+                                label: Text('Claro'),
+                              ),
+                              ButtonSegment(
+                                value: ThemeModeUrutau.altoContraste,
+                                label: Text('Alto contraste'),
+                              ),
+                            ],
+                            selected: {themeProvider.mode},
+                            onSelectionChanged: (sel) async =>
+                                await themeProvider.setMode(sel.first),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Claro = tema padrão. Alto contraste = preto/amarelo/'
+                            'branco com contraste AA, para uso sob sol. '
+                            'A escolha fica guardada.',
+                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -457,7 +469,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 16),
 
-          // ────────── QUALIDADE DAS FOTOS ──────────
+          // ────────── FORMULÁRIO DE CAMPO (UX-APP-CAMPO) ──────────
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.view_carousel),
+                      SizedBox(width: 8),
+                      Text(
+                        'Formulário de Campo',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.segment),
+                    title: const Text('Modo wizard'),
+                    subtitle: const Text(
+                      'Formulário da parcela em 4 etapas com swipe '
+                      '(Local, Plantas, Fotos, Revisar). '
+                      'Desligado = formulário clássico de sempre.',
+                    ),
+                    value: _wizardMode,
+                    onChanged: (val) async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool(kWizardModeKey, val);
+                      setState(() => _wizardMode = val);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ────────── FOTOS (integridade) ──────────
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -469,7 +525,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Icon(Icons.image),
                       SizedBox(width: 8),
                       Text(
-                        'Qualidade das Fotos',
+                        'Fotos',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -477,37 +533,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.image, size: 20),
-                        const SizedBox(width: 12),
-                        const Text('Qualidade das Fotos', style: TextStyle(fontSize: 16)),
-                        const Spacer(),
-                        Text('${_photoQuality}%', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  Slider(
-                    value: _photoQuality.toDouble(),
-                    min: 50,
-                    max: 95,
-                    divisions: 9,
-                    label: '${_photoQuality.round()}%',
-                    onChanged: (val) async {
-                      setState(() => _photoQuality = val.round());
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setInt(kPhotoQualityKey, val.round());
-                    },
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Maior qualidade = arquivos maiores. Recomendado: 70%.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'As fotos são guardadas e enviadas como o ORIGINAL capturado, '
+                    'sem compressão. O hash SHA-256 é calculado sobre exatamente '
+                    'o arquivo que sobe — a evidência não é alterada. '
+                    'Não há opção de comprimir: comprimir mudaria os bytes e o '
+                    'hash deixaria de ser do original.',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -525,6 +558,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.pushNamed(context, '/storage'),
             ),
           ),
+
+          // ────────── PROJETO MRV (admin) — RT-04/RS-04/RS-05/RT-02/RG-03/RG-06 ──────────
+          if (context.read<SyncService>().isAdmin) ...[
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.eco),
+                title: const Text('Projeto MRV'),
+                subtitle: const Text(
+                    'Baseline/adicionalidade, desenho amostral, campanhas, incidentes e verificação interna'),
+                onTap: () => Navigator.pushNamed(context, '/mrv-projeto'),
+              ),
+            ),
+          ],
 
           const SizedBox(height: 16),
 
@@ -564,73 +611,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       setState(() => _forcedOffline = val);
                     },
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       'Reinicie o app para aplicar completamente.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // ────────── BACKUP AUTOMÁTICO ──────────
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.schedule),
-                      SizedBox(width: 8),
-                      Text(
-                        'Backup Automático Diário',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    secondary: const Icon(Icons.backup),
-                    title: const Text('Backup Automático Diário'),
-                    subtitle: const Text(
-                      'Cria backup local automaticamente a cada 24h em segundo plano.',
-                    ),
-                    value: _autoBackupEnabled,
-                    onChanged: (val) async {
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setBool(kAutoBackupKey, val);
-                      setState(() => _autoBackupEnabled = val);
-                      if (val) {
-                        await Workmanager().registerPeriodicTask(
-                          'urutau-background-backup',
-                          'localBackup',
-                          frequency: Duration(hours: 24),
-                        constraints: Constraints(
-                          networkType: NetworkType.notRequired,
-                          requiresStorageNotLow: true,
-                        ),
-                        );
-                      } else {
-                        await Workmanager().cancelByUniqueName('urutau-background-backup');
-                      }
-                    },
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Backups são salvos localmente. Use "Exportar backup" para salvar cópia externa.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                     ),
                   ),
                 ],
@@ -733,20 +718,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await context.read<SyncService>().setServerUrl(url);
 
       if (mounted) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('URL do servidor salva!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
+          SnackBar(
+            content: Text('URL do servidor salva!',
+                style: TextStyle(color: cs.onPrimaryContainer)),
+            backgroundColor: cs.primaryContainer,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Erro: $e', style: TextStyle(color: cs.onErrorContainer)),
+            backgroundColor: cs.errorContainer,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -761,18 +749,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) {
       final syncService = context.read<SyncService>();
       if (syncService.lastError == null) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sincronização concluída!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
+          SnackBar(
+            content: Text('Sincronização concluída!',
+                style: TextStyle(color: cs.onPrimaryContainer)),
+            backgroundColor: cs.primaryContainer,
+            duration: const Duration(seconds: 3),
           ),
         );
       } else if (syncService.lastError != null && syncService.lastError!.contains('planta(s) falharam')) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(syncService.lastError!),
-            backgroundColor: Colors.orange,
+            content: Text(syncService.lastError!,
+                style: TextStyle(color: cs.onTertiaryContainer)),
+            backgroundColor: cs.tertiaryContainer,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -838,11 +830,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (mounted) {
+      final cs = Theme.of(context).colorScheme;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text('${missing.length} referência(s) ausente(s) removida(s)'),
-          backgroundColor: Colors.green,
+          content: Text('${missing.length} referência(s) ausente(s) removida(s)',
+              style: TextStyle(color: cs.onPrimaryContainer)),
+          backgroundColor: cs.primaryContainer,
           duration: const Duration(seconds: 3),
         ),
       );

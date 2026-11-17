@@ -15,9 +15,13 @@ class StorageService {
     try {
       if (Platform.isAndroid) {
         final appDir = await getApplicationDocumentsDirectory();
-        final freeBytes = await _channel.invokeMethod('getFreeSpace', appDir.path);
-        if (freeBytes is int) {
-          return freeBytes / (1024 * 1024 * 1024);
+        // Contrato do canal: os argumentos vão como Map nomeado. O lado Kotlin
+        // faz `call.argument<String>("path")`, que exige um Map — enviar a
+        // String crua provoca ClassCastException do lado nativo.
+        final freeBytes = await _channel.invokeMethod('getFreeSpace', {'path': appDir.path});
+        // O Kotlin devolve um Long; o StandardMessageCodec converte para int.
+        if (freeBytes is num) {
+          return freeBytes.toInt() / (1024 * 1024 * 1024);
         }
       }
       // Fallback for iOS and other platforms

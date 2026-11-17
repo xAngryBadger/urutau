@@ -29,11 +29,13 @@ class _ConflictResolutionDialogState extends State<ConflictResolutionDialog> {
 
     final conflict = _currentConflict;
     final isLast = _currentIndex == widget.conflicts.length - 1;
+    // Cores do tema (antes laranja/grey[700]/blue[50]/orange[50] fixos).
+    final cs = Theme.of(context).colorScheme;
 
     return AlertDialog(
       title: Row(
         children: [
-          const Icon(Icons.warning_amber, color: Colors.orange, size: 28),
+          Icon(Icons.warning_amber, color: cs.tertiary, size: 28),
           const SizedBox(width: 8),
           const Expanded(
             child: Text('Conflito Detectado', style: TextStyle(fontSize: 18)),
@@ -54,10 +56,10 @@ class _ConflictResolutionDialogState extends State<ConflictResolutionDialog> {
               const SizedBox(height: 8),
               Text(
                 'Os seguintes campos diferem entre o local e o servidor:',
-                style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 8),
-              ...conflict.differingFields.map((field) => _buildDiffRow(field, conflict)),
+              ...conflict.differingFields.map((field) => _buildDiffRow(field, conflict, cs)),
               const Divider(height: 24),
               const Text('Como deseja resolver?'),
               const SizedBox(height: 12),
@@ -102,7 +104,7 @@ class _ConflictResolutionDialogState extends State<ConflictResolutionDialog> {
     );
   }
 
-  Widget _buildDiffRow(String field, ConflictInfo conflict) {
+  Widget _buildDiffRow(String field, ConflictInfo conflict, ColorScheme cs) {
     final localVal = conflict.localValues[field]?.toString() ?? '(vazio)';
     final serverVal = conflict.serverValues[field]?.toString() ?? '(vazio)';
     final label = _fieldLabel(field);
@@ -119,9 +121,9 @@ class _ConflictResolutionDialogState extends State<ConflictResolutionDialog> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.blue[50],
+                    color: cs.primaryContainer,
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.blue[200]!),
+                    border: Border.all(color: cs.outlineVariant),
                   ),
                   child: Text('Local: $localVal', style: const TextStyle(fontSize: 12)),
                 ),
@@ -131,9 +133,9 @@ class _ConflictResolutionDialogState extends State<ConflictResolutionDialog> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.orange[50],
+                    color: cs.tertiaryContainer,
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.orange[200]!),
+                    border: Border.all(color: cs.outlineVariant),
                   ),
                   child: Text('Servidor: $serverVal', style: const TextStyle(fontSize: 12)),
                 ),

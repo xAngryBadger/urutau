@@ -1,11 +1,21 @@
+import 'dart:convert';
 import 'dart:io' as io;
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/backup_service.dart';
+import '../services/clock_service.dart';
 import '../services/password_service.dart';
 import '../services/image_service.dart';
+// >>> t14 S3: inicio
+import 'package:crypto/crypto.dart';
+// <<< t14 S3: fim
+// >>> t9 patch: inicio (imports ANTES do part — Dart exige essa ordem)
+import 'migrations/mrv_tables.dart';
+import 'migrations/mrv_migration.dart';
+// <<< t9 patch: fim
 
 part 'database.g.dart';
 
@@ -55,6 +65,38 @@ class Parcelas extends Table {
 
   BoolColumn get parcialmenteSincronizada =>
       boolean().withDefault(const Constant(false))();
+
+  // >>> t9 patch: inicio — MRV (v20)
+  // >>> t16: inicio — estado do arquivo local (D-1)
+  /// Estado do arquivo local desta foto: capturado | enviado_verificado |
+  /// comprimido_local | limpo. Transição para 'limpo' NUNCA é automática.
+  TextColumn get arquivoEstado =>
+      text().nullable().withDefault(const Constant('capturado'))();
+  /// Quando o upload foi confirmado (hash conferido). Base do estado.
+  DateTimeColumn get enviadoVerificadoEm => dateTime().nullable()();
+  // <<< t16: fim
+  // projeto/modalidade (D-02)
+  TextColumn get projetoId => text().nullable()();
+  // chave de negócio legível da parcela (RS-02). NAO é UNIQUE: o app permite
+  // parcela duplicada entre coletores e SINALIZA o conflito
+  // (findParcelaDuplicada). Índice único quebraria essa feature (Compat-UNIQUE).
+  TextColumn get parcelaIdText => text().nullable()();
+  // geo obrigatória (RC-10): {"tipo","coordenadas","crs","acuracia_m",
+  //                          "n_satelites","fix_em","fonte"}
+  TextColumn get geoJson => text().nullable()();
+  // unidade amostral (RS-01)
+  RealColumn get areaM2 => real().nullable()();
+  TextColumn get unidadeForma => text().nullable()(); // retangular|circular|quadrada
+  RealColumn get raioM => real().nullable()();
+  TextColumn get statusParcela =>
+      text().nullable().withDefault(const Constant('ativa'))();
+  TextColumn get marcador => text().nullable()(); // estaca/plaqueta (RS-02)
+  TextColumn get protocoloVersao => text().nullable()(); // SOP aplicado (RC-11)
+  TextColumn get substitutaDe => text().nullable()(); // rastreio de substituição (RS-06)
+  // v30 — RT-01: vínculo da parcela ao projeto MRV e ao período de monitoramento
+  TextColumn get projetoUuid => text().nullable()();
+  TextColumn get periodoUuid => text().nullable()();
+  // <<< t9 patch: fim
 }
 
 class Plantas extends Table {
@@ -71,6 +113,37 @@ class Plantas extends Table {
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   // Soft-delete
   DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// (Q2) true = fotoEspeciePath aponta para arquivo ausente no disco.
+  /// O PATH permanece (evidência do original); a marcação informa a UI.
+  BoolColumn get fotoAusente =>
+      boolean().withDefault(const Constant(false))();
+
+  /// (Q3 motor Fase 1) id do registro desta planta no servidor PocketBase —
+  /// ponte local→servidor para o upsert versionado (fim do delete+recreate).
+  /// NULL = ainda não sincronizada. Preenchido/atualizado no push.
+  TextColumn get serverPlantaId => text().nullable()();
+
+  /// (v28, MRV — pitch: "cada medição tem GPS, timestamp e dono"):
+  /// quem registrou a medição. GPS da planta vem do fix da parcela (geoJson);
+  /// timestamp é createdAt. autorUuid fecha a tríade prometida ao cliente.
+  TextColumn get autorUuid => text().nullable()();
+
+  // >>> t14: inicio — v26 parcelaServerId
+  /// (v26) id do registro parcela NO SERVIDOR (cópia local do campo texto do
+  /// PB, que passa a relation `parcela_rel` na migração 1778250001).
+  ///
+  /// Derivado de parcelaUuid: 'pb-<serverId>' -> '<serverId>'.
+  /// NULL = não sincronizado ainda ou não mapeável — NUNCA inventado.
+  TextColumn get parcelaServerId => text().nullable()();
+  // <<< t14: fim
+
+  // >>> t16: inicio — estado do arquivo local (D-1)
+  /// Mesma máquina de estados de FotosParcela.arquivoEstado.
+  TextColumn get arquivoEstado =>
+      text().nullable().withDefault(const Constant('capturado'))();
+  DateTimeColumn get enviadoVerificadoEm => dateTime().nullable()();
+  // <<< t16: fim
 }
 
 class FotosParcela extends Table {
@@ -81,6 +154,29 @@ class FotosParcela extends Table {
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// (Q2) true = arquivo não encontrado no disco. A LINHA permanece como
+  /// evidência de que a foto existiu — nunca deletar (auditoria).
+  BoolColumn get arquivoAusente =>
+      boolean().withDefault(const Constant(false))();
+
+  // >>> t16: inicio — estado do arquivo local (D-1)
+  /// Estado do arquivo local desta foto: capturado | enviado_verificado |
+  /// comprimido_local | limpo. Transição para 'limpo' NUNCA é automática.
+  TextColumn get arquivoEstado =>
+      text().nullable().withDefault(const Constant('capturado'))();
+  /// Quando o upload foi confirmado (hash conferido). Base do estado.
+  DateTimeColumn get enviadoVerificadoEm => dateTime().nullable()();
+  // <<< t16: fim
+
+  // >>> v28: inicio — MRV: cada foto tem GPS + dono (promessa do pitch)
+  /// Fix GPS no momento da captura (câmera). Galeria/EXIF: NULL e herda
+  /// o fix da parcela no sync (fonte registrada em fotos_meta).
+  RealColumn get latitude => real().nullable()();
+  RealColumn get longitude => real().nullable()();
+  /// Quem tirou/registrou a foto.
+  TextColumn get autorUuid => text().nullable()();
+  // <<< v28: fim
 }
 
 /// Tabela de auditoria — registra operações críticas no sistema.
@@ -102,9 +198,23 @@ class AuditLog extends Table {
 // DATABASE
 // ============================================================
 
-@DriftDatabase(tables: [Usuarios, Parcelas, Plantas, FotosParcela, AuditLog])
+@DriftDatabase(tables: [
+  Usuarios, Parcelas, Plantas, FotosParcela, AuditLog,
+  // >>> t9 patch: inicio — MRV v20..v23
+  ProjetosMrv, PeriodosMonitoramento, Campanhas, DesenhoAmostral,
+  ProtocolosMedicao, AmostrasParcela,
+  Individuos, MedicoesIndividuo, PlantacaoUts, MedicoesPlantacao,
+  RestauracaoProjetos, RestauracaoUts, MedicoesRestauracao, CoberturasAmostra,
+  AtivosBrutos, Dispositivos, TrilhaAuditoria,
+  EspeciesCatalogo, EquacoesAlometricas, CalculosMrv, ResultadosAmostra,
+  Papeis, UsuarioPapeis, Incidentes, VerificacoesInternas, Competencias,
+  // <<< t9 patch: fim
+])
 class AppDatabase extends _$AppDatabase {
   AppDatabase._internal(super.e);
+
+  /// Construtor para testes: injeta um QueryExecutor (ex.: NativeDatabase.memory()).
+  AppDatabase.forTesting(QueryExecutor e) : super(e);
 
   static AppDatabase? _instance;
 
@@ -121,7 +231,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 32; // v31 + RT-03: projetos_mrv.risco_reversao/fonte_fogo_historico
 
   @override
   MigrationStrategy get migration {
@@ -129,6 +239,9 @@ class AppDatabase extends _$AppDatabase {
       onCreate: (Migrator m) async {
         await m.createAll();
         await _createIndexes(m);
+        // >>> t9: base MRV também em banco NOVO (índices + scaffold + SOP-MRV).
+        // DEPOIS de _createIndexes: o SQL cria índice, a tabela já precisa existir.
+        await MrvMigration.aplicarBase((sql) => m.database.customStatement(sql));
       },
       onUpgrade: (Migrator m, int from, int to) async {
         if (from < 2) {
@@ -207,6 +320,158 @@ class AppDatabase extends _$AppDatabase {
       await customStatement(
           'UPDATE plantas SET updated_at = created_at WHERE updated_at IS NULL');
     }
+      if (from < 19) {
+        // Q2: marcar ausência de arquivo sem apagar evidência
+        await m.addColumn(fotosParcela, fotosParcela.arquivoAusente);
+        await m.addColumn(plantas, plantas.fotoAusente);
+      }
+      if (from < 25) {
+        // Q3 motor Fase 1: ponte local→servidor para o upsert de plantas
+        await m.addColumn(plantas, plantas.serverPlantaId);
+      }
+      // >>> t14: inicio — v26
+      if (from < 26) {
+        await m.addColumn(plantas, plantas.parcelaServerId);
+        // Backfill a partir do que já existe localmente. 'pb-<id>' -> '<id>'.
+        // uuid local (planta não sincronizada) fica NULL de propósito.
+        await m.database.customStatement(
+          'UPDATE plantas SET parcela_server_id = '
+          "  CASE WHEN parcela_uuid LIKE 'pb-%' "
+          '    THEN substr(parcela_uuid, 4) ELSE NULL END '
+          'WHERE parcela_server_id IS NULL');
+      }
+      // <<< t14: fim
+      // >>> t16: inicio — v27 (D-1: estado do arquivo local)
+      if (from < 27) {
+        await m.addColumn(plantas, plantas.arquivoEstado);
+        await m.addColumn(plantas, plantas.enviadoVerificadoEm);
+        await m.addColumn(fotosParcela, fotosParcela.arquivoEstado);
+        await m.addColumn(fotosParcela, fotosParcela.enviadoVerificadoEm);
+        // Só o que JÁ estava sincronizado nasce enviado_verificado; o resto
+        // fica 'capturado' (default). Nunca afirmar verificação sem hash.
+        await m.database.customStatement(
+          "UPDATE plantas SET arquivo_estado = 'enviado_verificado' "
+          'WHERE synced = 1 AND arquivo_estado = \'capturado\'');
+        await m.database.customStatement(
+          'UPDATE fotos_parcela SET arquivo_estado = \'enviado_verificado\' '
+          "WHERE synced = 1 AND arquivo_estado = 'capturado'");
+      }
+      // <<< t16: fim
+      // >>> v28: inicio — MRV: foto/planta com GPS + dono (promessa do pitch)
+      if (from < 28) {
+        await m.addColumn(fotosParcela, fotosParcela.latitude);
+        await m.addColumn(fotosParcela, fotosParcela.longitude);
+        await m.addColumn(fotosParcela, fotosParcela.autorUuid);
+        await m.addColumn(plantas, plantas.autorUuid);
+        // Backfill: fotos/planta já existentes ganham o dono da parcela
+        // (quem registrou a parcela é o dono das evidências dela).
+        await m.database.customStatement(
+          'UPDATE fotos_parcela SET autor_uuid = '
+          '  (SELECT user_id FROM parcelas WHERE parcelas.uuid = fotos_parcela.parcela_uuid) '
+          'WHERE autor_uuid IS NULL');
+        await m.database.customStatement(
+          'UPDATE plantas SET autor_uuid = '
+          '  (SELECT user_id FROM parcelas WHERE parcelas.uuid = plantas.parcela_uuid) '
+          'WHERE autor_uuid IS NULL');
+      }
+      // <<< v28: fim
+      // >>> t9 patch: inicio — migracao MRV v20..v24
+      if (from < 20) {
+        await _mrvV20Ddl(m);
+        // dev-codigo: o hunk original chamava so v20. O backfill das colunas
+        // de parcela + indices + semente do protocolo SOP-MRV vive em
+        // MrvMigration.v19() (o patch a marcou "nunca chamar", mas o proprio
+        // teste mrv_migration_test.dart exige parcela_id_text/area_m2/geo_json
+        // e o SOP-MRV semeado). Roda DEPOIS do DDL (as colunas passam a
+        // existir) e ANTES de v20 (scaffold LEGADO depende das colunas).
+        await MrvMigration.v19(m);
+        await MrvMigration.v20(m);
+      }
+      if (from < 21) { await _mrvV21Ddl(m); await MrvMigration.v21(m); }
+      if (from < 22) { await _mrvV22Ddl(m); await MrvMigration.v22(m); }
+      if (from < 23) { await _mrvV23Ddl(m); await MrvMigration.v23(m); }
+      // v24 nao tem DDL: e o marco de depreciacao controlada. Nada e dropado.
+      if (from < 24) { await MrvMigration.v24(m); }
+      // v29 DEPOIS dos DDLs MRV (trilha_auditoria é criada no DDL v20+)
+      if (from < 29) {
+        // RC-05: offset do relógio medido no servidor entra na trilha (hash).
+        // Em instalacao nova o DDL ja traz a coluna; so adiciona se faltar.
+        final cols = await m.database
+            .customSelect('PRAGMA table_info(trilha_auditoria)')
+            .get();
+        final tem = cols.any((r) => r.data['name'] == 'offset_relogio_ms');
+        if (!tem) {
+          await m.addColumn(trilhaAuditoria, trilhaAuditoria.offsetRelogioMs);
+        }
+      }
+      // v30 — RT-01: projeto/período na parcela. Em instalacao nova o DDL
+      // ja traz as colunas; so adiciona se faltar.
+      if (from < 30) {
+        final colsP = await m.database
+            .customSelect('PRAGMA table_info(parcelas)')
+            .get();
+        final temProj =
+            colsP.any((r) => r.data['name'] == 'projeto_uuid');
+        if (!temProj) {
+          await m.addColumn(parcelas, parcelas.projetoUuid);
+          await m.addColumn(parcelas, parcelas.periodoUuid);
+        }
+      }
+      // v31 — fix: seeds da v20+ gravaram CURRENT_TIMESTAMP (texto
+      // "YYYY-MM-DD HH:MM:SS") em colunas DateTime, que o drift le como
+      // inteiro (epoch s). Banco novo ja nasce correto (strftime('%s')),
+      // banco existente precisa normalizar texto -> epoch.
+      if (from < 31) {
+        const datetimeCols = <String, List<String>>{
+          // só colunas DateTime do drift (leem epoch int). Colunas TEXT de
+          // data ISO (vigencia_inicio, retencao_ate, data_inicio...) NAO entram.
+          'protocolos_medicao': ['created_at', 'updated_at', 'deleted_at'],
+          'equacoes_alometricas': ['created_at', 'updated_at', 'deleted_at'],
+          'projetos_mrv': ['created_at', 'updated_at', 'deleted_at'],
+          'periodos_monitoramento': ['plano_aprovado_em', 'created_at', 'updated_at', 'deleted_at'],
+          'campanhas': ['created_at', 'updated_at', 'deleted_at'],
+          'amostras_parcela': ['medido_em_servidor', 'relogio_dispositivo', 'revisado_em', 'created_at', 'updated_at', 'deleted_at'],
+          'individuos': ['created_at', 'updated_at', 'deleted_at'],
+          'medicoes_individuo': ['created_at', 'updated_at', 'deleted_at'],
+          'coberturas_amostra': ['created_at', 'updated_at', 'deleted_at'],
+          'ativos_brutos': ['capturado_em', 'ingerido_em', 'created_at', 'updated_at', 'deleted_at'],
+          'verificacoes_internas': ['verificado_em', 'created_at', 'updated_at', 'deleted_at'],
+          'calculos_mrv': ['executado_em', 'created_at', 'updated_at', 'deleted_at'],
+          'dispositivos': ['created_at', 'updated_at', 'deleted_at'],
+          'incidentes': ['detectado_em', 'resolvido_em', 'created_at', 'updated_at'],
+          'competencias': ['created_at', 'updated_at', 'deleted_at'],
+          'papeis': ['created_at'],
+          'usuario_papeis': ['atribuido_em', 'created_at'],
+        };
+        for (final entry in datetimeCols.entries) {
+          final cols = await m.database
+              .customSelect('PRAGMA table_info(${entry.key})')
+              .get();
+          final nomes = cols.map((r) => r.data['name'] as String).toSet();
+          for (final col in entry.value) {
+            if (!nomes.contains(col)) continue;
+            // so normaliza valores em texto; inteiros (epoch) ficam intactos
+            await m.database.customStatement(
+              "UPDATE ${entry.key} SET $col = CAST(strftime('%s', $col) AS INTEGER) "
+              "WHERE typeof($col) = 'text'",
+            );
+          }
+        }
+      }
+      // v32 — RT-03: risco de reversão + fonte do histórico de fogo no projeto
+      if (from < 32) {
+        final colsP = await m.database
+            .customSelect('PRAGMA table_info(projetos_mrv)')
+            .get();
+        final nomes = colsP.map((r) => r.data['name'] as String).toSet();
+        if (!nomes.contains('risco_reversao')) {
+          await m.addColumn(projetosMrv, projetosMrv.riscoReversao);
+        }
+        if (!nomes.contains('fonte_fogo_historico')) {
+          await m.addColumn(projetosMrv, projetosMrv.fonteFogoHistorico);
+        }
+      }
+      // <<< t9 patch: fim
   },
       beforeOpen: (details) async {
         await customStatement('PRAGMA journal_mode = WAL');
@@ -214,6 +479,10 @@ class AppDatabase extends _$AppDatabase {
         await customStatement('PRAGMA synchronous = NORMAL');
         await _garantirAdminSeNecessario();
         await _seedCatalogoEstatico();
+        // >>> t9: reparo idempotente — cobre as parcelas do seed (face 1).
+        // DEPOIS do seed: se viesse antes, as parcelas nasceriam depois do
+        // backfill e ficariam sem projeto_id/parcela_id_text.
+        await MrvMigration.aplicarBase(customStatement);
         await purgarAuditLog();
       },
     );
@@ -239,6 +508,63 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
         'CREATE INDEX IF NOT EXISTS idx_parcelas_sync_status ON parcelas(synced, pronta_para_sync, deleted_at)');
   }
+
+  // >>> t9 patch: inicio — DDL do modelo MRV (v20..v23)
+  // createTable/addColumn precisam das instancias geradas pelo build_runner,
+  // que so existem como campos desta classe. Por isso o DDL fica aqui, e o SQL
+  // puro (indices + backfill) fica em migrations/mrv_migration.dart.
+  // Nenhuma coluna nova NOT NULL sem default; nenhum drop.
+
+  Future<void> _mrvV20Ddl(Migrator m) async {
+    // 10 colunas de parcela — vieram para a v20 porque a v19 committed
+    // (43a165e) é so do Q2.
+    await m.addColumn(parcelas, parcelas.projetoId);
+    await m.addColumn(parcelas, parcelas.parcelaIdText);
+    await m.addColumn(parcelas, parcelas.geoJson);
+    await m.addColumn(parcelas, parcelas.areaM2);
+    await m.addColumn(parcelas, parcelas.unidadeForma);
+    await m.addColumn(parcelas, parcelas.raioM);
+    await m.addColumn(parcelas, parcelas.statusParcela);
+    await m.addColumn(parcelas, parcelas.marcador);
+    await m.addColumn(parcelas, parcelas.protocoloVersao);
+    await m.addColumn(parcelas, parcelas.substitutaDe);
+    await m.createTable(projetosMrv);
+    await m.createTable(periodosMonitoramento);
+    await m.createTable(campanhas);
+    await m.createTable(desenhoAmostral);
+    await m.createTable(protocolosMedicao);
+    await m.createTable(amostrasParcela);
+    await m.createTable(individuos);
+    await m.createTable(medicoesIndividuo);
+    await m.createTable(plantacaoUts);
+    await m.createTable(restauracaoProjetos);
+    await m.createTable(restauracaoUts);
+    await m.createTable(medicoesRestauracao);
+    await m.createTable(medicoesPlantacao);
+    await m.createTable(coberturasAmostra);
+  }
+
+  Future<void> _mrvV21Ddl(Migrator m) async {
+    await m.createTable(ativosBrutos);
+    await m.createTable(dispositivos);
+    await m.createTable(trilhaAuditoria);
+  }
+
+  Future<void> _mrvV22Ddl(Migrator m) async {
+    await m.createTable(especiesCatalogo);
+    await m.createTable(equacoesAlometricas);
+    await m.createTable(calculosMrv);
+    await m.createTable(resultadosAmostra);
+  }
+
+  Future<void> _mrvV23Ddl(Migrator m) async {
+    await m.createTable(papeis);
+    await m.createTable(usuarioPapeis);
+    await m.createTable(incidentes);
+    await m.createTable(verificacoesInternas);
+    await m.createTable(competencias);
+  }
+  // <<< t9 patch: fim
 
   /// Migra senhas armazenadas em plaintext para formato hash (SHA-256 + salt).
   /// Mantém compatibilidade: se já estiver no formato hash, não faz nada.
@@ -593,13 +919,45 @@ VGVG0069;UT04;0.0;1''';
 
   /// Atualiza o UUID de uma parcela e cascata para plantas e fotos.
   /// Usado para mapear UUID local → PocketBase record ID após push.
+  ///
+  /// BUG CORRIGIDO (regressão provada em test/remap_uuid_fk_test.dart): com
+  /// `PRAGMA foreign_keys = ON` (ver beforeOpen), o SQLite valida a chave
+  /// estrangeira a cada statement. Como `plantas.parcela_uuid` referencia
+  /// `parcelas.uuid`, NENHUMA ordem de updates passa:
+  ///   - filhos primeiro → o pai ainda não tem o UUID novo (recusa);
+  ///   - pai primeiro → os filhos ficam órfãos (recusa).
+  /// O sintoma em produção era silencioso: a parcela era marcada como
+  /// sincronizada mas mantinha o UUID local, e o sync seguinte criava um
+  /// registo DUPLICADO no servidor.
+  ///
+  /// `PRAGMA defer_foreign_keys = ON` adia a verificação para o COMMIT, e
+  /// dentro da transacção todos os apontadores ficam consistentes antes dele.
+  /// (O pragma `foreign_keys = OFF` NÃO serve: é no-op dentro de transacção.)
   Future<void> remapParcelaUuid(String oldUuid, String newUuid) async {
     if (oldUuid == newUuid) return;
     await transaction(() async {
+      // Adia a checagem de FK até ao commit desta transacção.
+      await customStatement('PRAGMA defer_foreign_keys = ON');
+
       await (update(plantas)..where((t) => t.parcelaUuid.equals(oldUuid)))
           .write(PlantasCompanion(parcelaUuid: Value(newUuid)));
       await (update(fotosParcela)..where((t) => t.parcelaUuid.equals(oldUuid)))
           .write(FotosParcelaCompanion(parcelaUuid: Value(newUuid)));
+      // >>> t9 patch: inicio — cascade MRV (RS-02)
+      // Linhas MRV apontam para parcelas.uuid por texto; sem este cascade o
+      // remap (sync_service _syncParcela) as deixaria orfas de identidade.
+      await (update(individuos)..where((t) => t.parcelaUuid.equals(oldUuid)))
+          .write(IndividuosCompanion(parcelaUuid: Value(newUuid)));
+      await (update(amostrasParcela)..where((t) => t.parcelaUuid.equals(oldUuid)))
+          .write(AmostrasParcelaCompanion(parcelaUuid: Value(newUuid)));
+      // ativos_brutos: so os de escopo parcela (vinculo polimorfico)
+      await (update(ativosBrutos)
+            ..where((t) =>
+                t.entidadeTipo.equals('parcela') &
+                t.entidadeUuid.equals(oldUuid)))
+          .write(AtivosBrutosCompanion(entidadeUuid: Value(newUuid)));
+      // <<< t9 patch: fim
+      // Pai por último: ao commit, filhos e pai já concordam no UUID novo.
       await (update(parcelas)..where((t) => t.uuid.equals(oldUuid)))
           .write(ParcelasCompanion(uuid: Value(newUuid)));
     });
@@ -614,6 +972,19 @@ VGVG0069;UT04;0.0;1''';
                 t.idParcela.equals(idParcela) &
                 t.userId.equals(userId) &
                 t.deletedAt.isNull()))
+          .getSingleOrNull();
+
+  /// (Q3 item 6) Parcela local SOFT-DELETADA com a mesma chave natural
+  /// (propriedade, propUt, idParcela). Usado no pull para NÃO ressuscitar:
+  /// se existir, o delete é propagado ao servidor em vez de reinserir.
+  Future<Parcela?> findParcelaDeletadaPorChave(
+          String propriedade, String propUt, int idParcela) =>
+      (select(parcelas)
+            ..where((t) =>
+                t.propriedade.equals(propriedade) &
+                t.propUt.equals(propUt) &
+                t.idParcela.equals(idParcela) &
+                t.deletedAt.isNotNull()))
           .getSingleOrNull();
 
   /// Parcela disponível (userId vazio) com mesmo (propriedade, propUt, idParcela).
@@ -826,6 +1197,35 @@ VGVG0069;UT04;0.0;1''';
   Future<int> insertParcela(ParcelasCompanion parcela) =>
       into(parcelas).insert(parcela);
 
+  /// Garante que a parcela existe na BD antes de uma linha que a referencia
+  /// (plantas, fotos, observações) ser inserida.
+  ///
+  /// A tabela `plantas` tem FK `parcela_uuid -> parcelas.uuid`. Numa parcela
+  /// NOVA, o wizard atribui o uuid no `_initAsync` mas só grava a linha em
+  /// `parcelas` no passo final ("Concluir"). Como a Etapa 3 (Plantas) insere
+  /// as plantas ANTES disso, o insert rebentava com
+  /// `SqliteException(787): FOREIGN KEY constraint failed` — impossibilitando
+  /// criar uma parcela nova com qualquer planta.
+  ///
+  /// Aqui a linha é criada como "rascunho" (ainda sem o dono e sem
+  /// `prontaParaSync`), para que as plantas gravem. O `_writeParcela` final
+  /// completa a mesma linha com todos os campos — é um UPDATE, não um INSERT
+  /// duplicado, porque o uuid é o mesmo.
+  Future<void> ensureParcelaExists(String uuid) async {
+    final existente = await getParcelaByUuid(uuid, includeDeleted: true);
+    if (existente != null) return;
+    await into(parcelas).insert(ParcelasCompanion(
+      uuid: Value(uuid),
+      propriedade: const Value(''),
+      propUt: const Value(''),
+      idParcela: const Value(0),
+      userId: const Value(''),
+      synced: const Value(false),
+      prontaParaSync: const Value(false),
+      updatedAt: Value(DateTime.now()),
+    ));
+  }
+
   Future<int> updateParcela(ParcelasCompanion parcela, String uuid) =>
       (update(parcelas)..where((t) => t.uuid.equals(uuid))).write(parcela);
 
@@ -892,6 +1292,10 @@ VGVG0069;UT04;0.0;1''';
   Future<int> deleteAllPlantasByParcela(String parcelaUuid) =>
       (delete(plantas)..where((t) => t.parcelaUuid.equals(parcelaUuid))).go();
 
+  Future<Planta?> getPlantaByUuid(String uuid) =>
+      (select(plantas)..where((t) => t.uuid.equals(uuid) & t.deletedAt.isNull()))
+          .getSingleOrNull();
+
   Future<void> marcarPlantaSynced(String uuid) =>
       (update(plantas)..where((t) => t.uuid.equals(uuid)))
           .write(PlantasCompanion(
@@ -912,14 +1316,273 @@ VGVG0069;UT04;0.0;1''';
                 t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull()))
           .get();
 
+  // >>> t9 S1: inicio — leitura das marcacoes do Q2 (43a165e)
+  /// Plantas cuja foto de espécie tem arquivo ausente no disco.
+  /// A LINHA permanece (evidência do caminho original); esta query é o que
+  /// torna a marcação visível. Antes não havia nenhum leitor de fotoAusente.
+  Future<List<Planta>> getPlantasComFotoAusente() =>
+      (select(plantas)
+            ..where((t) => t.fotoAusente.equals(true) & t.deletedAt.isNull())
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
+
+  /// Fotos de parcela cujo arquivo não está mais no disco.
+  Future<List<FotosParcelaData>> getFotosComArquivoAusente() =>
+      (select(fotosParcela)
+            ..where((t) =>
+                t.arquivoAusente.equals(true) & t.deletedAt.isNull())
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+          .get();
+
+  /// Contagem para badge/contador — não carrega as linhas.
+  Future<int> countFotosComArquivoAusente() async {
+    final c = fotosParcela.arquivoAusente.count();
+    final q = selectOnly(fotosParcela)
+      ..addColumns([c])
+      ..where(fotosParcela.arquivoAusente.equals(true) &
+          fotosParcela.deletedAt.isNull());
+    final r = await q.getSingle();
+    return r.read(c) ?? 0;
+  }
+  // <<< t9 S1: fim
+
   Stream<List<FotosParcelaData>> watchFotosByParcela(String parcelaUuid) =>
       (select(fotosParcela)
             ..where((t) =>
                 t.parcelaUuid.equals(parcelaUuid) & t.deletedAt.isNull()))
           .watch();
 
-  Future<int> insertFotoParcela(FotosParcelaCompanion foto) =>
-      into(fotosParcela).insert(foto);
+  /// v28 MRV: atualiza campos de rastreabilidade de uma foto vindos do
+  /// servidor (fotos_meta), sem tocar em hash/arquivo.
+  Future<void> updateFotoParcelaCampos(
+    String fotoUuid, {
+    double? latitude,
+    double? longitude,
+    String? autorUuid,
+  }) async {
+    await (update(fotosParcela)..where((t) => t.uuid.equals(fotoUuid))).write(
+      FotosParcelaCompanion(
+        latitude: latitude != null ? Value(latitude) : const Value.absent(),
+        longitude: longitude != null ? Value(longitude) : const Value.absent(),
+        autorUuid: autorUuid != null ? Value(autorUuid) : const Value.absent(),
+      ),
+    );
+  }
+
+  Future<int> insertFotoParcela(FotosParcelaCompanion foto) async {
+    final id = await into(fotosParcela).insert(foto);
+    // >>> t9 S2 (H4): foto nova nasce no catálogo de evidência
+    final uuid = foto.uuid.value;
+    final path = foto.filePath.value;
+    if (uuid != null && path != null) {
+      await registrarFotoCatalogo(
+        objetoUuid: uuid,
+        entidadeTipo: 'parcela',
+        entidadeUuid: foto.parcelaUuid.value ?? '',
+        caminhoOriginal: path,
+        // createdAt tem DEFAULT (currentDateAndTime): no companion pode estar
+        // ausente e .value lançaria — agora() é o mesmo instante do default.
+        capturadoEm: DateTime.now(),
+      );
+    }
+    return id;
+  }
+
+  /// (Q3 motor Fase 2) Guarda a ponte local→servidor da planta após o upsert.
+  Future<int> atualizarServerPlantaId(String uuid, String serverId) =>
+      (update(plantas)..where((t) => t.uuid.equals(uuid)))
+          .write(PlantasCompanion(serverPlantaId: Value(serverId)));
+
+  // >>> t16 D-1: inicio — máquina de estados do arquivo local
+  /// (D-1 H3) Marca fotos/plantas como ENVIADO_VERIFICADO — o sync MARCA,
+  /// não apaga. Idempotente: quem já está marcado não volta atrás.
+  Future<void> marcarFotosEnviadasVerificadas(String parcelaUuid) async {
+    final agora = DateTime.now();
+    await (update(fotosParcela)
+          ..where((t) =>
+              t.parcelaUuid.equals(parcelaUuid) &
+              t.arquivoEstado.equals('capturado')))
+        .write(FotosParcelaCompanion(
+      arquivoEstado: const Value('enviado_verificado'),
+      enviadoVerificadoEm: Value(agora),
+    ));
+    await (update(plantas)
+          ..where((t) =>
+              t.parcelaUuid.equals(parcelaUuid) &
+              t.arquivoEstado.equals('capturado')))
+        .write(PlantasCompanion(
+      arquivoEstado: const Value('enviado_verificado'),
+      enviadoVerificadoEm: Value(agora),
+    ));
+  }
+
+  /// RC-04 pós-upload: o sync confere o hash ANTES de enviar
+  /// (sync_service recheck); depois do sucesso marca `sha256_verificado=true`
+  /// nos ativos da parcela (fotos da parcela + fotos das plantas dela).
+  /// Idempotente.
+  Future<void> marcarAtivosVerificadosDaParcela(String parcelaUuid) async {
+    final plantasUuids = await (select(plantas)
+          ..where((t) => t.parcelaUuid.equals(parcelaUuid)))
+        .map((p) => p.uuid)
+        .get();
+    await (update(ativosBrutos)
+          ..where((t) =>
+              t.sha256.isNotNull() &
+              ((t.entidadeTipo.equals('parcela') &
+                      t.entidadeUuid.equals(parcelaUuid)) |
+                  (t.entidadeTipo.equals('planta') &
+                      t.entidadeUuid.isIn(plantasUuids)) |
+                  (t.entidadeTipo.equals('foto') &
+                      t.entidadeUuid.equals(parcelaUuid)))))
+        .write(const AtivosBrutosCompanion(
+      sha256Verificado: Value(true),
+      status: Value('presente'),
+    ));
+  }
+
+  /// (D-1 H4) Estado do arquivo local de uma foto (para o guard da UI).
+  Future<String?> estadoArquivoFoto(String fotoUuid) async {
+    final f = await (select(fotosParcela)
+          ..where((t) => t.uuid.equals(fotoUuid)))
+        .getSingleOrNull();
+    return f?.arquivoEstado;
+  }
+  // <<< t16 D-1: fim
+
+  // >>> t14 S3: inicio — catálogo de evidência (hash)
+  /// UUID local para incidentes (mesmo formato das demais tabelas).
+  String _novoUuid() =>
+      DateTime.now().microsecondsSinceEpoch.toRadixString(16) +
+      '-local';
+
+  /// (S3 H5) Grava hash+bytes no catálogo. NUNCA sobrescreve sha256
+  /// existente: divergência abre incidente, o valor original permanece
+  /// como evidência (contrato do patch-s3-hash).
+  Future<void> registrarHashDoAtivo({
+    required String ativoUuid,
+    required String sha256,
+    int? bytes,
+    String? mime,
+    String papel = 'derivado',
+  }) async {
+    final existente = await (select(ativosBrutos)
+          ..where((t) => t.uuid.equals(ativoUuid)))
+        .getSingleOrNull();
+    if (existente == null) return; // sem linha não inventa
+
+    if (existente.sha256 != null && existente.sha256 != sha256) {
+      // divergência → incidente BLOQUEADOR de crédito (RG-06; nunca overwrite)
+      await into(incidentes).insert(IncidentesCompanion.insert(
+        uuid: _novoUuid(),
+        tipo: 'hash_divergente',
+        entidadeTipo: const Value('ativo'),
+        entidadeUuid: Value(ativoUuid),
+        severidade: 'bloqueadora',
+        bloqueiaUsoParaCredito: const Value(true),
+        descricao: Value(
+            'hash divergente: catalogo=${existente.sha256} novo=$sha256'),
+      ));
+      return;
+    }
+
+    await (update(ativosBrutos)..where((t) => t.uuid.equals(ativoUuid)))
+        .write(AtivosBrutosCompanion(
+      sha256: Value(sha256),
+      bytes: Value(bytes),
+      mime: Value(mime),
+      papel: Value(papel),
+      status: const Value('presente'),
+      updatedAt: Value(DateTime.now()),
+    ));
+  }
+
+  /// (S3 H4) hash do ativo de uma foto, para recheck no upload.
+  Future<String?> hashDoAtivoDaFoto(String fotoUuid) async {
+    final row = await (select(ativosBrutos)
+          ..where((t) =>
+              t.entidadeUuid.equals(fotoUuid) & t.papel.equals('derivado'))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.sha256;
+  }
+
+  /// RG-06: true se existe incidente BLOQUEADOR de crédito ainda aberto que
+  /// atinja a entidade (ou global — entidadeUuid null bloqueia tudo).
+  Future<bool> haIncidenteBloqueadorAberto(String? entidadeUuid) async {
+    final query = selectOnly(incidentes)
+      ..addColumns([incidentes.uuid.count()])
+      ..where(incidentes.bloqueiaUsoParaCredito.equals(true) &
+          incidentes.resolvidoEm.isNull());
+    if (entidadeUuid != null) {
+      query.where(incidentes.entidadeUuid.equals(entidadeUuid) |
+          incidentes.entidadeUuid.isNull());
+    }
+    final row = await query.getSingle();
+    return (row.read(incidentes.uuid.count()) ?? 0) > 0;
+  }
+
+  /// RG-06: incidentes abertos (qualquer severidade) ligados à entidade.
+  Future<List<Incidente>> incidentesAbertos(String entidadeUuid) async {
+    return (select(incidentes)
+          ..where((t) =>
+              t.entidadeUuid.equals(entidadeUuid) & t.resolvidoEm.isNull())
+          ..orderBy([(t) => OrderingTerm.desc(t.detectadoEm)]))
+        .get();
+  }
+
+  /// (S3 H6 / RC-07) Recalcula o hash dos arquivos do catálogo e compara.
+  /// Rodar SOB DEMANDA (custa I/O). Divergência nunca sobrescreve —
+  /// abre incidente e o valor original permanece.
+  Future<({int verificados, int divergentes, int ilegiveis})>
+      verificarIntegridadeAtivos() async {
+    final ativos = await (select(ativosBrutos)
+          ..where((t) => t.caminhoOriginal.isNotNull() & t.sha256.isNotNull()))
+        .get();
+    int verificados = 0;
+    int divergentes = 0;
+    int ilegiveis = 0;
+
+    for (final a in ativos) {
+      final path = a.caminhoOriginal!;
+      final file = io.File(path);
+      if (!await file.exists()) {
+        ilegiveis++;
+        continue;
+      }
+      final bytes = await file.readAsBytes();
+      final hash = sha256.convert(bytes).toString();
+      verificados++;
+      if (hash != a.sha256) {
+        divergentes++;
+        await into(incidentes).insert(IncidentesCompanion.insert(
+          uuid: _novoUuid(),
+          tipo: 'integridade_divergente',
+          entidadeTipo: const Value('ativo'),
+          entidadeUuid: Value(a.uuid),
+          severidade: 'bloqueadora',
+          bloqueiaUsoParaCredito: const Value(true),
+          descricao: Value(
+              'recheck divergente: catalogo=${a.sha256} arquivo=$hash'),
+        ));
+      }
+    }
+    return (verificados: verificados, divergentes: divergentes, ilegiveis: ilegiveis);
+  }
+  // <<< t14 S3: fim
+
+  /// (t14 v26) Grava o id do servidor da parcela dona desta planta.
+  /// Só preenche se ainda estiver NULL — nunca sobrescreve (um id errado
+  /// ligaria a planta à parcela errada). O guard no WHERE é o que garante:
+  /// update sem casa = 0 linhas, sem dano.
+  Future<void> registrarParcelaServerId(
+      String plantaUuid, String parcelaServerId) async {
+    await (update(plantas)
+          ..where((t) =>
+              t.uuid.equals(plantaUuid) & t.parcelaServerId.isNull()))
+        .write(PlantasCompanion(
+            parcelaServerId: Value(parcelaServerId)));
+  }
 
   Future<int> deleteFotoParcela(String uuid) =>
       (delete(fotosParcela)..where((t) => t.uuid.equals(uuid))).go();
@@ -1003,41 +1666,151 @@ VGVG0069;UT04;0.0;1''';
     return query.get();
   }
 
-  /// Remove permanentemente parcelas soft-deletadas há mais de N dias.
-  Future<int> purgarDeletados({int diasRetencao = 30}) async {
-    final cutoff = DateTime.now().subtract(Duration(days: diasRetencao));
+  /// RC-06/RC-07 (MRV): purge DESTRÓI evidência. Regras endurecidas:
+  /// - sem `confirmarDestruicao: true`, não apaga nada (return 0);
+  /// - piso de retenção de 10 anos (retencaoMinimaDias): valores menores
+  ///   são corrigidos para o piso — MRV não admite destroying evidence em 30d;
+  /// - cada parcela purgada é registrada na trilha encadeada ANTES de apagar.
+  static const int retencaoMinimaDias = 3650; // 10 anos
+
+  Future<int> purgarDeletados({
+    int diasRetencao = retencaoMinimaDias,
+    bool confirmarDestruicao = false,
+  }) async {
+    if (!confirmarDestruicao) return 0;
+    final retencao = diasRetencao < retencaoMinimaDias
+        ? retencaoMinimaDias
+        : diasRetencao;
+    final cutoff = DateTime.now().subtract(Duration(days: retencao));
     final parcelasParaPurgar = await (select(parcelas)
           ..where((t) =>
               t.deletedAt.isNotNull() & t.deletedAt.isSmallerThanValue(cutoff)))
         .get();
     final photoPaths = <String>[];
     for (final p in parcelasParaPurgar) {
-      final fotos = await getFotosByParcela(p.uuid);
+      final fotos = await (select(fotosParcela)
+            ..where((t) => t.parcelaUuid.equals(p.uuid)))
+          .get();
       photoPaths.addAll(fotos.map((f) => f.filePath));
-      final plantas = await getPlantasByParcela(p.uuid);
-      for (final planta in plantas) {
+      final plantasRows = await (select(plantas)
+            ..where((t) => t.parcelaUuid.equals(p.uuid)))
+          .get();
+      for (final planta in plantasRows) {
         if (planta.fotoEspeciePath != null)
           photoPaths.add(planta.fotoEspeciePath!);
       }
     }
 
-  int count = 0;
-  await ImageService.deletePhotos(photoPaths);
-  await transaction(() async {
+    // Evidência da destruição vai pra trilha ANTES de apagar (RC-06).
     for (final p in parcelasParaPurgar) {
-      await deleteAllPlantasByParcela(p.uuid);
-      await deleteAllFotosByParcela(p.uuid);
-      await deleteParcela(p.uuid);
-      count++;
+      await logTrilha(
+        acao: 'purge_parcela',
+        entidadeTipo: 'parcela',
+        entidadeUuid: p.uuid,
+        antes: 'soft-deletada em ${p.deletedAt?.toIso8601String()}',
+        depois: 'hard-delete por purge (retencao $retencao dias)',
+        origem: 'app',
+      );
     }
-  });
 
-  return count;
+    int count = 0;
+    await ImageService.deletePhotos(photoPaths);
+    await transaction(() async {
+      for (final p in parcelasParaPurgar) {
+        await deleteAllPlantasByParcela(p.uuid);
+        await deleteAllFotosByParcela(p.uuid);
+        await deleteParcela(p.uuid);
+        count++;
+      }
+    });
+
+    return count;
+  }
+
+  /// RC-06/RC-07 (MRV): "limpar dados da parcela" vira SOFT-DELETE —
+  /// plantas e fotos são marcadas com deletedAt (ficam no DB e na trilha),
+  /// nada é hard-deletado. Arquivos de foto não são tocados aqui.
+  Future<void> softDeleteDadosParcela(String uuid, {String? by}) async {
+    final now = DateTime.now();
+    final nPlantas = await (select(plantas)
+          ..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
+        .get()
+        .then((l) => l.length);
+    final nFotos = await (select(fotosParcela)
+          ..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
+        .get()
+        .then((l) => l.length);
+    await transaction(() async {
+      await (update(plantas)
+            ..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
+          .write(PlantasCompanion(deletedAt: Value(now), updatedAt: Value(now)));
+      await (update(fotosParcela)
+            ..where((t) => t.parcelaUuid.equals(uuid) & t.deletedAt.isNull()))
+          .write(FotosParcelaCompanion(deletedAt: Value(now)));
+      await logAudit(
+        'parcela_dados_limpos',
+        entityType: 'parcela',
+        entityUuid: uuid,
+        userId: by,
+        details:
+            'soft-delete: $nPlantas plantas, $nFotos fotos (retencao preservada)',
+        oldValue: 'com dados',
+        newValue: 'soft-delete',
+      );
+    });
   }
 
   // ========== AUDIT LOG ==========
 
-  /// Registra uma ação no log de auditoria.
+  /// Move as plantas e fotos de uma parcela-rascunho para a parcela real.
+  ///
+  /// Cenário: o utilizador preenche a Etapa 3 (Plantas) de uma parcela NOVA.
+  /// `ensureParcelaExists` cria a linha em `parcelas` como rascunho (sem dono)
+  /// para satisfazer a FK `plantas.parcela_uuid`. Se, ao concluir, existir uma
+  /// parcela DISPONÍVEL com a mesma propriedade/UT/número, o wizard passa a
+  /// trabalhar nessa parcela. As plantas já medidas têm de acompanhar a
+  /// mudança — perdê-las seria perda de dados de campo.
+  ///
+  /// O rascunho fica soft-deleted (retenção preservada) e as plantas/fotos
+  /// passam a apontar para a parcela real.
+  Future<void> migrarDadosParaParcela({
+    required String deRascunho,
+    required String paraParcela,
+  }) async {
+    final nPlantas = await (select(plantas)
+          ..where((t) => t.parcelaUuid.equals(deRascunho) & t.deletedAt.isNull()))
+        .get()
+        .then((l) => l.length);
+    final nFotos = await (select(fotosParcela)
+          ..where((t) => t.parcelaUuid.equals(deRascunho) & t.deletedAt.isNull()))
+        .get()
+        .then((l) => l.length);
+    if (nPlantas == 0 && nFotos == 0) return;
+    final now = DateTime.now();
+    await transaction(() async {
+      await (update(plantas)
+            ..where((t) => t.parcelaUuid.equals(deRascunho) & t.deletedAt.isNull()))
+          .write(PlantasCompanion(
+            parcelaUuid: Value(paraParcela),
+            synced: const Value(false),
+            updatedAt: Value(now),
+          ));
+      await (update(fotosParcela)
+            ..where((t) => t.parcelaUuid.equals(deRascunho) & t.deletedAt.isNull()))
+          .write(FotosParcelaCompanion(parcelaUuid: Value(paraParcela)));
+      await logAudit(
+        'parcela_dados_migrados',
+        entityType: 'parcela',
+        entityUuid: paraParcela,
+        details: 'migrados do rascunho $deRascunho: $nPlantas plantas, $nFotos fotos',
+        oldValue: deRascunho,
+        newValue: paraParcela,
+      );
+    });
+  }
+
+  /// Registra uma ação no log de auditoria (tabela legada) E na trilha
+  /// encadeada por hash (RG-04 — imutável, append-only).
   Future<void> logAudit(
     String action, {
     String? entityType,
@@ -1056,6 +1829,124 @@ VGVG0069;UT04;0.0;1''';
       oldValue: Value(oldValue),
       newValue: Value(newValue),
     ));
+    await logTrilha(
+      acao: action,
+      entidadeTipo: entityType,
+      entidadeUuid: entityUuid,
+      usuarioUuid: userId,
+      antes: oldValue,
+      depois: newValue != null ? newValue : details,
+      origem: 'app',
+    );
+  }
+
+  /// RG-04: insere na trilha de auditoria encadeada por hash.
+  /// entryHash = sha256(prevHash | acao | entidade | antes | depois | ts | origem).
+  /// A cadeia quebra se qualquer entrada for alterada depois.
+  Future<int> logTrilha({
+    required String acao,
+    String? entidadeTipo,
+    String? entidadeUuid,
+    String? usuarioUuid,
+    String? antes,
+    String? depois,
+    required String origem,
+  }) async {
+    // Último hash da cadeia (maior idSeq)
+    final ultimo = await (select(trilhaAuditoria)
+          ..orderBy([(t) => OrderingTerm.desc(t.idSeq)])
+          ..limit(1))
+        .getSingleOrNull();
+    final prevHash = ultimo?.entryHash ?? 'GENESIS';
+
+    // RC-05: ts vem do relógio CONFIÁVEL (device + offset medido contra o
+    // servidor). O relógio bruto do device vai no payload como
+    // 'ts_dispositivo' e o offset entra no hash — adulterar o relógio quebra
+    // a cadeia. Trunca pra SEGUNDOS UTC porque o drift guarda DateTime no
+    // SQLite como epoch em segundos (descarta ms).
+    final tsDispositivoBruto = DateTime.now().toUtc();
+    final offsetMs = (await ClockService.offsetMedido())?.inMilliseconds ?? 0;
+    // Trunca o relógio bruto pra segundos (o drift guarda epoch em segundos)
+    final tsDisp = DateTime.fromMillisecondsSinceEpoch(
+        (tsDispositivoBruto.millisecondsSinceEpoch ~/ 1000) * 1000,
+        isUtc: true);
+    // tsServidor = relógio ajustado (device + offset), também em segundos
+    final ts = DateTime.fromMillisecondsSinceEpoch(
+        ((tsDisp.millisecondsSinceEpoch + offsetMs) ~/ 1000) * 1000,
+        isUtc: true);
+    final payload = jsonEncode({
+      'prev': prevHash,
+      'acao': acao,
+      'entidade_tipo': entidadeTipo,
+      'entidade_uuid': entidadeUuid,
+      'usuario_uuid': usuarioUuid,
+      'antes': antes,
+      'depois': depois,
+      'ts_dispositivo': tsDisp.toIso8601String(),
+      'offset_relogio_ms': offsetMs,
+      'origem': origem,
+    });
+    final entryHash =
+        sha256.convert(utf8.encode(payload)).toString();
+
+    return await into(trilhaAuditoria).insert(TrilhaAuditoriaCompanion.insert(
+      entidadeTipo: Value(entidadeTipo),
+      entidadeUuid: Value(entidadeUuid),
+      acao: acao,
+      antes: Value(antes),
+      depois: Value(depois),
+      usuarioUuid: Value(usuarioUuid),
+      tsServidor: Value(ts), // tempo ajustado (device + offset, RC-05)
+      tsDispositivo: Value(tsDisp), // relógio bruto do aparelho (truncado)
+      offsetRelogioMs: Value(offsetMs), // RC-05: offset entra na linha e no hash
+      origem: origem,
+      prevHash: Value(prevHash),
+      entryHash: Value(entryHash),
+    ));
+  }
+
+  /// RG-04: verifica a integridade da cadeia local.
+  /// Retorna null se íntegra, ou a descrição da quebra.
+  Future<String?> verificarCadeiaAuditoria() async {
+    final entradas = await (select(trilhaAuditoria)
+          ..orderBy([(t) => OrderingTerm.asc(t.idSeq)]))
+        .get();
+    String prev = 'GENESIS';
+    for (final e in entradas) {
+      if (e.prevHash != prev) {
+        return 'Cadeia quebrada em idSeq=${e.idSeq}: prevHash esperado '
+            '$prev, encontrado ${e.prevHash}';
+      }
+      final payload = jsonEncode({
+        'prev': e.prevHash,
+        'acao': e.acao,
+        'entidade_tipo': e.entidadeTipo,
+        'entidade_uuid': e.entidadeUuid,
+        'usuario_uuid': e.usuarioUuid,
+        'antes': e.antes,
+        'depois': e.depois,
+        // drift lê DateTime de volta em horário local; normaliza pro mesmo
+        // instante UTC (ms) usado no cálculo do hash no insert
+        'ts_dispositivo': e.tsDispositivo == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(
+                    e.tsDispositivo!.millisecondsSinceEpoch,
+                    isUtc: true)
+                .toIso8601String(),
+        // RC-05 (v29): entradas novas trazem o offset no hash; entradas
+        // legadas (coluna null) foram hasheadas SEM a chave — reproduzir
+        // exatamente pra não quebrar a cadeia na migração.
+        if (e.offsetRelogioMs != null) 'offset_relogio_ms': e.offsetRelogioMs,
+        'origem': e.origem,
+      });
+      final esperado = sha256.convert(utf8.encode(payload)).toString();
+      if (e.entryHash != esperado) {
+        return 'Hash divergente em idSeq=${e.idSeq}: esperado $esperado, '
+            'encontrado ${e.entryHash}';
+      }
+      prev = e.entryHash!;
+    }
+    return null; // íntegra
   }
 
   /// Retorna últimas entradas do audit log.
@@ -1081,9 +1972,31 @@ VGVG0069;UT04;0.0;1''';
     return query.get();
   }
 
-  Future<void> purgarAuditLog() async {
+  /// (Q1) Purga automática da auditoria DESLIGADA por padrão.
+  ///
+  /// Antes: beforeOpen chamava este método em CADA abertura do app e ele fazia
+  /// DELETE de linhas com >90 dias — a trilha de auditoria se auto-destruía,
+  /// perdendo evidência exatamente quando a auditoria externa pediria histórico.
+  ///
+  /// Segundo achado (Q1): o DELETE antigo comparava `created_at` (INTEGER,
+  /// epoch seconds — formato padrão do drift) com `datetime('now',...)`, que
+  /// devolve TEXTO. No SQLite, INTEGER < TEXT é SEMPRE verdadeiro, então a
+  /// purga nem respeitava os 90 dias: apagava a tabela INTEIRA a cada abertura.
+  /// Corrigido com CAST(strftime('%s',...) AS INTEGER).
+  ///
+  /// Agora: no-op enquanto `auditAutoPurgeEnabled` for false (default). Só com
+  /// decisão EXPLÍCITA do operador (liga a flag) a purga roda — e ainda assim é
+  /// hard delete, por isso está documentada como ação destrutiva deliberada.
+  /// O histórico permanece integral no comportamento padrão.
+  static bool auditAutoPurgeEnabled = false;
+
+  Future<void> purgarAuditLog(
+      {Duration retencao = const Duration(days: 90)}) async {
+    if (!auditAutoPurgeEnabled) return;
+    final dias = retencao.inDays;
+    // created_at é INTEGER (epoch seconds) no drift — compara com inteiro.
     await customStatement(
-        "DELETE FROM audit_log WHERE created_at < datetime('now', '-90 days')");
+        "DELETE FROM audit_log WHERE created_at < CAST(strftime('%s', 'now', '-$dias days') AS INTEGER)");
   }
 
   // ========== FIRST-RUN ADMIN SETUP ==========
@@ -1133,14 +2046,202 @@ VGVG0069;UT04;0.0;1''';
     return results;
   }
 
+  /// (Q2) Marca a foto da parcela como ausente (soft) — NUNCA deleta a linha.
+  /// A evidência de que a foto existiu permanece no banco para auditoria.
   Future<void> cleanMissingFotoParcela(String uuid) async {
-    await (delete(fotosParcela)..where((t) => t.uuid.equals(uuid))).go();
+    final foto = await (select(fotosParcela)
+          ..where((t) => t.uuid.equals(uuid)))
+        .getSingleOrNull();
+    if (foto == null) return;
+
+    await (update(fotosParcela)..where((t) => t.uuid.equals(uuid)))
+        .write(const FotosParcelaCompanion(arquivoAusente: Value(true)));
+
+    // >>> t9 S2: catalogo de evidencia
+    // uuid do ativo = 'legado-ativo-' || uuid da foto — MESMO esquema do
+    // backfill v21, para que a linha existente seja atualizada e não duplicada.
+    await _sincAtivosBrutos(
+      ativoUuid: 'legado-ativo-${foto.uuid}',
+      entidadeTipo: 'parcela',
+      // entidade_uuid é a PARCELA, não a foto — é assim que o backfill v21
+      // gravou, e misturar os dois critérios duplicaria a linha.
+      entidadeUuid: foto.parcelaUuid,
+      caminhoOriginal: foto.filePath,
+      capturadoEm: foto.createdAt,
+      status: 'ausente',
+    );
+    // <<< t9 S2: fim
   }
 
+  /// (Q2) Marca a foto da planta como ausente (soft) — MANTÉM fotoEspeciePath
+  /// (evidência do caminho original); apenas sinaliza a ausência.
   Future<void> cleanMissingFotoPlanta(String uuid) async {
+    final planta = await (select(plantas)
+          ..where((t) => t.uuid.equals(uuid)))
+        .getSingleOrNull();
+    if (planta == null) return;
+
     await (update(plantas)..where((t) => t.uuid.equals(uuid)))
-        .write(PlantasCompanion(fotoEspeciePath: Value(null), updatedAt: Value(DateTime.now())));
+        .write(PlantasCompanion(
+            fotoAusente: const Value(true),
+            updatedAt: Value(DateTime.now())));
+
+    // >>> t9 S2: catalogo de evidencia
+    // Decisão D-1 (ids-e-momentos.md §3.2): no caminho AO VIVO o tipo é
+    // 'planta' e o entidade_uuid é o uuid da PLANTA — não o 'legado-med-'
+    // inventado pelo backfill, que é artefato de migração.
+    // O uuid do ativo mantém o prefixo 'legado-ativo-' só para alcançar a
+    // linha já backfillada desta mesma planta; linhas novas passam a usar
+    // 'ativo-' via _registrarFotoPresente (H3).
+    await _sincAtivosBrutos(
+      ativoUuid: 'legado-ativo-${planta.uuid}',
+      entidadeTipo: 'planta',
+      entidadeUuid: planta.uuid,
+      caminhoOriginal: planta.fotoEspeciePath,
+      capturadoEm: planta.createdAt,
+      status: 'ausente',
+    );
+    // <<< t9 S2: fim
   }
+
+  // >>> t9 S2: inicio — sincronia do catálogo de evidência
+  /// Sincroniza ativos_brutos com o estado do arquivo em disco.
+  ///
+  /// NUNCA deleta linha: cria se não existir (foto nascida DEPOIS da migração
+  /// v21) e atualiza se existir (linha backfillada). É o ponto onde o detector
+  /// (checkAndFixOrphanedPhotos) e o catálogo finalmente se encontram.
+  ///
+  /// sha256 fica NULL de propósito: calcular hash é o S3, que depende do gate
+  /// Q4. Não inventar hash.
+  Future<void> _sincAtivosBrutos({
+    required String ativoUuid,
+    required String entidadeTipo,
+    required String entidadeUuid,
+    required String? caminhoOriginal,
+    required DateTime? capturadoEm,
+    required String status, // 'pendente_hash' | 'ausente' | 'presente'
+  }) async {
+    final existente = await (select(ativosBrutos)
+          ..where((t) => t.uuid.equals(ativoUuid)))
+        .getSingleOrNull();
+
+    // RC-13/RC-14: dispositivo que registrou + EXIF preservado (o app copia
+    // os bytes originais da foto — savePhotoLocally usa copy, não re-encode)
+    String? dispUuid;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      dispUuid = prefs.getString('device_uuid');
+    } catch (_) {
+      dispUuid = null; // ex.: teste puro sem binding — sem dispositivo
+    }
+
+    if (existente == null) {
+      await into(ativosBrutos).insert(AtivosBrutosCompanion.insert(
+        // required = valor cru no Companion.insert (Value é para update/nullable)
+        uuid: ativoUuid,
+        entidadeTipo: entidadeTipo,
+        entidadeUuid: entidadeUuid,
+        papel: const Value('bruto'),
+        mime: const Value('image/jpeg'),
+        caminhoOriginal: Value(caminhoOriginal),
+        capturadoEm: Value(capturadoEm),
+        status: Value(status),
+        sha256Verificado: const Value(false),
+        dispositivoUuid: Value(dispUuid), // RC-13
+        exifPreservado: const Value(true), // RC-14: bytes originais copiados
+      ));
+    } else {
+      await (update(ativosBrutos)..where((t) => t.uuid.equals(ativoUuid)))
+          .write(AtivosBrutosCompanion(
+        status: Value(status),
+        caminhoOriginal: Value(caminhoOriginal),
+        dispositivoUuid: Value(dispUuid), // RC-13
+        exifPreservado: const Value(true), // RC-14
+        updatedAt: Value(DateTime.now()),
+      ));
+    }
+  }
+
+  /// Caminho "foto nova" (G1): registra a linha no catálogo com
+  /// status='pendente_hash' (arquivo existe; hash é o S3).
+  ///
+  /// ADAPTAÇÃO AO D-1 (aplicador, dono do H4): o patch sugere prefixo 'ativo-'
+  /// para o caminho ao vivo, mas 'legado-ativo-<uuid>' é a identidade que o
+  /// backfill v21 gravou. Usar prefixo diferente criaria uma SEGUNDA linha para
+  /// objetos que já existiam na migração (foto backfillada / planta com foto) —
+  /// duplicata silenciosa. Aqui o prefixo é único: atualiza a linha existente
+  /// e cria só quando não há. O espírito do D-1 (não inventar 'legado-med-'
+  /// no caminho ao vivo) está mantido: entidade_tipo/entidade_uuid novos usam
+  /// 'planta' + plantas.uuid; linhas legadas conservam sua identidade.
+  Future<void> registrarFotoCatalogo({
+    required String objetoUuid,
+    required String entidadeTipo, // 'parcela' | 'planta'
+    required String entidadeUuid,
+    required String? caminhoOriginal,
+    required DateTime? capturadoEm,
+  }) async {
+    await _sincAtivosBrutos(
+      ativoUuid: 'legado-ativo-$objetoUuid',
+      entidadeTipo: entidadeTipo,
+      entidadeUuid: entidadeUuid,
+      caminhoOriginal: caminhoOriginal,
+      capturadoEm: capturadoEm,
+      status: 'pendente_hash',
+    );
+  }
+
+  // >>> t9 S2: inicio — arquivo reapareceu (ex.: restore de backup)
+  /// HOJE as flags são write-once: nada as desliga. Se o usuário restaurar um
+  /// backup e os arquivos voltarem, a linha continua marcada como ausente para
+  /// sempre — e o catálogo junto. Estes dois métodos fecham esse buraco.
+  ///
+  /// O guard `WHERE <flag> = true` é o que torna barato: no estado normal zero
+  /// linhas casam, e o UPDATE não faz nada.
+
+  Future<void> restaurarFotoParcela(String uuid) async {
+    final foto = await (select(fotosParcela)
+          ..where((t) => t.uuid.equals(uuid)))
+        .getSingleOrNull();
+    if (foto == null || !foto.arquivoAusente) return;
+
+    final linhas = await (update(fotosParcela)
+          ..where((t) => t.uuid.equals(uuid) & t.arquivoAusente.equals(true)))
+        .write(const FotosParcelaCompanion(arquivoAusente: Value(false)));
+    if (linhas == 0) return;
+
+    await _sincAtivosBrutos(
+      ativoUuid: 'legado-ativo-${foto.uuid}',
+      entidadeTipo: 'parcela',
+      entidadeUuid: foto.parcelaUuid,
+      caminhoOriginal: foto.filePath,
+      capturadoEm: foto.createdAt,
+      status: 'presente',
+    );
+  }
+
+  Future<void> restaurarFotoPlanta(String uuid) async {
+    final planta = await (select(plantas)
+          ..where((t) => t.uuid.equals(uuid)))
+        .getSingleOrNull();
+    if (planta == null || !planta.fotoAusente) return;
+
+    final linhas = await (update(plantas)
+          ..where((t) => t.uuid.equals(uuid) & t.fotoAusente.equals(true)))
+        .write(PlantasCompanion(
+            fotoAusente: const Value(false),
+            updatedAt: Value(DateTime.now())));
+    if (linhas == 0) return;
+
+    await _sincAtivosBrutos(
+      ativoUuid: 'legado-ativo-${planta.uuid}',
+      entidadeTipo: 'planta',
+      entidadeUuid: planta.uuid,
+      caminhoOriginal: planta.fotoEspeciePath,
+      capturadoEm: planta.createdAt,
+      status: 'presente',
+    );
+  }
+  // <<< t9 S2: fim
 
   /// Verifica e corrige referências órfãs de fotos no banco de dados.
   /// Retorna (orphanedCount, unreferencedFilesCount)
@@ -1158,8 +2259,8 @@ VGVG0069;UT04;0.0;1''';
       }
     }
 
-    // Remove DB references to missing files
-    int removedCount = 0;
+    // (Q2) MARCA referências a arquivos ausentes — nunca deleta (evidência).
+    int markedCount = 0;
     for (final entry in allPaths) {
       final file = io.File(entry.path);
       if (!await file.exists()) {
@@ -1168,7 +2269,15 @@ VGVG0069;UT04;0.0;1''';
         } else {
           await cleanMissingFotoPlanta(entry.uuid);
         }
-        removedCount++;
+        markedCount++;
+      } else {
+        // >>> t9 S2: inicio — arquivo voltou (restore de backup etc.)
+        if (entry.source == 'foto') {
+          await restaurarFotoParcela(entry.uuid);
+        } else {
+          await restaurarFotoPlanta(entry.uuid);
+        }
+        // <<< t9 S2: fim
       }
     }
 
@@ -1187,7 +2296,7 @@ VGVG0069;UT04;0.0;1''';
       }
     }
 
-    return (removedCount, unreferencedCount);
+    return (markedCount, unreferencedCount);
   }
 
   Future<({bool ok, String? error})> checkIntegrity() async {

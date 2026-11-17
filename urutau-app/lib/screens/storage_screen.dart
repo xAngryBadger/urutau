@@ -16,7 +16,6 @@ class _StorageScreenState extends State<StorageScreen> {
   int _totalSize = 0;
   double _freeSpace = 0;
   bool _isLoading = true;
-  bool _isCleaning = false;
 
   @override
   void initState() {
@@ -26,28 +25,15 @@ class _StorageScreenState extends State<StorageScreen> {
 
   Future<void> _refresh() async {
     setState(() => _isLoading = true);
-    try {
-      final breakdown = await StorageService.getStorageBreakdown();
-      final free = await StorageService.getFreeSpaceGB();
-      final total = breakdown.values.fold(0, (a, b) => a + b);
-      if (mounted) {
-        setState(() {
-          _breakdown = breakdown;
-          _totalSize = total;
-          _freeSpace = free;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao carregar: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
+    final breakdown = await StorageService.getStorageBreakdown();
+    final free = await StorageService.getFreeSpaceGB();
+    final total = breakdown.values.fold(0, (a, b) => a + b);
+    setState(() {
+      _breakdown = breakdown;
+      _totalSize = total;
+      _freeSpace = free;
+      _isLoading = false;
+    });
   }
 
   String _formatBytes(int bytes) {
@@ -62,6 +48,7 @@ class _StorageScreenState extends State<StorageScreen> {
   @override
   Widget build(BuildContext context) {
     final syncService = context.watch<SyncService>();
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Armazenamento')),
@@ -77,9 +64,9 @@ class _StorageScreenState extends State<StorageScreen> {
                   if (_breakdown != null) ...[
                     _buildCategoryCard('Banco de Dados', _breakdown!['database'] ?? 0,
                         Icons.storage, () => _confirmCleanup('database', 'Banco de Dados')),
-                    _buildCategoryCard('Fotos', _breakdown!['fotos'] ?? 0,
+                    _buildCategoryCard('Fotos sincronizadas', _breakdown!['fotos'] ?? 0,
                         Icons.image, () => _confirmCleanup('fotos', 'Fotos sincronizadas')),
-                    _buildCategoryCard('Backups', _breakdown!['backups'] ?? 0,
+                    _buildCategoryCard('Backups >30 dias', _breakdown!['backups'] ?? 0,
                         Icons.backup, () => _confirmCleanup('backups', 'Backups >30 dias')),
                     _buildCategoryCard('Arquivos Temporários', _breakdown!['temp'] ?? 0,
                         Icons.cleaning_services, () => _confirmCleanup('temp', 'Arquivos Temporários')),
@@ -89,7 +76,7 @@ class _StorageScreenState extends State<StorageScreen> {
                     'Total usado: ${_formatBytes(_totalSize)} — '
                     '${_freeSpace.toStringAsFixed(1)} GB livres',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
                   ),
                 ],
               ),
@@ -98,6 +85,7 @@ class _StorageScreenState extends State<StorageScreen> {
   }
 
   Widget _buildOverviewCard() {
+    final cs = Theme.of(context).colorScheme;
     final usedPercent = _freeSpace > 0
         ? (_totalSize / (1024 * 1024 * 1024) / (_totalSize / (1024 * 1024 * 1024) + _freeSpace) * 100)
             .clamp(0, 100)
@@ -113,8 +101,8 @@ class _StorageScreenState extends State<StorageScreen> {
             const SizedBox(height: 12),
             LinearProgressIndicator(
               value: usedPercent / 100,
-              backgroundColor: Colors.grey.shade200,
-              color: usedPercent > 80 ? Colors.red : Colors.green,
+              backgroundColor: cs.surfaceContainerHighest,
+              color: usedPercent > 80 ? cs.error : cs.primary,
               minHeight: 8,
               borderRadius: BorderRadius.circular(4),
             ),
@@ -127,21 +115,15 @@ class _StorageScreenState extends State<StorageScreen> {
   }
 
   Widget _buildCategoryCard(String label, int size, IconData icon, VoidCallback onClean) {
-    final isDisabled = size == 0 || _isCleaning;
+    final cs = Theme.of(context).colorScheme;
     return Card(
       child: ListTile(
-        leading: _isCleaning
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Icon(icon),
+        leading: Icon(icon),
         title: Text(label),
         subtitle: Text(_formatBytes(size)),
         trailing: TextButton(
-          onPressed: isDisabled ? null : onClean,
-          child: Text('Limpar', style: TextStyle(color: isDisabled ? Colors.grey : Colors.red)),
+          onPressed: size > 0 ? onClean : null,
+          child: Text('Limpar', style: TextStyle(color: size > 0 ? cs.error : cs.onSurfaceVariant)),
         ),
       ),
     );
@@ -160,7 +142,8 @@ class _StorageScreenState extends State<StorageScreen> {
               Navigator.pop(ctx);
               _performCleanup(categoryKey, categoryLabel);
             },
-            child: const Text('Limpar', style: TextStyle(color: Colors.red)),
+            child: Text('Limpar',
+                style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
           ),
         ],
       ),
@@ -168,7 +151,6 @@ class _StorageScreenState extends State<StorageScreen> {
   }
 
   Future<void> _performCleanup(String categoryKey, String categoryLabel) async {
-    setState(() => _isCleaning = true);
     try {
       Set<String>? protectedPaths;
       if (categoryKey == 'fotos') {
@@ -178,20 +160,25 @@ class _StorageScreenState extends State<StorageScreen> {
       }
       await StorageService.cleanCategory(categoryKey, protectedPaths: protectedPaths);
       if (mounted) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$categoryLabel limpo'), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text('$categoryLabel limpo',
+                style: TextStyle(color: cs.onPrimaryContainer)),
+            backgroundColor: cs.primaryContainer,
+          ),
         );
         await _refresh();
       }
     } catch (e) {
       if (mounted) {
+        final cs = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Erro: $e', style: TextStyle(color: cs.onErrorContainer)),
+            backgroundColor: cs.errorContainer,
+          ),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isCleaning = false);
       }
     }
   }
