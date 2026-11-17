@@ -335,23 +335,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () async {
-                        final result = await FilePicker.platform.pickFiles(
+                        final result = await FilePicker.pickFile(
                           type: FileType.any,
-                          allowMultiple: false,
                         );
-                        if (result == null ||
-                            result.files.isEmpty ||
-                            !context.mounted) return;
-                        final file = result.files.single;
+                        if (result == null || !context.mounted) return;
+                        final file = result;
                         String msg;
                         if (file.path != null && file.path!.isNotEmpty) {
                           msg = await BackupService.prepareRestore(file.path!);
-                        } else if (file.bytes != null &&
-                            file.bytes!.isNotEmpty) {
-                          msg = await BackupService.prepareRestoreFromBytes(
-                              file.bytes!);
                         } else {
-                          msg = 'Não foi possível aceder ao ficheiro.';
+                          final bytes = await file.readAsBytes();
+                          if (bytes.isNotEmpty) {
+                            msg = await BackupService.prepareRestoreFromBytes(bytes);
+                          } else {
+                            msg = 'Não foi possível aceder ao ficheiro.';
+                          }
                         }
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(

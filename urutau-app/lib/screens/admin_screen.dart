@@ -27,6 +27,7 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _isOnline = true;
   bool _filterPendingOnly = false;
   String _searchQuery = '';
+  String _error = '';
   final _searchController = TextEditingController();
 
   // ── Filtro admin (sempre visível como landing) ──
@@ -233,13 +234,16 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _carregarDados() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _error = '';
+    });
 
     try {
       // Puxa TUDO do PocketBase (admin precisa ver dados de todos)
       final syncService = context.read<SyncService>();
       final online = syncService.isConfigured && await syncService.hasInternet();
-      _isOnline = online;
+      if (mounted) setState(() => _isOnline = online);
 
       if (online) {
         // Puxa usuários do servidor primeiro (para que apareçam no painel)
@@ -293,20 +297,22 @@ class _AdminScreenState extends State<AdminScreen> {
          unsyncedPorUsuario[usuario.uuid] = unsyncedCount;
        }
 
-       setState(() {
-         _usuarios = usuarios;
-         _parcelasPorUsuario = parcelasPorUsuario;
-         _plantasPorUsuario = plantasPorUsuario;
-         _unsyncedPorUsuario = unsyncedPorUsuario;
-         _talhoes = talhoes;
-         _isLoading = false;
-       });
+       if (mounted) {
+        setState(() {
+          _usuarios = usuarios;
+          _parcelasPorUsuario = parcelasPorUsuario;
+          _plantasPorUsuario = plantasPorUsuario;
+          _unsyncedPorUsuario = unsyncedPorUsuario;
+          _talhoes = talhoes;
+          _isLoading = false;
+        });
+       }
     } catch (e) {
-      setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao carregar dados: $e'), duration: const Duration(seconds: 5)),
-        );
+        setState(() {
+          _isLoading = false;
+          _error = e.toString();
+        });
       }
     }
   }
@@ -362,6 +368,14 @@ class _AdminScreenState extends State<AdminScreen> {
             FutureBuilder<DateTime?>(
               future: syncService.getLastSyncTime(),
               builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Text('Verificando...',
+                      style: TextStyle(fontSize: 10, color: Colors.grey));
+                }
+                if (snapshot.hasError) {
+                  return Text('Erro ao verificar sync',
+                      style: TextStyle(fontSize: 10, color: Colors.red[300]));
+                }
                 if (!snapshot.hasData || snapshot.data == null) {
                   return const Text('Nunca sincronizado',
                       style: TextStyle(fontSize: 10, color: Colors.grey));
@@ -397,32 +411,58 @@ class _AdminScreenState extends State<AdminScreen> {
                   padding: const EdgeInsets.only(right: 4),
                   child: Badge(
                     label: Text('${syncService.pendingCount}'),
-                    child: IconButton(
-                      icon: syncService.isSyncing
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.cloud_upload),
-                      onPressed: syncService.isSyncing ? null : _sync,
+                    child: Semantics(
+                      label: 'Sincronizar dados',
+                      button: true,
+                      child: Tooltip(
+                        message: 'Sincronizar',
+                        child: IconButton(
+                          icon: syncService.isSyncing
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.cloud_upload),
+                          onPressed: syncService.isSyncing ? null : _sync,
+                          style: IconButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                            padding: const EdgeInsets.all(8),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 );
               return const SizedBox.shrink();
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _carregarDados,
-            tooltip: 'Atualizar',
+          Semantics(
+            label: 'Atualizar dados',
+            button: true,
+            child: Tooltip(
+              message: 'Atualizar',
+              child: IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _carregarDados,
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  padding: const EdgeInsets.all(8),
+                ),
+              ),
+            ),
           ),
-          PopupMenuButton<String>(
-            onSelected: _onMenuSelected,
-            itemBuilder: (context) => [
+          Semantics(
+            label: 'Menu de ações administrativas',
+            button: true,
+            child: Tooltip(
+              message: 'Mais ações',
+              child: PopupMenuButton<String>(
+                onSelected: _onMenuSelected,
+                itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'export',
                 child: ListTile(
@@ -502,13 +542,17 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
               ),
             ],
+              ),
+            ),
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
+          : _error.isNotEmpty
+              ? _buildErrorState()
+              : Column(
+                  children: [
                 // Barra de progresso de sync
                 if (syncService.isSyncing)
                   LinearProgressIndicator(value: syncService.syncProgress > 0 ? syncService.syncProgress : null),
@@ -539,8 +583,8 @@ class _AdminScreenState extends State<AdminScreen> {
                 if (_filterActive) _buildAdminFilterTag(),
                 _buildSearchBar(),
                 Expanded(child: _buildUsuariosList()),
-              ],
-            ),
+                  ],
+                ),
       // Admin não cria parcelas — apenas visualiza dados coletados em campo
     );
   }
@@ -860,6 +904,44 @@ orElse: () => _usuarios.isNotEmpty ? _usuarios.first : Usuario(
             contentPadding: const EdgeInsets.symmetric(vertical: 12),
           ),
           onChanged: (v) => setState(() => _searchQuery = v),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+            const SizedBox(height: 16),
+            Text(
+              'Erro ao carregar dados',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                _error,
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _carregarDados,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Tentar novamente'),
+            ),
+          ],
         ),
       ),
     );

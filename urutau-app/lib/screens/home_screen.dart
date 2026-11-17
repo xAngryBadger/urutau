@@ -924,9 +924,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onMenuSelected(String value) {
     switch (value) {
-      case 'sync':
-        _sync();
-        break;
       case 'pull_meus':
         _pullMeusDados();
         break;

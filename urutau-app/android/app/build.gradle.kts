@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -16,25 +15,21 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
-
     ndkVersion = "28.2.13676358"
 
     signingConfigs {
         create("release") {
             val keystorePath = System.getenv("KEYSTORE_FILE") ?: ""
             val keystorePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
-            val keyAlias = System.getenv("KEY_ALIAS") ?: ""
-            val keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            val keyAliasEnv = System.getenv("KEY_ALIAS") ?: ""
+            val keyPasswordEnv = System.getenv("KEY_PASSWORD") ?: ""
 
             if (keystorePath.isNotEmpty() && keystorePassword.isNotEmpty() &&
-                keyAlias.isNotEmpty() && keyPassword.isNotEmpty()) {
+                keyAliasEnv.isNotEmpty() && keyPasswordEnv.isNotEmpty()) {
                 storeFile = file(keystorePath)
                 storePassword = keystorePassword
-                this.keyAlias = keyAlias
-                this.keyPassword = keyPassword
+                keyAlias = keyAliasEnv
+                keyPassword = keyPasswordEnv
             } else {
                 val propsFile = rootProject.file("key.properties")
                 if (propsFile.exists()) {
@@ -42,8 +37,8 @@ android {
                     props.load(FileInputStream(propsFile))
                     storeFile = file(props.getProperty("storeFile"))
                     storePassword = props.getProperty("storePassword")
-                    this.keyAlias = props.getProperty("keyAlias")
-                    this.keyPassword = props.getProperty("keyPassword")
+                    keyAlias = props.getProperty("keyAlias")
+                    keyPassword = props.getProperty("keyPassword")
                 }
             }
         }

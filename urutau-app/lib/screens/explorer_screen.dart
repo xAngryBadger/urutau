@@ -566,15 +566,36 @@ if (!syncService.isConfigured) {
     final conflictKeys = conflitosResult.conflictKeys;
     final conflitoMessages = conflitosResult.messages;
 
+    // Conta parcelas já sincronizadas (para opção de limpar cache)
+    int syncedCount = 0;
+    final myParcelas = await _db.getAllParcelas(userId: myId);
+    for (final p in myParcelas) {
+      if (p.synced) syncedCount++;
+    }
+    if (!mounted) return;
+
+    // Se não há parcelas pendentes, mostra opção de puxar do servidor
     if (pending.isEmpty) {
-      if (mounted) {
-ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Nenhuma parcela concluída para sincronizar.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => _PullOnlySheet(
+          syncedCount: syncedCount,
+          onPull: () async {
+            Navigator.pop(ctx);
+            await _pullFromServer();
+          },
+          onClearCache: syncedCount > 0
+              ? () {
+                  Navigator.pop(ctx);
+                  _confirmClearSyncedCache(syncedCount);
+                }
+              : null,
+        ),
+      );
       return;
     }
 
@@ -585,12 +606,6 @@ ScaffoldMessenger.of(context).showSnackBar(
         .toSet();
     final selectedUuids = Set<String>.from(selectableUuids);
 
-    if (!mounted) return;
-    int syncedCount = 0;
-    final myParcelas = await _db.getAllParcelas(userId: myId);
-    for (final p in myParcelas) {
-      if (p.synced) syncedCount++;
-    }
     if (!mounted) return;
 
     await showModalBottomSheet<void>(
@@ -611,10 +626,6 @@ ScaffoldMessenger.of(context).showSnackBar(
           await Navigator.of(context)
               .pushNamed('/parcela/editar', arguments: p.uuid);
           if (mounted) await _refreshNivel();
-        },
-        onPull: () {
-          Navigator.pop(ctx);
-          _doPull();
         },
         onClearCache: syncedCount > 0
             ? () {
@@ -750,6 +761,71 @@ ScaffoldMessenger.of(context).showSnackBar(
     }
   }
 
+  /// Puxa parcelas do servidor para o dispositivo local.
+  Future<void> _pullFromServer() async {
+    final syncService = context.read<SyncService>();
+    if (!syncService.isConfigured) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Configure o servidor nas definições primeiro.'),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+      return;
+    }
+    final myId = _myUserId;
+    if (myId == null) return;
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Expanded(child: Text('A puxar dados do servidor...')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    try {
+      final imported = await syncService.pullDadosDoServidor(userId: myId);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      await _refreshNivel();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            imported > 0
+                ? '$imported parcela(s) importada(s) do servidor.'
+                : 'Nenhuma parcela nova no servidor.',
+          ),
+          backgroundColor: imported > 0 ? Colors.green : Colors.blue,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao puxar do servidor: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+
   Future<void> _doSync() async {
     final syncService = context.read<SyncService>();
     if (!syncService.isConfigured) {
@@ -802,16 +878,7 @@ ScaffoldMessenger.of(context).showSnackBar(
   }
 
   // Pull de parcelas desativado — catálogo é estático/local.
-  Future<void> _doPull() async {
-    if (mounted) {
-ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Configure o servidor nas definições primeiro.'),
-            duration: Duration(seconds: 5),
-          ),
-        );
-    }
-    }
+  // _doPull removido: funcionalidade de pull não suportada (catálogo estático).
 
   Future<void> _exportarXlsx() async {
     final syncService = context.read<SyncService>();
@@ -840,7 +907,7 @@ ScaffoldMessenger.of(context).showSnackBar(
             child: Text(
               'Exportar do APP: gera a planilha com os dados que estão neste dispositivo (o que você registou aqui).\n\n'
               'Exportar do Servidor: atualiza primeiro a lista a partir do servidor e depois gera a planilha com esses dados (inclui o que outros utilizadores já enviaram). Requer internet.',
-              style: TextStyle(fontSize: 13, height: 1.35),
+              style: TextStyle(fontSize: 14, height: 1.35),
             ),
           ),
           SimpleDialogOption(
@@ -1653,29 +1720,28 @@ ScaffoldMessenger.of(context).showSnackBar(
        label: isActive ? label : 'Navegar para $label',
        button: !isActive,
        child: InkWell(
-         borderRadius: BorderRadius.circular(6),
+         borderRadius: BorderRadius.circular(8),
          onTap: onTap,
          child: Container(
-           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
            decoration: isActive
                ? BoxDecoration(
                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                   borderRadius: BorderRadius.circular(6),
+                   borderRadius: BorderRadius.circular(8),
                  )
                : null,
            child: Row(
              mainAxisSize: MainAxisSize.min,
              children: [
-               Icon(icon,
-                   size: 14,
+               Icon(icon, size: 16,
                    color: isActive ? Theme.of(context).colorScheme.primary : Theme.of(context).textTheme.bodySmall?.color),
-               const SizedBox(width: 4),
+               const SizedBox(width: 6),
                Text(
                  label,
                  style: TextStyle(
                    color: isActive ? Theme.of(context).colorScheme.primary : Theme.of(context).textTheme.bodySmall?.color,
                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                   fontSize: 13,
+                   fontSize: 14,
                  ),
                ),
              ],
@@ -2123,52 +2189,6 @@ ScaffoldMessenger.of(context).showSnackBar(
     }
   }
 
-  Future<void> _showDesistirDialog(Parcela p) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.person_remove, color: Colors.orange[700], size: 32),
-        title: const Text('Desistir da parcela?'),
-        content: const Text(
-          'A parcela ficará disponível para outros utilizadores. '
-          'As alterações locais serão enviadas ao sair (user vazio). '
-          'Tem certeza?',
-        ),
-        actions: [
-          Semantics(
-            label: 'Cancelar',
-            button: true,
-            child: TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar'),
-            ),
-          ),
-          Semantics(
-            label: 'Desistir da parcela',
-            button: true,
-            child: FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-              child: const Text('Desistir'),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true || _myUserId == null) return;
-    await _db.updateParcela(
-      ParcelasCompanion(
-        userId: const drift.Value(''),
-        prontaParaSync: const drift.Value(false),
-        synced: const drift.Value(false),
-        updatedAt: drift.Value(DateTime.now()),
-      ),
-      p.uuid,
-    );
-    await context.read<SyncService>().refreshPendingCount();
-    if (mounted) await _refreshNivel();
-  }
-
   // ─── Ownership indicator bar ──────────────────────────
 
   Widget _ownershipBar(_OwnershipInfo info) {
@@ -2252,11 +2272,11 @@ Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).colorScheme.on
              ),
             const SizedBox(height: 8),
              Text(
-               'Toque no botão abaixo para criar, ou puxe dados do servidor.',
+               'Toque no botão abaixo para criar uma nova parcela.',
                style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 12),
                textAlign: TextAlign.center,
              ),
-            // Botão de pull removido (catálogo é estático)
+            
           ],
         ),
       ),
@@ -2274,7 +2294,6 @@ class _SyncListSheet extends StatefulWidget {
   final Color accentColor;
   final int syncedCount;
   final void Function(Parcela p) onEdit;
-  final VoidCallback? onPull;
   final VoidCallback? onClearCache;
   final void Function(Set<String> selected) onConfirm;
 
@@ -2286,7 +2305,6 @@ class _SyncListSheet extends StatefulWidget {
     required this.accentColor,
     required this.syncedCount,
     required this.onEdit,
-    this.onPull,
     this.onClearCache,
     required this.onConfirm,
   });
@@ -2421,36 +2439,128 @@ class _SyncListSheetState extends State<_SyncListSheet> {
                       ),
                     ),
                   ),
-                  if (widget.onPull != null || widget.onClearCache != null) ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (widget.onPull != null)
-                          Semantics(
-                            label: 'Puxar do servidor',
-                            button: true,
-                            child: TextButton.icon(
-                              icon: const Icon(Icons.cloud_download, size: 18),
-                              label: const Text('Puxar do servidor'),
-                              onPressed: widget.onPull,
-                            ),
-                          ),
-                        if (widget.onClearCache != null &&
+                  if (widget.onClearCache != null &&
                             widget.syncedCount > 0) ...[
-                          if (widget.onPull != null) const SizedBox(width: 8),
-                          Semantics(
-                            label: 'Limpar cache',
-                            button: true,
-                            child: TextButton.icon(
-                              icon: Icon(Icons.cleaning_services,
-                                  size: 18, color: Colors.red[400]),
-                              label: const Text('Limpar cache'),
-                              onPressed: widget.onClearCache,
-                            ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Semantics(
+                                label: 'Limpar cache',
+                                button: true,
+                                child: TextButton.icon(
+                                  icon: Icon(Icons.cleaning_services,
+                                      size: 18, color: Colors.red[400]),
+                                  label: const Text('Limpar cache'),
+                                  onPressed: widget.onClearCache,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
-                      ],
+                    ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Sheet mostrada quando não há parcelas pendentes para sincronizar.
+/// Oferece opção de puxar do servidor e limpar cache.
+class _PullOnlySheet extends StatelessWidget {
+  final int syncedCount;
+  final Future<void> Function() onPull;
+  final VoidCallback? onClearCache;
+
+  const _PullOnlySheet({
+    required this.syncedCount,
+    required this.onPull,
+    this.onClearCache,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.4,
+      maxChildSize: 0.6,
+      expand: false,
+      builder: (_, sc) => SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.cloud_download, color: AppTheme.primary, size: 28),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Sincronização',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Nenhuma parcela local pendente de envio.',
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).disabledColor),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Pode puxar parcelas do servidor ou limpar o cache local.',
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).disabledColor),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView(
+                controller: sc,
+                padding: const EdgeInsets.all(16),
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: Semantics(
+                      label: 'Puxar do servidor',
+                      button: true,
+                      child: FilledButton.icon(
+                        onPressed: onPull,
+                        icon: const Icon(Icons.cloud_download),
+                        label: const Text('Puxar do servidor'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (onClearCache != null) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: Semantics(
+                        label: 'Limpar cache',
+                        button: true,
+                        child: OutlinedButton.icon(
+                          onPressed: onClearCache,
+                          icon: Icon(Icons.cleaning_services, size: 18, color: Colors.red[400]),
+                          label: Text('Limpar cache ($syncedCount parcelas sincronizadas)',
+                              style: TextStyle(color: Colors.red[700])),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.red[400]!),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ],
@@ -2462,3 +2572,4 @@ class _SyncListSheetState extends State<_SyncListSheet> {
     );
   }
 }
+

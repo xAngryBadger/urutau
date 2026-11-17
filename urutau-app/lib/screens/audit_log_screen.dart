@@ -17,6 +17,7 @@ class AuditLogScreen extends StatefulWidget {
 class _AuditLogScreenState extends State<AuditLogScreen> {
   List<AuditLogData> _logs = [];
   bool _isLoading = true;
+  String _error = '';
   String _filter = '';
   int _page = 0;
   static const _pageSize = 100;
@@ -29,6 +30,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
 
   Future<void> _loadLogs({bool append = false}) async {
     if (!append) setState(() => _isLoading = true);
+    setState(() => _error = '');
     try {
       final logs = await widget.database.getAuditLog(
         limit: _pageSize,
@@ -45,7 +47,12 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = e.toString();
+        });
+      }
     }
   }
 
@@ -99,9 +106,49 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : _buildLogList(dateFmt),
+              : _error.isNotEmpty
+                  ? _buildErrorState()
+                  : _buildLogList(dateFmt),
         ),
       ],
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+            const SizedBox(height: 16),
+            Text(
+              'Erro ao carregar logs',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                _error,
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _loadLogs,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Tentar novamente'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

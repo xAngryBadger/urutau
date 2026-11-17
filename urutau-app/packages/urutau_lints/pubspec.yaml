@@ -1,0 +1,16 @@
+name: urutau_lints
+description: "Custom lint rules for Urutau Flutter app"
+version: 1.0.0
+publish_to: "none"
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  analyzer: ^10.0.0
+  custom_lint_builder: any
+
+dev_dependencies:
+  test: ^1.25.0
+  custom_lint: any
+  lints: ^6.0.0

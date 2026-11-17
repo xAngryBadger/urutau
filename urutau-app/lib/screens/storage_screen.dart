@@ -16,6 +16,7 @@ class _StorageScreenState extends State<StorageScreen> {
   int _totalSize = 0;
   double _freeSpace = 0;
   bool _isLoading = true;
+  bool _isCleaning = false;
 
   @override
   void initState() {
@@ -25,15 +26,28 @@ class _StorageScreenState extends State<StorageScreen> {
 
   Future<void> _refresh() async {
     setState(() => _isLoading = true);
-    final breakdown = await StorageService.getStorageBreakdown();
-    final free = await StorageService.getFreeSpaceGB();
-    final total = breakdown.values.fold(0, (a, b) => a + b);
-    setState(() {
-      _breakdown = breakdown;
-      _totalSize = total;
-      _freeSpace = free;
-      _isLoading = false;
-    });
+    try {
+      final breakdown = await StorageService.getStorageBreakdown();
+      final free = await StorageService.getFreeSpaceGB();
+      final total = breakdown.values.fold(0, (a, b) => a + b);
+      if (mounted) {
+        setState(() {
+          _breakdown = breakdown;
+          _totalSize = total;
+          _freeSpace = free;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao carregar: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   String _formatBytes(int bytes) {
@@ -62,13 +76,13 @@ class _StorageScreenState extends State<StorageScreen> {
                   const SizedBox(height: 16),
                   if (_breakdown != null) ...[
                     _buildCategoryCard('Banco de Dados', _breakdown!['database'] ?? 0,
-                        Icons.storage, () => _confirmCleanup('Banco de Dados')),
+                        Icons.storage, () => _confirmCleanup('database', 'Banco de Dados')),
                     _buildCategoryCard('Fotos', _breakdown!['fotos'] ?? 0,
-                        Icons.image, () => _confirmCleanup('Fotos sincronizadas')),
+                        Icons.image, () => _confirmCleanup('fotos', 'Fotos sincronizadas')),
                     _buildCategoryCard('Backups', _breakdown!['backups'] ?? 0,
-                        Icons.backup, () => _confirmCleanup('Backups >30 dias')),
+                        Icons.backup, () => _confirmCleanup('backups', 'Backups >30 dias')),
                     _buildCategoryCard('Arquivos Temporários', _breakdown!['temp'] ?? 0,
-                        Icons.cleaning_services, () => _confirmCleanup('Temp')),
+                        Icons.cleaning_services, () => _confirmCleanup('temp', 'Arquivos Temporários')),
                   ],
                   const SizedBox(height: 24),
                   Text(
@@ -113,31 +127,38 @@ class _StorageScreenState extends State<StorageScreen> {
   }
 
   Widget _buildCategoryCard(String label, int size, IconData icon, VoidCallback onClean) {
+    final isDisabled = size == 0 || _isCleaning;
     return Card(
       child: ListTile(
-        leading: Icon(icon),
+        leading: _isCleaning
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(icon),
         title: Text(label),
         subtitle: Text(_formatBytes(size)),
         trailing: TextButton(
-          onPressed: size > 0 ? onClean : null,
-          child: Text('Limpar', style: TextStyle(color: size > 0 ? Colors.red : Colors.grey)),
+          onPressed: isDisabled ? null : onClean,
+          child: Text('Limpar', style: TextStyle(color: isDisabled ? Colors.grey : Colors.red)),
         ),
       ),
     );
   }
 
-  void _confirmCleanup(String category) {
+  void _confirmCleanup(String categoryKey, String categoryLabel) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Limpar $category?'),
+        title: Text('Limpar $categoryLabel?'),
         content: const Text('Esta ação não pode ser desfeita.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _performCleanup(category);
+              _performCleanup(categoryKey, categoryLabel);
             },
             child: const Text('Limpar', style: TextStyle(color: Colors.red)),
           ),
@@ -146,18 +167,19 @@ class _StorageScreenState extends State<StorageScreen> {
     );
   }
 
-  Future<void> _performCleanup(String category) async {
+  Future<void> _performCleanup(String categoryKey, String categoryLabel) async {
+    setState(() => _isCleaning = true);
     try {
       Set<String>? protectedPaths;
-      if (category == 'fotos') {
+      if (categoryKey == 'fotos') {
         final db = context.read<AppDatabase>();
         final allPaths = await db.getAllPhotoPaths();
         protectedPaths = allPaths.map((e) => e.path).toSet();
       }
-      await StorageService.cleanCategory(category, protectedPaths: protectedPaths);
+      await StorageService.cleanCategory(categoryKey, protectedPaths: protectedPaths);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$category limpo'), backgroundColor: Colors.green),
+          SnackBar(content: Text('$categoryLabel limpo'), backgroundColor: Colors.green),
         );
         await _refresh();
       }
@@ -166,6 +188,10 @@ class _StorageScreenState extends State<StorageScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCleaning = false);
       }
     }
   }

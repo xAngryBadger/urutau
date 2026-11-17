@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// e SharedPreferences com aviso em web (onde não há keystore nativo).
 class SecureStorageService {
   static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    aOptions: AndroidOptions(),
   );
 
   // Keys

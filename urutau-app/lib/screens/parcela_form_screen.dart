@@ -385,7 +385,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
         appBar: AppBar(
           title: Text(_isEditing ? 'Editar Parcela' : 'Nova Parcela'),
           actions: [
-            if (_isEditing) ...[
+            if (_isEditing && !widget.readOnly) ...[
               Semantics(
                 label: 'Próxima parcela',
                 button: true,
@@ -810,17 +810,31 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
             Semantics(
               label: 'Editar planta',
               button: true,
-              child: IconButton(
-                icon: const Icon(Icons.edit, size: 20),
-                onPressed: () => _editPlanta(planta),
+              child: Tooltip(
+                message: 'Editar planta',
+                child: IconButton(
+                  icon: const Icon(Icons.edit, size: 20),
+                  onPressed: () => _editPlanta(planta),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    padding: const EdgeInsets.all(8),
+                  ),
+                ),
               ),
             ),
             Semantics(
               label: 'Remover planta',
               button: true,
-              child: IconButton(
-                icon: Icon(Icons.delete, size: 20, color: Colors.red[300]),
-                onPressed: () => _removePlanta(planta),
+              child: Tooltip(
+                message: 'Remover planta',
+                child: IconButton(
+                  icon: Icon(Icons.delete, size: 20, color: Colors.red[300]),
+                  onPressed: () => _removePlanta(planta),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    padding: const EdgeInsets.all(8),
+                  ),
+                ),
               ),
             ),
           ],
@@ -892,7 +906,7 @@ class _ParcelaFormScreenState extends State<ParcelaFormScreen> {
               style: IconButton.styleFrom(
                 backgroundColor: Colors.white.withValues(alpha: 0.8),
                 padding: const EdgeInsets.all(4),
-                minimumSize: const Size(28, 28),
+                minimumSize: const Size(48, 48),
               ),
             ),
           ),

@@ -178,10 +178,20 @@ class _LoginScreenState extends State<LoginScreen> {
             Positioned(
               top: 8,
               right: 8,
-              child: IconButton(
-                icon: Icon(Icons.settings, color: Colors.grey[600]),
-                tooltip: 'Configurar servidor',
-                onPressed: () => _showServerConfigDialog(),
+              child: Semantics(
+                label: 'Configurar servidor',
+                button: true,
+                child: Tooltip(
+                  message: 'Configurar servidor',
+                  child: IconButton(
+                    icon: Icon(Icons.settings, color: Colors.grey[600]),
+                    onPressed: () => _showServerConfigDialog(),
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      padding: const EdgeInsets.all(8),
+                    ),
+                  ),
+                ),
               ),
             ),
             Center(

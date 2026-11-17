@@ -545,13 +545,19 @@ Semantics(
                     Positioned(
                       top: 8,
                       right: 8,
-                      child: IconButton(
-                        icon: const Icon(Icons.cancel, color: Colors.red),
-                        onPressed: () {
-                          setState(() => _fotoPath = null);
-                        },
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.8),
+                      child: Semantics(
+                        label: 'Remover foto da espécie',
+                        button: true,
+                        child: IconButton(
+                          icon: const Icon(Icons.cancel, color: Colors.red),
+                          onPressed: () {
+                            setState(() => _fotoPath = null);
+                          },
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.white.withValues(alpha: 0.8),
+                            minimumSize: const Size(48, 48),
+                            padding: const EdgeInsets.all(12),
+                          ),
                         ),
                       ),
                     ),
