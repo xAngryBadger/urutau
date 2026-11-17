@@ -17,6 +17,12 @@ analyzer:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - packages/**
+    # Scaffolding quebrado: integration_test/smoke_test.dart depende de
+    # package:integration_test (não declarado) e de helpers (pumpUntilFound,
+    # Button) que não existem no repo. Não compila desde que foi criado.
+    # Excluído da análise até que seja reescrito ou receba as dependências.
+    # Ver docs/causa-raiz-build-lento.md.
+    - integration_test/**
   plugins:
     - custom_lint
 

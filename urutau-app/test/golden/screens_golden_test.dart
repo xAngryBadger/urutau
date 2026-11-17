@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../lib/main.dart';
 import '../../lib/screens/storage_screen.dart';
 import '../../lib/screens/integrity_error_screen.dart';

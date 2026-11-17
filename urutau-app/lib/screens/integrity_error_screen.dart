@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart' as fp;
 import '../data/database.dart';
 import '../services/backup_service.dart';
 
@@ -58,13 +58,12 @@ class IntegrityErrorScreen extends StatelessWidget {
   }
 
   Future<void> _restoreFromBackup(BuildContext context) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      allowMultiple: false,
+    final result = await fp.FilePickerPlatform.instance.pickFiles(
+      type: fp.FileType.any,
     );
-    if (result == null || result.files.single.path == null) return;
+    if (result == null || result.isEmpty || result.single.path == null) return;
 
-    final filePath = result.files.single.path!;
+    final filePath = result.single.path!;
     await BackupService.prepareRestore(filePath);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

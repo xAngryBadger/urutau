@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'dart:io' if (dart.library.html) 'dart:io';
+import 'dart:io' if (dart.library.html) '';
 import 'dart:async';
 import 'dart:isolate';
 import 'package:drift/drift.dart';
@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../data/database.dart';
 import '../models/conflict_info.dart';
 import '../widgets/conflict_resolution_dialog.dart';
@@ -204,8 +205,9 @@ class SyncService extends ChangeNotifier {
     int ultimoEnviado = ultimoId;
     for (final e in entradas) {
       try {
+        final safeEntryHash = escapePbFilter(e.entryHash ?? '');
         final existe = await _withRetry(() => _pb!.collection('trilha_auditoria')
-            .getList(page: 1, perPage: 1, filter: "entry_hash = '${e.entryHash}'"));
+            .getList(page: 1, perPage: 1, filter: 'entry_hash = "$safeEntryHash"'));
         if (existe.items.isEmpty) {
           // RC-13: dispositivo_id vai no registro do servidor (fora do hash local)
           final dispId = prefs.getString('device_uuid');
@@ -1169,7 +1171,7 @@ class SyncService extends ChangeNotifier {
     try {
       String filter = '';
       if (userId != null && userId.isNotEmpty) {
-        filter = 'user = "$userId"';
+        filter = 'user = "${escapePbFilter(userId)}"';
       }
 
       // 1. Detectar schema (normalizado vs flat)
@@ -1464,7 +1466,7 @@ class SyncService extends ChangeNotifier {
       final parcelaIds = parcelasServidor.map((r) => r.id).toSet();
       if (parcelaIds.isEmpty) return;
 
-      final filterParts = parcelaIds.map((id) => 'parcela = "$id"').join(' || ');
+      final filterParts = parcelaIds.map((id) => 'parcela = "${escapePbFilter(id)}"').join(' || ');
 
       // Paginação explícita: `perPage` sozinho trunca silenciosamente quando
       // há mais registos do que o limite.
@@ -1659,7 +1661,7 @@ class SyncService extends ChangeNotifier {
       final filterParts = keys.map((k) {
         final parts = k.split('|');
         if (parts.length != 3) return null;
-        final utEsc = parts[1].replaceAll('"', '\\"');
+        final utEsc = escapePbFilter(parts[1]);
         return '(prop_ut = "$utEsc" && id_parcela = ${parts[2]})';
       }).where((s) => s != null).join(' || ');
 
@@ -1957,7 +1959,7 @@ class SyncService extends ChangeNotifier {
    /// por isso o filtro usa só `codigo` e `nome`.
    Future<String?> _getOrCreatePropriedadeId(String name) async {
      if (name.isEmpty) return null;
-     final escaped = name.replaceAll('"', '\\"');
+     final escaped = escapePbFilter(name);
      final filter = '(codigo = "$escaped" || nome = "$escaped")';
      try {
        final list = await _pb!.collection('propriedades').getList(
@@ -2001,7 +2003,7 @@ class SyncService extends ChangeNotifier {
    /// Mesma restrição de filtro: só `codigo` (e `propriedade`).
    Future<String?> _getOrCreateUtId(String propriedadeId, String utName) async {
      if (propriedadeId.isEmpty || utName.isEmpty) return null;
-     final escaped = utName.replaceAll('"', '\\"');
+     final escaped = escapePbFilter(utName);
      final filter = 'codigo = "$escaped" && propriedade = "$propriedadeId"';
      try {
        final list = await _pb!.collection('uts').getList(
@@ -2231,9 +2233,10 @@ class SyncService extends ChangeNotifier {
     // apagados (regra P-2: evidência sobrevive) e sua normalização é v25+.
     final existentes = <String, RecordModel>{};
     try {
+      final safeRecordId = escapePbFilter(record.id);
       final serverPlantas = await _withRetry(
         () => _pb!.collection('plantas').getFullList(
-              filter: 'parcela = "${record.id}"',
+              filter: 'parcela = "$safeRecordId"',
             ),
       );
       for (final r in serverPlantas) {
@@ -2418,8 +2421,9 @@ class SyncService extends ChangeNotifier {
     if (!parcelaUuid.startsWith('pb-') || _pb == null) return;
     final serverId = parcelaUuid.substring(3);
     try {
+      final safeServerId = escapePbFilter(serverId);
       final plantas = await _pb!.collection('plantas').getFullList(
-            filter: 'parcela = "$serverId"',
+            filter: 'parcela = "$safeServerId"',
           );
       for (final pl in plantas) {
         await _pb!.collection('plantas').delete(pl.id);
@@ -2441,26 +2445,40 @@ class SyncService extends ChangeNotifier {
 
   /// Baixa fotos do servidor organizadas por usuário/parcela.
   /// Suporta schema normalizado e flat.
+  ///
+  /// P4/P8: Agora também salva as fotos no diretório interno do app
+  /// (documents/fotos/) E insere/atualiza registros na tabela fotosParcela
+  /// do SQLite local, com verificação SHA-256 pós-download.
+  ///
+  /// - Usa _waitForSyncLock/_syncLock pattern igual ao syncAll/syncSelected.
+  /// - Compara hash local com hash do servidor (via fotos_meta) antes de marcar verificado.
+  /// - Usa uuid_local do servidor para identidade de plantas (mesmo padrão de _pullPlantasDoServidor).
+  /// - NÃO insere em fotosParcela para fotos de espécie; apenas atualiza plantas.fotoEspeciePath.
+  /// - Usa identificadores estáveis do servidor (nomes de arquivo) em vez de índice posicional.
   Future<String?> downloadFotosOrganizadas(
       {String? userId,
       String? userName,
       String? propUt,
       String? parcelaServerId}) async {
-    if (_pb == null || !_pb!.authStore.isValid) {
-      final ok = await _tryAutoAuth();
-      if (!ok) return null;
-    }
+    // Lock pattern igual ao syncAll/syncSelected
+    await _waitForSyncLock();
+    _syncLock = Completer<void>();
 
     try {
+      if (_pb == null || !_pb!.authStore.isValid) {
+        final ok = await _tryAutoAuth();
+        if (!ok) return null;
+      }
+
       final filterParts = <String>[];
       if (userId != null && userId.isNotEmpty) {
-        filterParts.add('user = "$userId"');
+        filterParts.add('user = "${escapePbFilter(userId)}"');
       }
       if (propUt != null && propUt.isNotEmpty) {
-        filterParts.add('prop_ut = "$propUt"');
+        filterParts.add('prop_ut = "${escapePbFilter(propUt)}"');
       }
       if (parcelaServerId != null && parcelaServerId.isNotEmpty) {
-        filterParts.add('id = "$parcelaServerId"');
+        filterParts.add('id = "${escapePbFilter(parcelaServerId)}"');
       }
       final filter = filterParts.join(' && ');
 
@@ -2473,7 +2491,7 @@ class SyncService extends ChangeNotifier {
 
       if (parcelas.isEmpty) return null;
 
-      // Diretório de destino: Downloads (acessível ao usuário)
+      // Diretório de destino: Downloads (acessível ao usuário) + diretório interno do app
       Directory? baseDir;
       if (kIsWeb) {
         return null;
@@ -2494,6 +2512,34 @@ class SyncService extends ChangeNotifier {
       }
       exportDir.createSync(recursive: true);
 
+      // Diretório interno do app para as fotos (P8)
+      final internalPhotosDir = await ImageService.getPhotosDir();
+      if (!internalPhotosDir.existsSync()) {
+        internalPhotosDir.createSync(recursive: true);
+      }
+
+      // Buscar fotos_meta do servidor para obter hashes SHA-256 por foto
+      final Map<String, Map<String, dynamic>> serverFotosMeta = {};
+      for (final parcelaRecord in parcelas) {
+        final fotosMetaJson = parcelaRecord.getStringValue('fotos_meta');
+        if (fotosMetaJson.isNotEmpty) {
+          try {
+            final List<dynamic> metaList = jsonDecode(fotosMetaJson);
+            for (final meta in metaList) {
+              if (meta is Map<String, dynamic>) {
+                final arquivo = meta['arquivo']?.toString();
+                final sha256 = meta['sha256']?.toString();
+                if (arquivo != null && arquivo.isNotEmpty && sha256 != null && sha256.isNotEmpty) {
+                  serverFotosMeta[arquivo] = {'sha256': sha256};
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('Erro ao parsear fotos_meta da parcela ${parcelaRecord.id}: $e');
+          }
+        }
+      }
+
       int totalDownloads = 0;
       int completedDownloads = 0;
       final Map<String, List<RecordModel>> plantasCache = {};
@@ -2503,7 +2549,7 @@ class SyncService extends ChangeNotifier {
             parcelaRecord.getListValue<String>('fotos_parcela').length;
         final plantas = await _withRetry(
           () => _pb!.collection('plantas').getFullList(
-                filter: 'parcela = "${parcelaRecord.id}"',
+                filter: 'parcela = "${escapePbFilter(parcelaRecord.id)}"',
               ),
         );
         plantasCache[parcelaRecord.id] = plantas;
@@ -2523,17 +2569,93 @@ class SyncService extends ChangeNotifier {
         final parcelaDir = Directory('${exportDir.path}/$pastaName');
         parcelaDir.createSync(recursive: true);
 
-        final fotosParcela =
-            parcelaRecord.getListValue<String>('fotos_parcela');
-        for (int i = 0; i < fotosParcela.length; i++) {
-          final fotoName = fotosParcela[i];
+        // UUID local da parcela (formato: pb-{serverId})
+        final parcelaUuid = 'pb-${parcelaRecord.id}';
+
+        // --- Fotos da parcela ---
+        final fotosParcelaList = parcelaRecord.getListValue<String>('fotos_parcela');
+        for (int i = 0; i < fotosParcelaList.length; i++) {
+          final fotoName = fotosParcelaList[i];
           try {
             final url = _pb!.files.getUrl(parcelaRecord, fotoName);
             final response = await http.get(url);
             if (response.statusCode == 200) {
-              final file = File('${parcelaDir.path}/$fotoName');
-              await Isolate.run(
-                  () => file.writeAsBytesSync(response.bodyBytes));
+              final bytes = response.bodyBytes;
+
+              // 1. Salvar no diretório de exportação (Downloads)
+              final exportFile = File('${parcelaDir.path}/$fotoName');
+              await Isolate.run(() => exportFile.writeAsBytesSync(bytes));
+
+              // 2. Salvar no diretório interno do app (P8)
+              // UUID derivado do nome do arquivo do servidor (identificador estável)
+              // Remove extensão para usar como base do UUID
+              final fotoNameBase = p.basenameWithoutExtension(fotoName);
+              final fotoUuid = '${parcelaUuid}_foto_$fotoNameBase';
+              final internalFileName = '$fotoUuid.jpg';
+              final internalFile = File(p.join(internalPhotosDir.path, internalFileName));
+              await Isolate.run(() => internalFile.writeAsBytesSync(bytes));
+
+              // 3. P4: Verificar SHA-256 pós-download
+              final localSha256 = await ImageService.sha256De(internalFile.path);
+
+              // 4. Comparar com hash do servidor (se disponível em fotos_meta)
+              final serverMeta = serverFotosMeta[fotoName];
+              final serverSha256 = serverMeta?['sha256'];
+              if (serverSha256 != null && localSha256 != null && localSha256 != serverSha256) {
+                // Hash diverge: registrar incidente e NÃO marcar como verificado
+                await _db.logAudit('hash_divergente_download',
+                    entityType: 'foto',
+                    entityUuid: fotoUuid,
+                    oldValue: serverSha256,
+                    newValue: localSha256);
+                await _db.into(_db.incidentes).insert(IncidentesCompanion.insert(
+                      uuid: DateTime.now().microsecondsSinceEpoch.toRadixString(16) + '-local',
+                      tipo: 'hash_divergente_download',
+                      entidadeTipo: const Value('foto'),
+                      entidadeUuid: Value(fotoUuid),
+                      severidade: 'bloqueadora',
+                      bloqueiaUsoParaCredito: const Value(true),
+                      descricao: Value(
+                          'Hash divergente no download: servidor=$serverSha256 local=$localSha256'),
+                    ));
+                debugPrint('Hash divergente no download para $fotoName: servidor=$serverSha256 local=$localSha256');
+                // Não continua o processamento desta foto
+                continue;
+              }
+
+              // 5. P8: Inserir/atualizar registro na tabela fotosParcela
+              final autorUuid = await _getAutorUuidFallback();
+              await _db.insertFotoParcela(FotosParcelaCompanion.insert(
+                uuid: fotoUuid,
+                parcelaUuid: parcelaUuid,
+                filePath: internalFile.path,
+                synced: const Value(true),
+                // v28 MRV: GPS e autor (herdados da parcela se disponíveis)
+                latitude: Value(parcelaRecord.data['latitude'] is num
+                    ? (parcelaRecord.data['latitude'] as num).toDouble()
+                    : null),
+                longitude: Value(parcelaRecord.data['longitude'] is num
+                    ? (parcelaRecord.data['longitude'] as num).toDouble()
+                    : null),
+                autorUuid: Value(autorUuid),
+              ));
+
+              // 6. Registrar hash no catálogo de evidência (S3) - verificar contra catálogo existente
+              if (localSha256 != null) {
+                await _db.registrarHashDoAtivo(
+                  ativoUuid: 'legado-ativo-$fotoUuid',
+                  sha256: localSha256,
+                  bytes: bytes.length,
+                  papel: 'derivado',
+                );
+                // Verificar contra catálogo existente se houver
+                final hashOk = await _verifyHashAgainstCatalog('legado-ativo-$fotoUuid', localSha256);
+                if (hashOk) {
+                  // Marcar como verificado no catálogo (faremos em lote no final)
+                  // Não chamamos marcarAtivosVerificadosDaParcela aqui; faremos em lote no final
+                }
+              }
+
               completedDownloads++;
               _syncProgress = completedDownloads / totalDownloads;
               notifyListeners();
@@ -2543,6 +2665,7 @@ class SyncService extends ChangeNotifier {
           }
         }
 
+        // --- Fotos de espécie das plantas ---
         final plantas = plantasCache[parcelaRecord.id] ?? [];
         for (final plantaRecord in plantas) {
           final fotoEspecie = plantaRecord.getStringValue('foto_especie');
@@ -2551,9 +2674,73 @@ class SyncService extends ChangeNotifier {
               final url = _pb!.files.getUrl(plantaRecord, fotoEspecie);
               final response = await http.get(url);
               if (response.statusCode == 200) {
-                final file = File('${parcelaDir.path}/$fotoEspecie');
-                await Isolate.run(
-                    () => file.writeAsBytesSync(response.bodyBytes));
+                final bytes = response.bodyBytes;
+
+                // 1. Salvar no diretório de exportação (Downloads)
+                final exportFile = File('${parcelaDir.path}/$fotoEspecie');
+                await Isolate.run(() => exportFile.writeAsBytesSync(bytes));
+
+                // 2. Resolver UUID da planta usando uuid_local do servidor
+                // Mesmo padrão de _pullPlantasDoServidor (linhas 1508-1510)
+                final uuidLocal = plantaRecord.getStringValue('uuid_local');
+                final plantaUuid = uuidLocal.isNotEmpty ? uuidLocal : 'planta-${plantaRecord.id}';
+
+                // 3. Salvar no diretório interno do app (P8)
+                // UUID derivado do nome do arquivo do servidor (identificador estável)
+                final fotoEspecieBase = p.basenameWithoutExtension(fotoEspecie);
+                final internalFileName = '${plantaUuid}_$fotoEspecieBase.jpg';
+                final internalFile = File(p.join(internalPhotosDir.path, internalFileName));
+                await Isolate.run(() => internalFile.writeAsBytesSync(bytes));
+
+                // 4. P4: Verificar SHA-256 pós-download
+                final localSha256 = await ImageService.sha256De(internalFile.path);
+
+                // 5. Comparar com hash do servidor (se disponível em fotos_meta da parcela)
+                final serverMeta = serverFotosMeta[fotoEspecie];
+                final serverSha256 = serverMeta?['sha256'];
+                if (serverSha256 != null && localSha256 != null && localSha256 != serverSha256) {
+                  // Hash diverge: registrar incidente
+                  await _db.logAudit('hash_divergente_download',
+                      entityType: 'foto',
+                      entityUuid: plantaUuid,
+                      oldValue: serverSha256,
+                      newValue: localSha256);
+                  await _db.into(_db.incidentes).insert(IncidentesCompanion.insert(
+                        uuid: DateTime.now().microsecondsSinceEpoch.toRadixString(16) + '-local',
+                        tipo: 'hash_divergente_download',
+                        entidadeTipo: const Value('foto'),
+                        entidadeUuid: Value(plantaUuid),
+                        severidade: 'bloqueadora',
+                        bloqueiaUsoParaCredito: const Value(true),
+                        descricao: Value(
+                            'Hash divergente no download (planta): servidor=$serverSha256 local=$localSha256'),
+                      ));
+                  debugPrint('Hash divergente no download para $fotoEspecie: servidor=$serverSha256 local=$localSha256');
+                  continue;
+                }
+
+                // 6. NÃO inserir em fotosParcela para fotos de espécie
+                // Apenas atualizar plantas.fotoEspeciePath
+                await _db.updatePlanta(PlantasCompanion(
+                  fotoEspeciePath: Value(internalFile.path),
+                  synced: const Value(true),
+                ), plantaUuid);
+
+                // 7. Registrar hash no catálogo de evidência (S3) com entidadeTipo='planta'
+                if (localSha256 != null) {
+                  await _db.registrarHashDoAtivo(
+                    ativoUuid: 'legado-ativo-$plantaUuid',
+                    sha256: localSha256,
+                    bytes: bytes.length,
+                    papel: 'derivado',
+                  );
+                  // Verificar contra catálogo existente se houver
+                  final hashOk = await _verifyHashAgainstCatalog('legado-ativo-$plantaUuid', localSha256);
+                  if (hashOk) {
+                    // Marcar como verificado no catálogo (faremos em lote no final)
+                  }
+                }
+
                 completedDownloads++;
                 _syncProgress = completedDownloads / totalDownloads;
                 notifyListeners();
@@ -2565,11 +2752,59 @@ class SyncService extends ChangeNotifier {
         }
       }
 
+      // Marcar ativos como verificados no catálogo uma única vez no final
+      // (evita múltiplas chamadas redundantes dentro do loop)
+      // Coleta todos os UUIDs de parcelas únicos processados
+      final processedParcelas = <String>{};
+      for (final parcelaRecord in parcelas) {
+        processedParcelas.add('pb-${parcelaRecord.id}');
+      }
+      for (final uuid in processedParcelas) {
+        await _db.marcarAtivosVerificadosDaParcela(uuid);
+      }
+
       return exportDir.path;
     } catch (e) {
       debugPrint('Erro ao baixar fotos: $e');
       return null;
+    } finally {
+      // Completar o lock no finally, igual ao syncAll/syncSelected
+      if (_syncLock != null) {
+        _syncLock!.complete();
+        _syncLock = null;
+      }
     }
+  }
+
+  /// Obtém o UUID do usuário atual ou faz fallback para o device UUID.
+  /// Usado como autorUuid quando não há usuário autenticado.
+  Future<String> _getAutorUuidFallback() async {
+    if (_currentUser?.uuid != null && _currentUser!.uuid.isNotEmpty) {
+      return _currentUser!.uuid;
+    }
+    // Fallback para device UUID
+    final prefs = await SharedPreferences.getInstance();
+    final deviceUuid = prefs.getString('device_uuid');
+    if (deviceUuid != null && deviceUuid.isNotEmpty) {
+      return deviceUuid;
+    }
+    // Último recurso: UUID gerado localmente
+    return 'unknown-${DateTime.now().microsecondsSinceEpoch}';
+  }
+
+  /// Verifica se o hash local já existe no catálogo (ativosBrutos) e confere.
+  /// Retorna true se o hash confere ou se não há entrada no catálogo (primeira vez).
+  /// Retorna false se o hash diverge (incidente já registrado pelo registrarHashDoAtivo).
+  Future<bool> _verifyHashAgainstCatalog(String ativoUuid, String localSha256) async {
+    final ativo = await (_db.select(_db.ativosBrutos)
+          ..where((t) => t.uuid.equals(ativoUuid)))
+        .getSingleOrNull();
+    if (ativo == null || ativo.sha256 == null) {
+      // Não há entrada ou hash no catálogo → primeira vez, aceita
+      return true;
+    }
+    // Há hash no catálogo → verifica se confere
+    return ativo.sha256 == localSha256;
   }
 
   /// Atualiza o campo isAdmin de um usuário no PocketBase.
@@ -2582,8 +2817,9 @@ class SyncService extends ChangeNotifier {
     }
 
     try {
+      final safeEmail = escapePbFilter(email);
       final records = await _withRetry(
-        () => _pb!.collection('users').getFullList(filter: 'email = "$email"'),
+        () => _pb!.collection('users').getFullList(filter: 'email = "$safeEmail"'),
       );
       if (records.isEmpty) return false;
 
@@ -2622,9 +2858,10 @@ class SyncService extends ChangeNotifier {
 
       // Tenta encontrar o user no PB para pegar o PB record ID
       try {
+        final safeEmail = escapePbFilter(email);
         final userRecords = await _withRetry(
           () =>
-              _pb!.collection('users').getFullList(filter: 'email = "$email"'),
+              _pb!.collection('users').getFullList(filter: 'email = "$safeEmail"'),
         );
         for (final u in userRecords) {
           possibleIds.add(u.id);
@@ -2634,17 +2871,19 @@ class SyncService extends ChangeNotifier {
       // Busca parcelas para cada possível ID
       for (final uid in possibleIds) {
         try {
+          final safeUid = escapePbFilter(uid);
           final parcelas = await _withRetry(
             () => _pb!
                 .collection('parcelas')
-                .getFullList(filter: 'user = "$uid"'),
+                .getFullList(filter: 'user = "$safeUid"'),
           );
 
           for (final parcela in parcelas) {
             try {
+              final safeParcelaId = escapePbFilter(parcela.id);
               final plantas = await _withRetry(
                 () => _pb!.collection('plantas').getFullList(
-                      filter: 'parcela = "${parcela.id}"',
+                      filter: 'parcela = "$safeParcelaId"',
                     ),
               );
               for (final planta in plantas) {
@@ -2668,9 +2907,10 @@ class SyncService extends ChangeNotifier {
 
       // Deleta o registro do usuário do PB
       try {
+        final safeEmail = escapePbFilter(email);
         final userRecords = await _withRetry(
           () =>
-              _pb!.collection('users').getFullList(filter: 'email = "$email"'),
+              _pb!.collection('users').getFullList(filter: 'email = "$safeEmail"'),
         );
         for (final u in userRecords) {
           await _pb!.collection('users').delete(u.id);

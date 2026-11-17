@@ -8,6 +8,9 @@ import '../services/backup_service.dart';
 import '../services/sync_service.dart';
 import '../services/theme_provider.dart';
 
+// file_picker 13.x uses FilePickerPlatform.instance instead of FilePicker.platform
+import 'package:file_picker/file_picker.dart' as fp;
+
 const String kForcedOfflineKey = 'forced_offline_mode';
 const String kWizardModeKey = 'wizard_mode_enabled';
 
@@ -326,23 +329,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () async {
-                        final result = await FilePicker.platform.pickFiles(
+                        final result = await fp.FilePickerPlatform.instance.pickFiles(
                           type: FileType.any,
-                          allowMultiple: false,
                         );
                         if (result == null ||
-                            result.files.isEmpty ||
+                            result.isEmpty ||
                             !context.mounted) return;
-                        final file = result.files.single;
+                        final file = result.single;
                         String msg;
                         if (file.path != null && file.path!.isNotEmpty) {
                           msg = await BackupService.prepareRestore(file.path!);
-                        } else if (file.bytes != null &&
-                            file.bytes!.isNotEmpty) {
-                          msg = await BackupService.prepareRestoreFromBytes(
-                              file.bytes!);
                         } else {
-                          msg = 'Não foi possível aceder ao ficheiro.';
+                          final bytes = await file.readAsBytes();
+                          if (bytes.isNotEmpty) {
+                            msg = await BackupService.prepareRestoreFromBytes(bytes);
+                          } else {
+                            msg = 'Não foi possível aceder ao ficheiro.';
+                          }
                         }
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(

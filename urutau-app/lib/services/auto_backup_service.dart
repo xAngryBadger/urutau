@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -55,7 +56,8 @@ class AutoBackupService {
       }
       // last == null com banco existente = update de versão pré-feature: faz backup.
 
-      final zipBytes = await BackupService.buildBackupZip();
+      // Retry logic with exponential backoff for buildBackupZip (handles DB contention during auto-backup)
+      final zipBytes = await _buildBackupZipWithRetry();
       final fileName = 'urutau_backup_auto_v$current.zip';
       final saved = saveExternal != null
           ? await saveExternal(fileName, zipBytes)
@@ -111,5 +113,24 @@ class AutoBackupService {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Retry wrapper for BackupService.buildBackupZip with exponential backoff.
+  /// Handles transient DB contention (e.g., concurrent drift migration during beforeOpen).
+  /// Max 3 retries with base delay 200ms, exponential backoff (200ms, 400ms, 800ms).
+  static Future<List<int>> _buildBackupZipWithRetry() async {
+    const maxRetries = 3;
+    const baseDelay = Duration(milliseconds: 200);
+
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await BackupService.buildBackupZip();
+      } catch (e) {
+        if (attempt == maxRetries) rethrow;
+        debugPrint('AutoBackupService: buildBackupZip falhou (tentativa ${attempt + 1}/${maxRetries + 1}): $e. Retentando em ${baseDelay * (1 << attempt)}...');
+        await Future.delayed(baseDelay * (1 << attempt));
+      }
+    }
+    throw Exception('_buildBackupZipWithRetry: exauridas tentativas'); // Nunca alcançado
   }
 }

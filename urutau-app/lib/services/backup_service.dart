@@ -167,52 +167,75 @@ class BackupService {
   /// corrompido no teste do arquiteto) — por isso as três checagens.
   ///
   /// Exposto (público) para o teste de regressão `backup_wal_test.dart`.
+  /// Inclui retry com backoff exponencial ao redor de VACUUM INTO para
+  /// lidar com contenção de conexões concorrentes (ex.: auto-backup durante
+  /// beforeOpen). Alternativa seria usar sqlite3_backup API, mas VACUUM INTO
+  /// é mais simples e atende ao requisito de cópia consistente WAL-safe.
   static Future<List<int>> dumpWalsafe(String sourcePath) async {
-    final tmp = File('$sourcePath.tmp-backup');
-    if (await tmp.exists()) await tmp.delete();
-    final dest = tmp.path.replaceAll("'", "''");
+    const maxRetries = 3;
+    const baseDelay = Duration(milliseconds: 100);
 
-    final db = sqlite3.open(sourcePath); // READ-WRITE: VACUUM exige escrita
-    try {
-      db.execute("VACUUM INTO '$dest'");
-    } finally {
-      db.dispose();
-    }
-    if (!await tmp.exists()) {
-      throw Exception('dumpWalsafe: VACUUM INTO não gerou arquivo destino.');
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      final tmp = File('$sourcePath.tmp-backup');
+      if (await tmp.exists()) await tmp.delete();
+      final dest = tmp.path.replaceAll("'", "''");
+
+      final db = sqlite3.open(sourcePath); // READ-WRITE: VACUUM exige escrita
+      try {
+        db.execute("VACUUM INTO '$dest'");
+      } catch (e) {
+        db.dispose();
+        if (attempt == maxRetries) rethrow;
+        debugPrint('dumpWalsafe: VACUUM INTO falhou (tentativa ${attempt + 1}/${maxRetries + 1}): $e. Retentando em ${baseDelay * (1 << attempt)}...');
+        await Future.delayed(baseDelay * (1 << attempt));
+        continue;
+      } finally {
+        db.dispose();
+      }
+
+      if (!await tmp.exists()) {
+        if (attempt == maxRetries) {
+          throw Exception('dumpWalsafe: VACUUM INTO não gerou arquivo destino após $maxRetries retries.');
+        }
+        debugPrint('dumpWalsafe: arquivo temporário não criado (tentativa ${attempt + 1}). Retentando...');
+        await Future.delayed(baseDelay * (1 << attempt));
+        continue;
+      }
+
+      // Validação obrigatória — as TRÊS checagens, não só integridade.
+      final check = sqlite3.open(tmp.path, mode: OpenMode.readOnly);
+      final srcCheck = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
+      try {
+        final integrity =
+            check.select('PRAGMA integrity_check').first.values.first;
+        if ('$integrity'.toLowerCase() != 'ok') {
+          throw Exception('dumpWalsafe: backup inválido (integrity_check=$integrity).');
+        }
+        final objetos = check.select('SELECT COUNT(*) AS c FROM sqlite_master').first['c'] as int;
+        if (objetos <= 0) {
+          throw Exception('dumpWalsafe: backup inválido (nenhum objeto no schema).');
+        }
+        // A versão do backup tem de bater com o schema do banco DE ORIGEM
+        // (não com a constante do app — banco de campo pode estar em
+        // versão anterior durante a transição de releases).
+        final versao = check.select('PRAGMA user_version').first.values.first;
+        final srcVersao =
+            srcCheck.select('PRAGMA user_version').first.values.first;
+        if ('$versao' != '$srcVersao') {
+          throw Exception('dumpWalsafe: backup inválido (user_version=$versao, '
+              'banco de origem=$srcVersao).');
+        }
+      } finally {
+        check.dispose();
+        srcCheck.dispose();
+      }
+
+      final bytes = await tmp.readAsBytes();
+      await tmp.delete();
+      return bytes;
     }
 
-    // Validação obrigatória — as TRÊS checagens, não só integridade.
-    final check = sqlite3.open(tmp.path, mode: OpenMode.readOnly);
-    final srcCheck = sqlite3.open(sourcePath, mode: OpenMode.readOnly);
-    try {
-      final integrity =
-          check.select('PRAGMA integrity_check').first.values.first;
-      if ('$integrity'.toLowerCase() != 'ok') {
-        throw Exception('dumpWalsafe: backup inválido (integrity_check=$integrity).');
-      }
-      final objetos = check.select('SELECT COUNT(*) AS c FROM sqlite_master').first['c'] as int;
-      if (objetos <= 0) {
-        throw Exception('dumpWalsafe: backup inválido (nenhum objeto no schema).');
-      }
-      // A versão do backup tem de bater com o schema do banco DE ORIGEM
-      // (não com a constante do app — banco de campo pode estar em
-      // versão anterior durante a transição de releases).
-      final versao = check.select('PRAGMA user_version').first.values.first;
-      final srcVersao =
-          srcCheck.select('PRAGMA user_version').first.values.first;
-      if ('$versao' != '$srcVersao') {
-        throw Exception('dumpWalsafe: backup inválido (user_version=$versao, '
-            'banco de origem=$srcVersao).');
-      }
-    } finally {
-      check.dispose();
-      srcCheck.dispose();
-    }
-
-    final bytes = await tmp.readAsBytes();
-    await tmp.delete();
-    return bytes;
+    throw Exception('dumpWalsafe: exauridas tentativas de retry'); // Nunca alcançado
   }
 
   /// Constrói o ZIP de backup: banco (WAL-safe via dumpWalsafe) + fotos em
